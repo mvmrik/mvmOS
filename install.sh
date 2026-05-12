@@ -7,15 +7,15 @@ VENV_DIR="$SCRIPT_DIR/venv"
 CURRENT_USER="$(whoami)"
 
 echo ""
-echo "  ██╗   ██╗██╗██████╗ ████████╗██╗   ██╗ █████╗ ██╗      ██████╗ ███████╗"
-echo "  ██║   ██║██║██╔══██╗╚══██╔══╝██║   ██║██╔══██╗██║     ██╔═══██╗██╔════╝"
-echo "  ██║   ██║██║██████╔╝   ██║   ██║   ██║███████║██║     ██║   ██║███████╗"
-echo "  ╚██╗ ██╔╝██║██╔══██╗   ██║   ██║   ██║██╔══██║██║     ██║   ██║╚════██║"
-echo "   ╚████╔╝ ██║██║  ██║   ██║   ╚██████╔╝██║  ██║███████╗╚██████╔╝███████║"
-echo "    ╚═══╝  ╚═╝╚═╝  ╚═╝   ╚═╝    ╚═════╝ ╚═╝  ╚═╝╚══════╝ ╚═════╝ ╚══════╝"
+echo "  ███╗   ███╗██╗   ██╗███╗   ███╗ ██████╗ ███████╗"
+echo "  ████╗ ████║██║   ██║████╗ ████║██╔═══██╗██╔════╝"
+echo "  ██╔████╔██║██║   ██║██╔████╔██║██║   ██║███████╗"
+echo "  ██║╚██╔╝██║╚██╗ ██╔╝██║╚██╔╝██║██║   ██║╚════██║"
+echo "  ██║ ╚═╝ ██║ ╚████╔╝ ██║ ╚═╝ ██║╚██████╔╝███████║"
+echo "  ╚═╝     ╚═╝  ╚═══╝  ╚═╝     ╚═╝ ╚═════╝ ╚══════╝"
 echo ""
 echo "  Web Desktop for Linux Servers — Installer"
-echo "  ─────────────────────────────────────────"
+echo "  ──────────────────────────────────────────"
 echo ""
 
 # ── Port ──────────────────────────────────────────────────────────────────────
@@ -93,7 +93,7 @@ SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
 
 sudo tee "$SERVICE_FILE" > /dev/null <<EOF
 [Unit]
-Description=VirtualOS Web Desktop
+Description=mvmOS Web Desktop
 After=network.target
 
 [Service]
@@ -114,7 +114,7 @@ sudo systemctl enable --now "${SERVICE_NAME}.service"
 
 # ── Done ──────────────────────────────────────────────────────────────────────
 echo ""
-echo "  ✓ VirtualOS is running!"
+echo "  ✓ mvmOS is running!"
 echo ""
 
 # Try to detect the server's IP

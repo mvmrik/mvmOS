@@ -1,4 +1,4 @@
-# VirtualOS
+# mvmOS
 
 A browser-based virtual desktop for headless Linux servers. No Node.js, no build step — just Python + vanilla JS.
 

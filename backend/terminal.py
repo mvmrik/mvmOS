@@ -8,26 +8,39 @@ from .db import get_conn
 router = APIRouter()
 
 
-def verify_session(token: str | None) -> bool:
+def get_session(token: str | None):
     if not token:
-        return False
+        return None
     with get_conn() as conn:
-        row = conn.execute("SELECT token FROM sessions WHERE token = ?", (token,)).fetchone()
-    return row is not None
+        row = conn.execute("SELECT token, effective_user FROM sessions WHERE token = ?", (token,)).fetchone()
+    return dict(row) if row else None
 
 
 @router.websocket("/ws/terminal")
 async def terminal_ws(websocket: WebSocket, session: str | None = Cookie(default=None)):
-    if not verify_session(session):
+    s = get_session(session)
+    if not s:
         await websocket.close(code=4401)
         return
 
     await websocket.accept()
 
+    eu = s.get("effective_user", "root")
+    if eu and eu != "root":
+        cmd = ["runuser", "-l", eu]
+    else:
+        cmd = ["/bin/bash", "--login"]
+
+    import pwd as _pwd
+    try:
+        home = _pwd.getpwnam(eu).pw_dir
+    except KeyError:
+        home = os.path.expanduser("~")
+
     proc = PtyProcess.spawn(
-        ["/bin/bash", "--login"],
+        cmd,
         dimensions=(24, 80),
-        env={**os.environ, "TERM": "xterm-256color"},
+        env={**os.environ, "TERM": "xterm-256color", "HOME": home, "USER": eu, "LOGNAME": eu},
     )
 
     loop = asyncio.get_event_loop()

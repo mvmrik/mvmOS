@@ -1,6 +1,7 @@
 import os
+import re
 from fastapi import FastAPI, Request
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from .db import init_db
 from .auth import router as auth_router, get_current_session
@@ -8,8 +9,12 @@ from .terminal import router as terminal_router
 from .files import router as files_router
 from .desktop import router as desktop_router
 from .settings import router as settings_router
+from .users import router as users_router
+from .packages import router as packages_router
+from .plugins import router as plugins_router
+from .system import router as system_router
 
-app = FastAPI(title="VirtualOS")
+app = FastAPI(title="mvmOS")
 
 init_db()
 
@@ -18,14 +23,19 @@ app.include_router(terminal_router)
 app.include_router(files_router)
 app.include_router(desktop_router)
 app.include_router(settings_router)
+app.include_router(users_router)
+app.include_router(packages_router)
+app.include_router(plugins_router)
+app.include_router(system_router)
 
 FRONTEND_DIR = os.path.join(os.path.dirname(__file__), "..", "frontend")
 
 
 @app.middleware("http")
 async def auth_middleware(request: Request, call_next):
-    public = {"/login", "/favicon.ico"}
-    if request.url.path in public or request.url.path.startswith("/static"):
+    public = {"/login", "/favicon.ico", "/api/auth/login-users"}
+    path = request.url.path
+    if path in public or path.startswith("/static") or path.endswith((".js", ".css", ".ico", ".png", ".svg", ".woff", ".woff2")):
         return await call_next(request)
     token = request.cookies.get("session")
     if not token:
@@ -36,6 +46,27 @@ async def auth_middleware(request: Request, call_next):
     if not row:
         return RedirectResponse(url="/login")
     return await call_next(request)
+
+
+def _versioned_html():
+    index_path = os.path.join(FRONTEND_DIR, "index.html")
+    html = open(index_path).read()
+
+    def add_version(m):
+        src = m.group(1)
+        filepath = os.path.join(FRONTEND_DIR, src.lstrip("/"))
+        if os.path.isfile(filepath):
+            mtime = int(os.path.getmtime(filepath))
+            return f'"{src}?v={mtime}"'
+        return m.group(0)
+
+    html = re.sub(r'"(/[^"]+\.(?:js|css))"', add_version, html)
+    return html
+
+
+@app.get("/")
+async def serve_index():
+    return HTMLResponse(_versioned_html())
 
 
 app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")

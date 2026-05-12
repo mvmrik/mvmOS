@@ -1,5 +1,9 @@
 import os
 import shutil
+import stat
+import pwd
+import grp
+import subprocess
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from fastapi.responses import JSONResponse
@@ -8,32 +12,83 @@ from .auth import get_current_session
 
 router = APIRouter(prefix="/api/files", tags=["files"])
 
-# Restrict file manager access to the user's home directory
-BASE_DIR = os.path.expanduser("~")
+BASE_DIR = "/"
 
 
-def safe_path(path: str) -> str:
-    """Resolve path and ensure it stays within BASE_DIR."""
-    resolved = os.path.realpath(os.path.join(BASE_DIR, path.lstrip("/")))
-    if not resolved.startswith(os.path.realpath(BASE_DIR)):
+def run_as(user: str, cmd: list, input_data: str = None):
+    """Run a command as the given user (uses runuser if not root)."""
+    if user and user != "root":
+        cmd = ["runuser", "-u", user, "--"] + cmd
+    r = subprocess.run(cmd, capture_output=True, text=True, input=input_data)
+    return r
+
+
+def home_for(username: str) -> str:
+    try:
+        return pwd.getpwnam(username).pw_dir
+    except KeyError:
+        return os.path.expanduser("~")
+
+
+def safe_path(path: str, home: str = None) -> str:
+    base = home or os.path.expanduser("~")
+    resolved = os.path.realpath(path if os.path.isabs(path) else os.path.join(base, path))
+    if not resolved.startswith("/"):
         raise HTTPException(status_code=403, detail="Access denied")
     return resolved
 
 
+XDG_PLACES = [
+    {"name": "Desktop",   "icon": "🖥️"},
+    {"name": "Downloads", "icon": "📥"},
+    {"name": "Documents", "icon": "📄"},
+    {"name": "Music",     "icon": "🎵"},
+    {"name": "Pictures",  "icon": "🖼️"},
+    {"name": "Videos",    "icon": "🎬"},
+]
+
+
+@router.get("/places")
+async def get_places(session=Depends(get_current_session)):
+    username = session["effective_user"]
+    home = home_for(username)
+
+    xdg = []
+    for p in XDG_PLACES:
+        path = os.path.join(home, p["name"])
+        if os.path.isdir(path):
+            xdg.append({"name": p["name"], "icon": p["icon"], "path": path})
+
+    return JSONResponse({
+        "username": username,
+        "home": home,
+        "xdg": xdg,
+    })
+
+
 @router.get("")
-async def list_dir(path: str = "/", _session=Depends(get_current_session)):
-    real = safe_path(path)
+async def list_dir(path: str = "/", session=Depends(get_current_session)):
+    eu = session["effective_user"]
+    real = safe_path(path, home_for(eu))
     if not os.path.isdir(real):
         raise HTTPException(status_code=404, detail="Not a directory")
     entries = []
     for name in sorted(os.listdir(real)):
         full = os.path.join(real, name)
-        stat = os.stat(full)
+        st = os.stat(full)
+        try:
+            owner = pwd.getpwuid(st.st_uid).pw_name
+            group = grp.getgrgid(st.st_gid).gr_name
+        except KeyError:
+            owner, group = str(st.st_uid), str(st.st_gid)
         entries.append({
             "name": name,
             "type": "dir" if os.path.isdir(full) else "file",
-            "size": stat.st_size,
-            "modified": datetime.fromtimestamp(stat.st_mtime).isoformat(),
+            "size": st.st_size,
+            "modified": datetime.fromtimestamp(st.st_mtime).isoformat(),
+            "permissions": oct(stat.S_IMODE(st.st_mode))[2:],
+            "owner": owner,
+            "group": group,
         })
     return JSONResponse({"path": path, "entries": entries})
 
@@ -89,4 +144,41 @@ class MkdirRequest(BaseModel):
 async def mkdir(body: MkdirRequest, _session=Depends(get_current_session)):
     real = safe_path(body.path)
     os.makedirs(real, exist_ok=True)
+    return {"ok": True}
+
+
+class ChmodRequest(BaseModel):
+    path: str
+    mode: str  # octal string e.g. "755"
+
+
+@router.post("/chmod")
+async def chmod(body: ChmodRequest, _session=Depends(get_current_session)):
+    real = safe_path(body.path)
+    if not os.path.exists(real):
+        raise HTTPException(status_code=404, detail="Not found")
+    try:
+        os.chmod(real, int(body.mode, 8))
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid mode")
+    return {"ok": True}
+
+
+class ChownRequest(BaseModel):
+    path: str
+    owner: str
+    group: str = ""
+
+
+@router.post("/chown")
+async def chown(body: ChownRequest, _session=Depends(get_current_session)):
+    real = safe_path(body.path)
+    if not os.path.exists(real):
+        raise HTTPException(status_code=404, detail="Not found")
+    try:
+        uid = pwd.getpwnam(body.owner).pw_uid
+        gid = grp.getgrnam(body.group).gr_gid if body.group else -1
+        os.chown(real, uid, gid)
+    except KeyError:
+        raise HTTPException(status_code=400, detail="Unknown user or group")
     return {"ok": True}

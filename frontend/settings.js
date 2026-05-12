@@ -54,7 +54,7 @@ const Settings = (() => {
   }
 
   // Display settings are per-device — stored in localStorage only
-  const DISPLAY_KEY = 'vos_display';
+  const DISPLAY_KEY = 'mvmos_display';
 
   function loadDisplay() {
     try { return JSON.parse(localStorage.getItem(DISPLAY_KEY)) || {}; } catch (_) { return {}; }
@@ -94,125 +94,213 @@ const Settings = (() => {
     window.dispatchEvent(new CustomEvent('settings-changed', { detail: data }));
   }
 
-  function openWindow() {
+  const FM_PREFS_KEY = 'mvmos_fm_prefs';
+  function loadFMPrefs() {
+    try { return JSON.parse(localStorage.getItem(FM_PREFS_KEY)) || {}; } catch (_) { return {}; }
+  }
+  function saveFMPrefs(p) {
+    localStorage.setItem(FM_PREFS_KEY, JSON.stringify(p));
+    window.dispatchEvent(new CustomEvent('fm-prefs-changed', { detail: p }));
+  }
+
+  function openWindow(tab) {
+    if (document.querySelector('.window[data-win-id="settings"]')) {
+      Desktop.focusWindow('settings');
+      if (tab) switchTab(tab);
+      return;
+    }
     Desktop.createWindow({
       id: 'settings',
       title: '⚙️ Settings',
-      width: 560,
-      height: 520,
+      width: 620,
+      height: 480,
       onMount(body) {
-        loadSettings().then(s => render(body, s));
+        loadSettings().then(s => render(body, s, tab));
       },
     });
+    Desktop.focusWindow('settings');
   }
 
-  function render(body, s) {
+  function switchTab(tab) {
+    const body = document.querySelector('.window[data-win-id="settings"] .window-body');
+    if (!body) return;
+    body.querySelectorAll('.settings-tab').forEach(t => t.classList.remove('active'));
+    body.querySelectorAll('.settings-panel').forEach(p => p.classList.remove('active'));
+    const tabEl = body.querySelector(`.settings-tab[data-tab="${tab}"]`);
+    const panEl = body.querySelector(`#sp-${tab}`);
+    if (tabEl) tabEl.classList.add('active');
+    if (panEl) panEl.classList.add('active');
+  }
+
+  function render(body, s, activeTab) {
+    activeTab = activeTab || 'display';
     const d = loadDisplay();
-    body.style.overflow = 'auto';
+    const fm = loadFMPrefs();
+    body.style.overflow = 'hidden';
+    body.style.padding = '0';
     body.innerHTML = `
       <div class="settings-wrap">
 
-        <div class="settings-section">
-          <div class="settings-section-title">🕐 Date &amp; Time</div>
+        <nav class="settings-tabs">
+          <div class="settings-tab ${activeTab==='display'?'active':''}" data-tab="display">🖥️ Display</div>
+          <div class="settings-tab ${activeTab==='regional'?'active':''}" data-tab="regional">🌐 Regional</div>
+          <div class="settings-tab ${activeTab==='filemanager'?'active':''}" data-tab="filemanager">📁 File Manager</div>
+          <div class="settings-tab ${activeTab==='users'?'active':''}" data-tab="users">👥 Users</div>
+          <div class="settings-tab ${activeTab==='about'?'active':''}" data-tab="about" style="margin-top:auto">ℹ️ About</div>
+        </nav>
 
-          <div class="settings-row">
-            <label>Time Zone</label>
-            <select id="s-timezone">
-              ${TIMEZONES.map(tz =>
-                `<option value="${tz}" ${s.timezone === tz ? 'selected' : ''}>${tz.replace('_', ' ')}</option>`
-              ).join('')}
-            </select>
+        <div class="settings-panels">
+
+          <!-- Display panel -->
+          <div class="settings-panel ${activeTab==='display'?'active':''}" id="sp-display">
+            <div class="settings-section">
+              <div class="settings-section-title">🖥️ Display <span style="font-size:.7rem;color:#666;font-weight:400;text-transform:none;letter-spacing:0">(saved per device)</span></div>
+
+              <div class="settings-row settings-row-slider">
+                <label>Icon Size</label>
+                <div class="slider-wrap">
+                  <input type="range" id="s-icon-size" min="1" max="5" step="1" value="${parseInt(d.icon_size) || 3}">
+                  <div class="slider-labels"><span>XS</span><span>S</span><span>M</span><span>L</span><span>XL</span></div>
+                </div>
+                <span class="slider-preview-icon" id="prev-icon">🖥️</span>
+              </div>
+
+              <div class="settings-row settings-row-slider">
+                <label>Text Size</label>
+                <div class="slider-wrap">
+                  <input type="range" id="s-text-size" min="1" max="5" step="1" value="${parseInt(d.text_size) || 3}">
+                  <div class="slider-labels"><span>XS</span><span>S</span><span>M</span><span>L</span><span>XL</span></div>
+                </div>
+                <span class="slider-preview-text" id="prev-text">Aa</span>
+              </div>
+            </div>
+
           </div>
 
-          <div class="settings-row">
-            <label>Time Format</label>
-            <div class="settings-radio-group">
-              <label class="radio-opt">
-                <input type="radio" name="time_format" value="24" ${s.time_format !== '12' ? 'checked' : ''}>
-                <span>24-hour &nbsp;<span class="preview-time" id="prev-24"></span></span>
-              </label>
-              <label class="radio-opt">
-                <input type="radio" name="time_format" value="12" ${s.time_format === '12' ? 'checked' : ''}>
-                <span>12-hour &nbsp;<span class="preview-time" id="prev-12"></span></span>
-              </label>
+          <!-- Regional panel -->
+          <div class="settings-panel ${activeTab==='regional'?'active':''}" id="sp-regional">
+            <div class="settings-section">
+              <div class="settings-section-title">🕐 Date &amp; Time</div>
+
+              <div class="settings-row">
+                <label>Time Zone</label>
+                <select id="s-timezone">
+                  ${TIMEZONES.map(tz =>
+                    `<option value="${tz}" ${s.timezone === tz ? 'selected' : ''}>${tz.replace('_', ' ')}</option>`
+                  ).join('')}
+                </select>
+              </div>
+
+              <div class="settings-row">
+                <label>Time Format</label>
+                <div class="settings-radio-group">
+                  <label class="radio-opt">
+                    <input type="radio" name="time_format" value="24" ${s.time_format !== '12' ? 'checked' : ''}>
+                    <span>24-hour &nbsp;<span class="preview-time" id="prev-24"></span></span>
+                  </label>
+                  <label class="radio-opt">
+                    <input type="radio" name="time_format" value="12" ${s.time_format === '12' ? 'checked' : ''}>
+                    <span>12-hour &nbsp;<span class="preview-time" id="prev-12"></span></span>
+                  </label>
+                </div>
+              </div>
+
+              <div class="settings-row">
+                <label>Date Format</label>
+                <select id="s-date-format">
+                  <option value="DD/MM/YYYY" ${s.date_format === 'DD/MM/YYYY' ? 'selected' : ''}>DD/MM/YYYY</option>
+                  <option value="MM/DD/YYYY" ${s.date_format === 'MM/DD/YYYY' ? 'selected' : ''}>MM/DD/YYYY</option>
+                  <option value="YYYY-MM-DD" ${s.date_format === 'YYYY-MM-DD' ? 'selected' : ''}>YYYY-MM-DD</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="settings-section">
+              <div class="settings-section-title">📅 Calendar</div>
+
+              <div class="settings-row">
+                <label>Week Starts On</label>
+                <div class="settings-radio-group">
+                  <label class="radio-opt">
+                    <input type="radio" name="week_starts" value="monday" ${s.week_starts !== 'sunday' ? 'checked' : ''}>
+                    <span>Monday</span>
+                  </label>
+                  <label class="radio-opt">
+                    <input type="radio" name="week_starts" value="sunday" ${s.week_starts === 'sunday' ? 'checked' : ''}>
+                    <span>Sunday</span>
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            <div class="settings-section">
+              <div class="settings-section-title">🌐 Language &amp; Region</div>
+
+              <div class="settings-row">
+                <label>Language</label>
+                <select id="s-language">
+                  ${LANGUAGES.map(l =>
+                    `<option value="${l.value}" ${s.language === l.value ? 'selected' : ''}>${l.label}</option>`
+                  ).join('')}
+                </select>
+              </div>
+            </div>
+
+          </div>
+
+          <!-- Users panel -->
+          <div class="settings-panel ${activeTab==='users'?'active':''}" id="sp-users">
+            <div id="users-content"><div class="settings-section-title" style="padding:16px 0 0 2px">Loading…</div></div>
+          </div>
+
+          <!-- File Manager panel -->
+          <div class="settings-panel ${activeTab==='filemanager'?'active':''}" id="sp-filemanager">
+            <div class="settings-section">
+              <div class="settings-section-title">📁 File Manager</div>
+
+              <div class="settings-row">
+                <label>Show hidden files</label>
+                <input type="checkbox" id="s-fm-hidden" ${fm.showHidden ? 'checked' : ''} style="accent-color:var(--accent);width:15px;height:15px;cursor:pointer;">
+              </div>
+              <div class="settings-row">
+                <label>Show permissions</label>
+                <input type="checkbox" id="s-fm-perms" ${fm.showPerms ? 'checked' : ''} style="accent-color:var(--accent);width:15px;height:15px;cursor:pointer;">
+              </div>
+              <div class="settings-row">
+                <label>Show owner</label>
+                <input type="checkbox" id="s-fm-owner" ${fm.showOwner ? 'checked' : ''} style="accent-color:var(--accent);width:15px;height:15px;cursor:pointer;">
+              </div>
             </div>
           </div>
 
-          <div class="settings-row">
-            <label>Date Format</label>
-            <select id="s-date-format">
-              <option value="DD/MM/YYYY" ${s.date_format === 'DD/MM/YYYY' ? 'selected' : ''}>DD/MM/YYYY</option>
-              <option value="MM/DD/YYYY" ${s.date_format === 'MM/DD/YYYY' ? 'selected' : ''}>MM/DD/YYYY</option>
-              <option value="YYYY-MM-DD" ${s.date_format === 'YYYY-MM-DD' ? 'selected' : ''}>YYYY-MM-DD</option>
-            </select>
-          </div>
-        </div>
-
-        <div class="settings-section">
-          <div class="settings-section-title">📅 Calendar</div>
-
-          <div class="settings-row">
-            <label>Week Starts On</label>
-            <div class="settings-radio-group">
-              <label class="radio-opt">
-                <input type="radio" name="week_starts" value="monday" ${s.week_starts !== 'sunday' ? 'checked' : ''}>
-                <span>Monday</span>
-              </label>
-              <label class="radio-opt">
-                <input type="radio" name="week_starts" value="sunday" ${s.week_starts === 'sunday' ? 'checked' : ''}>
-                <span>Sunday</span>
-              </label>
-            </div>
-          </div>
-        </div>
-
-        <div class="settings-section">
-          <div class="settings-section-title">🖥️ Display <span style="font-size:.7rem;color:#666;font-weight:400;text-transform:none;letter-spacing:0">(saved per device)</span></div>
-
-          <div class="settings-row settings-row-slider">
-            <label>Icon Size</label>
-            <div class="slider-wrap">
-              <input type="range" id="s-icon-size" min="1" max="5" step="1" value="${parseInt(d.icon_size) || 3}">
-              <div class="slider-labels"><span>XS</span><span>S</span><span>M</span><span>L</span><span>XL</span></div>
-            </div>
-            <span class="slider-preview-icon" id="prev-icon">🖥️</span>
+          <!-- About panel -->
+          <div class="settings-panel ${activeTab==='about'?'active':''}" id="sp-about">
+            <div id="about-content" style="padding:8px 0"><div style="color:var(--text-dim);font-size:.85rem">Loading…</div></div>
           </div>
 
-          <div class="settings-row settings-row-slider">
-            <label>Text Size</label>
-            <div class="slider-wrap">
-              <input type="range" id="s-text-size" min="1" max="5" step="1" value="${parseInt(d.text_size) || 3}">
-              <div class="slider-labels"><span>XS</span><span>S</span><span>M</span><span>L</span><span>XL</span></div>
-            </div>
-            <span class="slider-preview-text" id="prev-text">Aa</span>
-          </div>
         </div>
-
-        <div class="settings-section">
-          <div class="settings-section-title">🌐 Language &amp; Region</div>
-
-          <div class="settings-row">
-            <label>Language</label>
-            <select id="s-language">
-              ${LANGUAGES.map(l =>
-                `<option value="${l.value}" ${s.language === l.value ? 'selected' : ''}>${l.label}</option>`
-              ).join('')}
-            </select>
-          </div>
-        </div>
-
-        <div class="settings-actions">
-          <button id="s-save">Save Changes</button>
-          <span id="s-saved-msg" style="display:none;color:#50fa7b;font-size:.85rem;">✓ Saved</span>
-        </div>
-
       </div>
     `;
 
     updateTimePreviews();
     setInterval(updateTimePreviews, 10000);
 
-    // live preview for sliders
+    // tab switching
+    body.querySelectorAll('.settings-tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        body.querySelectorAll('.settings-tab').forEach(t => t.classList.remove('active'));
+        body.querySelectorAll('.settings-panel').forEach(p => p.classList.remove('active'));
+        tab.classList.add('active');
+        body.querySelector(`#sp-${tab.dataset.tab}`).classList.add('active');
+        if (tab.dataset.tab === 'users') renderUsers(body);
+        if (tab.dataset.tab === 'about') renderAbout(body);
+      });
+    });
+
+    if (activeTab === 'users') renderUsers(body);
+    if (activeTab === 'about') renderAbout(body);
+
+    // Display — auto-save on slider change
     const iconSlider = body.querySelector('#s-icon-size');
     const textSlider = body.querySelector('#s-text-size');
     const prevIcon   = body.querySelector('#prev-icon');
@@ -224,34 +312,194 @@ const Settings = (() => {
     iconSlider.addEventListener('input', () => {
       const i = parseInt(iconSlider.value) - 1;
       prevIcon.style.fontSize = ICON_FONT_PREVIEW[i];
+      saveDisplay({ icon_size: iconSlider.value, text_size: textSlider.value });
     });
     textSlider.addEventListener('input', () => {
       const i = parseInt(textSlider.value) - 1;
       prevText.style.fontSize = TEXT_PREVIEW[i];
+      saveDisplay({ icon_size: iconSlider.value, text_size: textSlider.value });
     });
 
-    // init preview sizes
     prevIcon.style.fontSize = ICON_FONT_PREVIEW[parseInt(iconSlider.value) - 1];
     prevText.style.fontSize = TEXT_PREVIEW[parseInt(textSlider.value) - 1];
 
-    body.querySelector('#s-save').addEventListener('click', () => {
-      const data = {
-        timezone:    body.querySelector('#s-timezone').value,
-        time_format: body.querySelector('input[name="time_format"]:checked').value,
-        date_format: body.querySelector('#s-date-format').value,
-        week_starts: body.querySelector('input[name="week_starts"]:checked').value,
-        language:    body.querySelector('#s-language').value,
-      };
-      const display = {
-        icon_size: body.querySelector('#s-icon-size').value,
-        text_size: body.querySelector('#s-text-size').value,
-      };
-      saveDisplay(display);
-      saveSettings(data).then(() => {
-        const msg = body.querySelector('#s-saved-msg');
-        msg.style.display = 'inline';
-        setTimeout(() => msg.style.display = 'none', 2000);
+    // Regional — auto-save on any change (debounced for selects)
+    let regionalTimer;
+    const saveRegional = () => {
+      clearTimeout(regionalTimer);
+      regionalTimer = setTimeout(() => {
+        saveSettings({
+          timezone:    body.querySelector('#s-timezone').value,
+          time_format: body.querySelector('input[name="time_format"]:checked').value,
+          date_format: body.querySelector('#s-date-format').value,
+          week_starts: body.querySelector('input[name="week_starts"]:checked').value,
+          language:    body.querySelector('#s-language').value,
+        });
+      }, 400);
+    };
+    body.querySelector('#s-timezone').addEventListener('change', saveRegional);
+    body.querySelector('#s-date-format').addEventListener('change', saveRegional);
+    body.querySelectorAll('input[name="time_format"]').forEach(el => el.addEventListener('change', saveRegional));
+    body.querySelectorAll('input[name="week_starts"]').forEach(el => el.addEventListener('change', saveRegional));
+    body.querySelector('#s-language').addEventListener('change', saveRegional);
+
+    // File Manager — instant
+    body.querySelector('#s-fm-hidden').addEventListener('change', e => {
+      saveFMPrefs({ ...loadFMPrefs(), showHidden: e.target.checked });
+    });
+    body.querySelector('#s-fm-perms').addEventListener('change', e => {
+      saveFMPrefs({ ...loadFMPrefs(), showPerms: e.target.checked });
+    });
+    body.querySelector('#s-fm-owner').addEventListener('change', e => {
+      saveFMPrefs({ ...loadFMPrefs(), showOwner: e.target.checked });
+    });
+  }
+
+  async function renderUsers(body) {
+    const container = body.querySelector('#users-content');
+    container.innerHTML = '<div style="padding:12px 0;color:var(--text-dim);font-size:.85rem">Loading…</div>';
+
+    let data;
+    try {
+      const res = await fetch('/api/users');
+      data = await res.json();
+    } catch (_) {
+      container.innerHTML = '<div style="color:#e05555;padding:12px 0">Failed to load users.</div>';
+      return;
+    }
+
+    const { users, groups } = data;
+
+    container.innerHTML = `
+      <div class="settings-section">
+        <div class="settings-section-title">System Users</div>
+        <div class="users-list" id="users-list"></div>
+      </div>
+      <div class="settings-section">
+        <div class="settings-section-title">Add New User</div>
+        <div class="settings-row"><label>Username</label><input class="s-input" id="nu-name" placeholder="username"></div>
+        <div class="settings-row"><label>Password</label><input class="s-input" id="nu-pass" type="password" placeholder="password"></div>
+        <div class="settings-row"><label>Shell</label>
+          <select class="s-input" id="nu-shell">
+            <option value="/bin/bash">/bin/bash</option>
+            <option value="/bin/sh">/bin/sh</option>
+            <option value="/usr/sbin/nologin">nologin</option>
+          </select>
+        </div>
+        <div class="settings-row"><label>Groups</label><input class="s-input" id="nu-groups" placeholder="sudo,www-data (comma separated)"></div>
+        <div class="settings-row">
+          <label></label>
+          <button class="s-btn" id="nu-add">Create User</button>
+          <span id="nu-msg" style="font-size:.8rem;margin-left:8px"></span>
+        </div>
+      </div>
+    `;
+
+    const listEl = container.querySelector('#users-list');
+    users.forEach(u => {
+      const row = document.createElement('div');
+      row.className = 'user-row';
+      row.innerHTML = `
+        <div class="user-row-main">
+          <span class="user-name">${u.username}</span>
+          <span class="user-uid">uid:${u.uid}</span>
+          <span class="user-shell">${u.shell}</span>
+          <button class="s-btn-sm user-edit-btn">Edit</button>
+          ${u.username !== 'root' ? `<button class="s-btn-sm s-btn-danger user-del-btn">Delete</button>` : ''}
+        </div>
+        <div class="user-edit-panel" style="display:none">
+          <div class="settings-row" style="margin-top:8px">
+            <label>Groups</label>
+            <div class="user-groups-wrap">
+              ${groups.map(g => `
+                <label class="user-group-opt">
+                  <input type="checkbox" value="${g}" ${u.groups.includes(g) ? 'checked' : ''}> ${g}
+                </label>`).join('')}
+            </div>
+          </div>
+          <div class="settings-row">
+            <label>Shell</label>
+            <select class="s-input user-shell-sel">
+              ${['/bin/bash','/bin/sh','/usr/sbin/nologin'].map(sh =>
+                `<option ${u.shell===sh?'selected':''}>${sh}</option>`).join('')}
+            </select>
+          </div>
+          <div class="settings-row">
+            <label>New Password</label>
+            <input class="s-input user-pass-inp" type="password" placeholder="leave blank to keep">
+          </div>
+          <div class="settings-row">
+            <label></label>
+            <button class="s-btn user-save-btn">Save</button>
+            <span class="user-save-msg" style="font-size:.8rem;margin-left:8px"></span>
+          </div>
+        </div>
+      `;
+
+      row.querySelector('.user-edit-btn').addEventListener('click', () => {
+        const panel = row.querySelector('.user-edit-panel');
+        panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
       });
+
+      if (u.username !== 'root') {
+        row.querySelector('.user-del-btn').addEventListener('click', async () => {
+          if (!confirm(`Delete user "${u.username}"? This will remove their home directory.`)) return;
+          const r = await fetch(`/api/users/${u.username}`, { method: 'DELETE' });
+          if (r.ok) renderUsers(body);
+          else { const e = await r.json(); alert(e.detail); }
+        });
+      }
+
+      row.querySelector('.user-save-btn').addEventListener('click', async () => {
+        const checkedGroups = [...row.querySelectorAll('.user-groups-wrap input:checked')].map(i => i.value);
+        const shell    = row.querySelector('.user-shell-sel').value;
+        const password = row.querySelector('.user-pass-inp').value;
+        const payload  = { groups: checkedGroups, shell };
+        if (password) payload.password = password;
+
+        const r = await fetch(`/api/users/${u.username}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        const msg = row.querySelector('.user-save-msg');
+        if (r.ok) {
+          msg.style.color = '#50fa7b'; msg.textContent = '✓ Saved';
+          setTimeout(() => renderUsers(body), 800);
+        } else {
+          const e = await r.json();
+          msg.style.color = '#e05555'; msg.textContent = e.detail;
+        }
+      });
+
+      listEl.appendChild(row);
+    });
+
+    // create user
+    container.querySelector('#nu-add').addEventListener('click', async () => {
+      const username = container.querySelector('#nu-name').value.trim();
+      const password = container.querySelector('#nu-pass').value;
+      const shell    = container.querySelector('#nu-shell').value;
+      const groups   = container.querySelector('#nu-groups').value.split(',').map(g => g.trim()).filter(Boolean);
+      const msg      = container.querySelector('#nu-msg');
+
+      if (!username || !password) { msg.style.color='#e05555'; msg.textContent='Username and password required'; return; }
+
+      const r = await fetch('/api/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password, shell, groups }),
+      });
+      if (r.ok) {
+        msg.style.color = '#50fa7b'; msg.textContent = '✓ User created';
+        container.querySelector('#nu-name').value = '';
+        container.querySelector('#nu-pass').value = '';
+        container.querySelector('#nu-groups').value = '';
+        setTimeout(() => renderUsers(body), 800);
+      } else {
+        const e = await r.json();
+        msg.style.color = '#e05555'; msg.textContent = e.detail;
+      }
     });
   }
 
@@ -272,5 +520,98 @@ const Settings = (() => {
     return currentSettings;
   }
 
-  return { openWindow, get, initDisplay };
+  async function renderAbout(body) {
+    const wrap = body.querySelector('#about-content');
+    if (!wrap) return;
+    wrap.innerHTML = '<div style="color:var(--text-dim);font-size:.85rem">Loading…</div>';
+
+    const res  = await fetch('/api/system/info');
+    const info = await res.json();
+
+    wrap.innerHTML = `
+      <div class="settings-section">
+        <div style="display:flex;align-items:center;gap:14px;margin-bottom:18px">
+          <div style="font-size:2.6rem;line-height:1">🖥️</div>
+          <div>
+            <div style="font-size:1.15rem;font-weight:700;color:var(--text)">mvmOS</div>
+            <div style="font-size:.82rem;color:var(--text-dim)">Version ${info.version} &nbsp;·&nbsp; <span style="font-family:monospace">${info.commit}</span> (${info.branch})</div>
+          </div>
+        </div>
+
+        <div class="about-grid">
+          <span class="about-label">Hostname</span><span class="about-val">${info.hostname}</span>
+          <span class="about-label">Kernel</span><span class="about-val">${info.kernel}</span>
+          <span class="about-label">Uptime</span><span class="about-val">${info.uptime}</span>
+          <span class="about-label">Memory</span><span class="about-val">${info.mem_used} / ${info.mem_total}</span>
+          <span class="about-label">Disk (/)</span><span class="about-val">${info.disk_used} / ${info.disk_total} (${info.disk_pct})</span>
+        </div>
+      </div>
+
+      <div class="settings-section" style="margin-top:16px">
+        <div class="settings-section-title">⬆️ System Update</div>
+        <div style="margin-bottom:10px">
+          <button class="s-btn" id="about-check-btn">Check for updates</button>
+          <span id="about-update-status" style="margin-left:10px;font-size:.82rem;color:var(--text-dim)"></span>
+        </div>
+        <div id="about-update-output" style="display:none;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:10px;font-size:.78rem;font-family:monospace;max-height:180px;overflow-y:auto;white-space:pre-wrap"></div>
+        <button class="s-btn" id="about-update-btn" style="display:none;margin-top:8px">↑ Apply update &amp; restart</button>
+      </div>
+    `;
+
+    const checkBtn  = wrap.querySelector('#about-check-btn');
+    const statusEl  = wrap.querySelector('#about-update-status');
+    const updateBtn = wrap.querySelector('#about-update-btn');
+    const outputEl  = wrap.querySelector('#about-update-output');
+
+    checkBtn.addEventListener('click', async () => {
+      checkBtn.disabled = true;
+      statusEl.textContent = 'Checking…';
+      const r = await fetch('/api/system/check-update');
+      const d = await r.json();
+      checkBtn.disabled = false;
+      if (d.up_to_date) {
+        statusEl.style.color = '#50fa7b';
+        statusEl.textContent = '✓ Already up to date';
+        updateBtn.style.display = 'none';
+      } else {
+        statusEl.style.color = '#f1fa8c';
+        statusEl.textContent = `${d.commits_behind} new commit${d.commits_behind !== 1 ? 's' : ''} available (${d.local} → ${d.remote})`;
+        updateBtn.style.display = '';
+      }
+    });
+
+    updateBtn.addEventListener('click', async () => {
+      updateBtn.disabled = true;
+      outputEl.style.display = 'block';
+      outputEl.textContent = '';
+      statusEl.textContent = 'Updating…';
+
+      const res = await fetch('/api/system/update', { method: 'POST' });
+      const reader = res.body.getReader();
+      const dec = new TextDecoder();
+      let buf = '';
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += dec.decode(value, { stream: true });
+        const lines = buf.split('\n');
+        buf = lines.pop();
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          const text = line.slice(6);
+          if (text === '__RESTARTING__') {
+            outputEl.textContent += '\nRestarting server…';
+            statusEl.style.color = '#50fa7b';
+            statusEl.textContent = '✓ Update applied — reconnecting…';
+            setTimeout(() => location.reload(), 3000);
+          } else {
+            outputEl.textContent += text + '\n';
+            outputEl.scrollTop = outputEl.scrollHeight;
+          }
+        }
+      }
+    });
+  }
+
+  return { openWindow, get, initDisplay, loadFMPrefs };
 })();

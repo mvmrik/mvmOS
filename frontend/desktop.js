@@ -135,10 +135,11 @@ const Desktop = (() => {
     if (app === 'terminal') Terminal.openWindow();
     if (app === 'filemanager') FileManager.openWindow();
     if (app === 'settings') Settings.openWindow();
+    if (app === 'appstore') AppStore.openWindow();
   }
 
   // ── Window factory ──
-  function createWindow({ id, title, width = 700, height = 450, onMount, onResize }) {
+  function createWindow({ id, title, width = 700, height = 450, onMount, onResize, appSettings }) {
     // bring existing to front if already open
     if (windows[id]) {
       focusWindow(id);
@@ -163,6 +164,7 @@ const Desktop = (() => {
           <button class="wbtn wbtn-max"    title="Maximize"></button>
         </div>
         <div class="window-title">${title}</div>
+        ${appSettings ? '<button class="wbtn-appsettings" title="App settings">⚙</button>' : ''}
       </div>
       <div class="window-body"></div>
       <div class="window-resize"></div>
@@ -180,9 +182,20 @@ const Desktop = (() => {
     el.querySelector('.wbtn-min').addEventListener('click', () => toggleMinimize(id));
     el.querySelector('.wbtn-max').addEventListener('click', () => toggleMaximize(el));
 
+    if (appSettings) {
+      const btn = el.querySelector('.wbtn-appsettings');
+      btn.addEventListener('click', e => {
+        e.stopPropagation();
+        Settings.openWindow(appSettings);
+      });
+    }
+
     el.addEventListener('mousedown', () => focusWindow(id));
 
     desktop.appendChild(el);
+    // ensure new window is always on top, even if another window captures mousedown
+    zCounter += 10;
+    el.style.zIndex = zCounter;
     focusWindow(id);
 
     windows[id] = { el, title, minimized: false, origStyle: null };
@@ -310,17 +323,88 @@ const Desktop = (() => {
     startMenu.classList.remove('open');
   });
 
+  // ── Switch User ──
+  async function loadCurrentUser() {
+    try {
+      const res = await fetch('/api/auth/whoami');
+      const d = await res.json();
+      window._effectiveUser = d.effective_user;
+      const el = document.getElementById('current-user-label');
+      if (el) el.textContent = d.effective_user;
+    } catch (_) {}
+  }
+
+  function openSwitchUser() {
+    startMenu.classList.remove('open');
+    Desktop.createWindow({
+      id: 'switch-user',
+      title: '🔄 Switch User',
+      width: 340,
+      height: 220,
+      onMount(body) {
+        body.style.padding = '20px';
+        body.innerHTML = `<div style="display:flex;flex-direction:column;gap:12px">
+          <div style="font-size:.85rem;color:var(--text-dim)">Current user: <strong id="su-current" style="color:var(--text)"></strong></div>
+          <div class="settings-row"><label style="width:90px">Switch to</label><select class="s-input" id="su-user"><option value="">Loading…</option></select></div>
+          <div class="settings-row"><label style="width:90px">Password</label><input class="s-input" id="su-pass" type="password" placeholder="password"></div>
+          <div style="display:flex;align-items:center;gap:10px">
+            <button class="s-btn" id="su-btn">Switch</button>
+            <span id="su-msg" style="font-size:.82rem"></span>
+          </div>
+        </div>`;
+        body.querySelector('#su-current').textContent = window._effectiveUser || '…';
+
+        // load user list
+        fetch('/api/users').then(r => r.json()).then(d => {
+          const sel = body.querySelector('#su-user');
+          sel.innerHTML = d.users
+            .filter(u => u.username !== window._effectiveUser)
+            .map(u => `<option value="${u.username}">${u.username} (uid:${u.uid})</option>`)
+            .join('');
+        });
+
+        const doSwitch = async () => {
+          const username = body.querySelector('#su-user').value.trim();
+          const password = body.querySelector('#su-pass').value;
+          const msg = body.querySelector('#su-msg');
+          if (!username || !password) { msg.style.color='#e05555'; msg.textContent='Fill in both fields'; return; }
+          const r = await fetch('/api/auth/switch', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, password }),
+          });
+          if (r.ok) {
+            const d = await r.json();
+            msg.style.color = '#50fa7b'; msg.textContent = `✓ Switched to ${d.effective_user}`;
+            window._effectiveUser = d.effective_user;
+            document.getElementById('current-user-label').textContent = d.effective_user;
+            setTimeout(() => closeWindow('switch-user'), 800);
+          } else {
+            const e = await r.json();
+            msg.style.color = '#e05555'; msg.textContent = e.detail;
+          }
+        };
+        body.querySelector('#su-btn').addEventListener('click', doSwitch);
+        body.querySelector('#su-pass').addEventListener('keydown', e => { if (e.key === 'Enter') doSwitch(); });
+      },
+    });
+  }
+
+  document.getElementById('switch-user-btn').addEventListener('click', openSwitchUser);
+
   // ── Init ──
   async function init() {
     Settings.initDisplay();
     await loadState();
     renderIcons();
+    await loadCurrentUser();
     // load settings before clock so format is correct on first render
     try {
       const res = await fetch('/api/settings');
       window._vosSettings = await res.json();
     } catch (_) { window._vosSettings = {}; }
     startClock();
+    mvmOS._loadAllPlugins();
   }
 
   init();

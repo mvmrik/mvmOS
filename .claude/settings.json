@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(awk '{print $1}')",
+      "Bash(sqlite3 /var/www/mvmos.mvmrik.com/data.db 'SELECT token FROM sessions LIMIT 1;')",
+      "Bash(curl -s http://127.0.0.1:8080/api/users -b \"session=$\\(sqlite3 /var/www/mvmos.mvmrik.com/data.db 'SELECT token FROM sessions LIMIT 1;'\\)\")",
+      "Bash(sqlite3 /var/www/mvmos.mvmrik.com/data.db \"ALTER TABLE sessions ADD COLUMN effective_user TEXT NOT NULL DEFAULT 'root';\")",
+      "Bash(curl -s http://127.0.0.1:8080/api/auth/whoami -b \"session=$\\(sqlite3 /var/www/mvmos.mvmrik.com/data.db 'SELECT token FROM sessions LIMIT 1;'\\)\")",
+      "Bash(useradd -m -s /bin/bash testuser)",
+      "Bash(chpasswd)",
+      "Bash(curl -s http://127.0.0.1:8080/api/auth/login-users)",
+      "Bash(curl -s \"http://127.0.0.1:8080/api/packages/search?q=htop\" -b \"session=$\\(sqlite3 /var/www/mvmos.mvmrik.com/data.db 'SELECT token FROM sessions LIMIT 1;'\\)\")",
+      "Bash(curl -s \"http://127.0.0.1:8080/api/packages/categories\" -b \"session=$\\(sqlite3 /var/www/mvmos.mvmrik.com/data.db 'SELECT token FROM sessions LIMIT 1;'\\)\")",
+      "Bash(dpkg -l jpegoptim)",
+      "Bash(python3 -c ' *)",
+      "Bash(sed -i s/VirtualOS/mvmOS/g /var/www/mvmos.mvmrik.com/frontend/index.html /var/www/mvmos.mvmrik.com/backend/main.py /var/www/mvmos.mvmrik.com/README.md /var/www/mvmos.mvmrik.com/install.sh)",
+      "Bash(sed -i 's/vos_display/mvmos_display/g; s/vos_fm_prefs/mvmos_fm_prefs/g' /var/www/mvmos.mvmrik.com/frontend/settings.js)",
+      "Bash(journalctl -u mvmos -n 30 --no-pager)"
+    ]
+  }
+}
