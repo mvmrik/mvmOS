@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VirtualOS</title>
+<link rel="stylesheet" href="/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css">
+</head>
+<body>
+
+<!-- Desktop area -->
+<div id="desktop"></div>
+
+<!-- Taskbar -->
+<div id="taskbar">
+  <button id="start-btn">⊞ Apps</button>
+  <div id="taskbar-windows"></div>
+  <div id="clock"></div>
+</div>
+
+<!-- Start menu -->
+<div id="start-menu">
+  <div class="start-menu-item" data-app="terminal">
+    <span class="emoji">🖥️</span> Terminal
+  </div>
+  <div class="start-menu-item" data-app="filemanager">
+    <span class="emoji">📁</span> File Manager
+  </div>
+  <div class="start-menu-sep"></div>
+  <div class="start-menu-item" data-app="settings">
+    <span class="emoji">⚙️</span> Settings
+  </div>
+  <div class="start-menu-sep"></div>
+  <form method="POST" action="/logout" style="margin:0">
+    <button type="submit" class="start-menu-item start-menu-logout" style="width:100%;background:none;border:none;cursor:pointer;text-align:left">
+      <span class="emoji">🚪</span> Log out
+    </button>
+  </form>
+</div>
+
+<!-- Right-click context menu -->
+<div id="context-menu">
+  <div class="ctx-item" id="ctx-terminal">🖥️ Open Terminal</div>
+  <div class="ctx-item" id="ctx-files">📁 Open Files</div>
+  <div class="ctx-sep"></div>
+  <div class="ctx-item ctx-danger" id="ctx-refresh">↺ Refresh Desktop</div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.js"></script>
+<script src="/settings.js"></script>
+<script src="/desktop.js"></script>
+<script src="/terminal.js"></script>
+<script src="/filemanager.js"></script>
+</body>
+</html>
