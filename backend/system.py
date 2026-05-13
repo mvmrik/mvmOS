@@ -96,11 +96,7 @@ async def check_update(session=Depends(get_current_session)):
 @router.post("/update")
 async def do_update(session=Depends(get_current_session)):
     async def generate():
-        user = session.get("effective_user", "")
-        if user:
-            cmd = ["su", user, "-c", f"cd {os.path.abspath(REPO_DIR)} && git pull origin main"]
-        else:
-            cmd = ["git", "pull", "origin", "main"]
+        cmd = ["git", "pull", "https://github.com/mvmrik/mvmOS.git", "main"]
         proc = await asyncio.create_subprocess_exec(
             *cmd,
             stdout=asyncio.subprocess.PIPE,
