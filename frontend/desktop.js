@@ -208,7 +208,19 @@ const Desktop = (() => {
   function addToDesktop(def) {
     if (!desktopState.icons) desktopState.icons = {};
     const state = desktopState.icons[def.id] || {};
-    desktopState.icons[def.id] = { ...state, hidden: false, label: def.label, emoji: def.emoji, x: state.x ?? def.x ?? 20, y: state.y ?? def.y ?? 20 };
+    if (state.x === undefined) {
+      // find a free slot — scan existing icons and offset
+      const occupied = Object.values(desktopState.icons).filter(s => !s.hidden);
+      const ICON_W = 80, ICON_H = 90, PAD = 16, START_X = 20, START_Y = 20;
+      const desktopH = desktop.clientHeight || window.innerHeight - 44;
+      const cols = Math.max(1, Math.floor((desktop.clientWidth || 200) / (ICON_W + PAD)));
+      let slot = occupied.length;
+      const col = slot % cols;
+      const row = Math.floor(slot / cols);
+      state.x = START_X + col * (ICON_W + PAD);
+      state.y = START_Y + row * (ICON_H + PAD);
+    }
+    desktopState.icons[def.id] = { ...state, hidden: false, label: def.label, emoji: def.emoji };
     saveState();
     renderIcons();
   }
@@ -289,10 +301,16 @@ const Desktop = (() => {
 
   // ── App launcher ──
   function openApp(app) {
-    if (app === 'terminal') Terminal.openWindow();
-    if (app === 'filemanager') FileManager.openWindow();
-    if (app === 'settings') Settings.openWindow();
-    if (app === 'appstore') AppStore.openWindow();
+    if (app === 'terminal') { Terminal.openWindow(); return; }
+    if (app === 'filemanager') { FileManager.openWindow(); return; }
+    if (app === 'settings') { Settings.openWindow(); return; }
+    if (app === 'appstore') { AppStore.openWindow(); return; }
+    // mvmOS plugin app
+    const pluginApp = window.mvmOS?._apps?.[app];
+    if (pluginApp) {
+      fetch(`/api/plugins/${app}/open`, { method: 'POST' }).catch(() => {});
+      pluginApp.launch();
+    }
   }
 
   // ── Window factory ──
