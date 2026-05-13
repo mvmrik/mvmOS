@@ -6,7 +6,7 @@ import grp
 import subprocess
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
-from fastapi.responses import JSONResponse, FileResponse
+from fastapi.responses import JSONResponse, FileResponse, StreamingResponse
 from pydantic import BaseModel
 from .auth import get_current_session
 
@@ -110,6 +110,29 @@ class RenameRequest(BaseModel):
     new_name: str
 
 
+class CopyRequest(BaseModel):
+    src: str
+    dst_dir: str
+    move: bool = False
+
+@router.post("/copy")
+async def copy_file(body: CopyRequest, _session=Depends(get_current_session)):
+    src = safe_path(body.src)
+    dst_dir = safe_path(body.dst_dir)
+    if not os.path.exists(src):
+        raise HTTPException(status_code=404, detail="Source not found")
+    if not os.path.isdir(dst_dir):
+        raise HTTPException(status_code=400, detail="Destination is not a directory")
+    dst = os.path.join(dst_dir, os.path.basename(src))
+    if body.move:
+        shutil.move(src, dst)
+    else:
+        if os.path.isdir(src):
+            shutil.copytree(src, dst)
+        else:
+            shutil.copy2(src, dst)
+    return {"ok": True}
+
 @router.post("/rename")
 async def rename(body: RenameRequest, _session=Depends(get_current_session)):
     src = safe_path(body.path)
@@ -178,6 +201,126 @@ async def raw_file(path: str, _session=Depends(get_current_session)):
         raise HTTPException(status_code=404, detail="Not found")
     mime, _ = mimetypes.guess_type(real)
     return FileResponse(real, media_type=mime or "application/octet-stream")
+
+@router.get("/desktop/watch")
+async def desktop_watch(session=Depends(get_current_session)):
+    import asyncio
+    username = session["effective_user"]
+    desktop_dir = os.path.join(home_for(username), "Desktop")
+    os.makedirs(desktop_dir, exist_ok=True)
+
+    def _snapshot():
+        try:
+            return {f: os.stat(os.path.join(desktop_dir, f)).st_mtime
+                    for f in os.listdir(desktop_dir) if not f.startswith('.')}
+        except Exception:
+            return {}
+
+    async def generate():
+        last = _snapshot()
+        yield "data: ok\n\n"
+        while True:
+            await asyncio.sleep(2)
+            current = _snapshot()
+            if current != last:
+                last = current
+                yield "data: changed\n\n"
+
+    return StreamingResponse(generate(), media_type="text/event-stream",
+                             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+@router.get("/desktop/list")
+async def desktop_files(session=Depends(get_current_session)):
+    username = session["effective_user"]
+    desktop_dir = os.path.join(home_for(username), "Desktop")
+    os.makedirs(desktop_dir, exist_ok=True)
+    entries = []
+    for name in sorted(os.listdir(desktop_dir)):
+        full = os.path.join(desktop_dir, name)
+        if name.startswith('.'):
+            continue
+        entry = {"name": name, "path": full}
+        if os.path.isdir(full):
+            entry["type"] = "dir"
+        elif name.endswith(".url"):
+            entry["type"] = "url"
+            try:
+                content = open(full).read()
+                for line in content.splitlines():
+                    if line.startswith("URL="):
+                        entry["url"] = line[4:].strip()
+            except Exception:
+                pass
+        elif name.endswith(".mvmos"):
+            entry["type"] = "app"
+            try:
+                content = open(full).read().strip()
+                entry["app_id"] = content
+            except Exception:
+                pass
+        else:
+            entry["type"] = "file"
+            ext = name.rsplit('.', 1)[-1].lower() if '.' in name else ''
+            entry["ext"] = ext
+        entries.append(entry)
+    return JSONResponse({"entries": entries, "desktop_dir": desktop_dir})
+
+class NewAppRequest(BaseModel):
+    app_id: str
+    label: str = ""
+
+@router.post("/desktop/app")
+async def desktop_new_app(body: NewAppRequest, session=Depends(get_current_session)):
+    username = session["effective_user"]
+    desktop_dir = os.path.join(home_for(username), "Desktop")
+    os.makedirs(desktop_dir, exist_ok=True)
+    safe_name = "".join(c if c.isalnum() or c in "-_ ." else "_" for c in (body.label or body.app_id))
+    filename = safe_name + ".mvmos"
+    path = os.path.join(desktop_dir, filename)
+    with open(path, "w") as f:
+        f.write(body.app_id)
+    return JSONResponse({"ok": True, "name": filename})
+
+class NewLinkRequest(BaseModel):
+    url: str
+    label: str = ""
+
+class NewFolderRequest(BaseModel):
+    name: str
+
+@router.post("/desktop/link")
+async def desktop_new_link(body: NewLinkRequest, session=Depends(get_current_session)):
+    username = session["effective_user"]
+    desktop_dir = os.path.join(home_for(username), "Desktop")
+    os.makedirs(desktop_dir, exist_ok=True)
+    from urllib.parse import urlparse
+    label = body.label or urlparse(body.url).hostname or "link"
+    safe_name = "".join(c if c.isalnum() or c in "-_ ." else "_" for c in label)
+    filename = safe_name + ".url"
+    path = os.path.join(desktop_dir, filename)
+    with open(path, "w") as f:
+        f.write(f"[InternetShortcut]\nURL={body.url}\n")
+    return JSONResponse({"ok": True, "name": filename})
+
+@router.post("/desktop/folder")
+async def desktop_new_folder(body: NewFolderRequest, session=Depends(get_current_session)):
+    username = session["effective_user"]
+    desktop_dir = os.path.join(home_for(username), "Desktop")
+    folder_path = os.path.join(desktop_dir, body.name)
+    os.makedirs(folder_path, exist_ok=True)
+    return JSONResponse({"ok": True})
+
+@router.delete("/desktop/entry")
+async def desktop_delete_entry(path: str, session=Depends(get_current_session)):
+    real = safe_path(path)
+    desktop_dir = safe_path(os.path.join(home_for(session["effective_user"]), "Desktop"))
+    if not real.startswith(desktop_dir):
+        raise HTTPException(status_code=403, detail="Access denied")
+    if os.path.isdir(real):
+        shutil.rmtree(real)
+    else:
+        os.remove(real)
+    return JSONResponse({"ok": True})
 
 @router.post("/chown")
 async def chown(body: ChownRequest, _session=Depends(get_current_session)):

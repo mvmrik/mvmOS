@@ -137,48 +137,82 @@ const Desktop = (() => {
   }
 
   // ── Default icons ──
-  const DEFAULT_ICONS = [
-    { id: 'terminal', label: 'Terminal', emoji: '🖥️', app: 'terminal',    x: 20, y: 20  },
-    { id: 'files',    label: 'Files',    emoji: '📁', app: 'filemanager', x: 20, y: 120 },
-    { id: 'settings', label: 'Settings', emoji: '⚙️', app: 'settings',   x: 20, y: 220 },
+  const BUILTIN_ICONS = [
+    { id: 'terminal', label: 'Terminal', emoji: '🖥️', app: 'terminal' },
+    { id: 'files',    label: 'Files',    emoji: '📁', app: 'filemanager' },
+    { id: 'settings', label: 'Settings', emoji: '⚙️', app: 'settings' },
   ];
-
-  // all icons available (built-in + installed plugins)
-  function allIconDefs() {
-    const defs = [...DEFAULT_ICONS];
-    if (window.mvmOS) {
-      Object.values(mvmOS._apps).forEach(a => {
-        if (!defs.find(d => d.id === a.id)) {
-          defs.push({ id: a.id, label: a.name, emoji: a.icon || '📦', app: a.id, x: 20, y: 20 });
-        }
-      });
-    }
-    return defs;
-  }
 
   // container for grid icons
   const iconsContainer = document.createElement('div');
   iconsContainer.id = 'desktop-icons';
   desktop.appendChild(iconsContainer);
 
+  let _desktopEntries = []; // from ~/Desktop filesystem
+
+  function _watchDesktop() {
+    const es = new EventSource('/api/files/desktop/watch');
+    es.onmessage = async e => {
+      if (e.data === 'changed') {
+        await loadDesktopFiles();
+        renderIcons();
+      }
+    };
+    es.onerror = () => { es.close(); setTimeout(_watchDesktop, 5000); };
+  }
+
+  async function loadDesktopFiles() {
+    try {
+      const res = await fetch('/api/files/desktop/list');
+      if (!res.ok) return;
+      const data = await res.json();
+      _desktopEntries = data.entries || [];
+    } catch (_) { _desktopEntries = []; }
+  }
+
+  function _fileIcon(entry) {
+    if (entry.type === 'dir')  return { emoji: '📁' };
+    if (entry.type === 'url')  return { favicon: `https://www.google.com/s2/favicons?sz=64&domain=${encodeURIComponent(entry.url || '')}` };
+    if (entry.type === 'app')  {
+      const appDef = window.mvmOS?._apps?.[entry.app_id];
+      return { emoji: appDef?.icon || '📦' };
+    }
+    const img = ['jpg','jpeg','png','gif','webp','bmp','svg'];
+    const vid = ['mp4','webm','ogg','mov','mkv'];
+    const aud = ['mp3','flac','wav','aac','opus','m4a'];
+    const ext = entry.ext || '';
+    if (img.includes(ext)) return { emoji: '🖼️' };
+    if (vid.includes(ext)) return { emoji: '🎬' };
+    if (aud.includes(ext)) return { emoji: '🎵' };
+    return { emoji: '📄' };
+  }
+
   function renderIcons() {
     iconsContainer.innerHTML = '';
-    const saved = desktopState.icons || {};
+    const positions = desktopState.positions || {};
 
-    // build list of all visible icons with order
     const toRender = [];
-    const seen = new Set();
 
-    allIconDefs().forEach(def => {
-      const state = saved[def.id];
-      if (state?.hidden) return;
-      toRender.push({ ...def, order: state?.order ?? 9999 });
-      seen.add(def.id);
+    // built-in app icons
+    BUILTIN_ICONS.forEach((def, i) => {
+      if (desktopState.hidden?.[def.id]) return;
+      toRender.push({ ...def, order: positions[def.id]?.order ?? i });
     });
 
-    Object.entries(saved).forEach(([id, state]) => {
-      if (seen.has(id) || state?.hidden) return;
-      toRender.push({ id, label: state.label || id, emoji: state.emoji || '📦', app: id, order: state.order ?? 9999 });
+    // mvmOS plugin apps
+    if (window.mvmOS) {
+      Object.values(mvmOS._apps).forEach(a => {
+        if (desktopState.hidden?.['app-' + a.id]) return;
+        toRender.push({ id: 'app-' + a.id, label: a.name, emoji: a.icon || '📦', app: a.id, order: positions['app-' + a.id]?.order ?? 9999 });
+      });
+    }
+
+    // filesystem desktop entries
+    _desktopEntries.forEach((entry, i) => {
+      const icon = _fileIcon(entry);
+      const appLabel = entry.type === 'app' && window.mvmOS?._apps?.[entry.app_id]?.name;
+      const label = appLabel || entry.name.replace(/\.(url|mvmos)$/, '');
+      toRender.push({ id: 'fs-' + entry.name, label, ...icon, fsEntry: entry, order: positions['fs-' + entry.name]?.order ?? 1000 + i });
     });
 
     toRender.sort((a, b) => a.order - b.order);
@@ -188,8 +222,8 @@ const Desktop = (() => {
   // icon context menu
   const iconCtxMenu = document.createElement('div');
   iconCtxMenu.id = 'icon-ctx-menu';
-  iconCtxMenu.style.cssText = 'position:fixed;display:none;flex-direction:column;min-width:160px;z-index:99999';
   iconCtxMenu.className = 'ctx-item-wrap';
+  iconCtxMenu.style.cssText = 'position:fixed;display:none;flex-direction:column;min-width:160px;z-index:99999';
   document.body.appendChild(iconCtxMenu);
 
   function showIconCtx(x, y, items) {
@@ -208,35 +242,55 @@ const Desktop = (() => {
   function hideIconCtx() { iconCtxMenu.style.display = 'none'; }
 
   function removeFromDesktop(id) {
-    if (!desktopState.icons) desktopState.icons = {};
-    desktopState.icons[id] = { ...(desktopState.icons[id] || {}), hidden: true };
+    if (!desktopState.hidden) desktopState.hidden = {};
+    desktopState.hidden[id] = true;
     saveState();
     renderIcons();
   }
 
   function addToDesktop(def) {
-    if (!desktopState.icons) desktopState.icons = {};
-    const state = desktopState.icons[def.id] || {};
-    desktopState.icons[def.id] = { ...state, hidden: false, label: def.label, emoji: def.emoji };
+    if (!desktopState.hidden) desktopState.hidden = {};
+    delete desktopState.hidden[def.id];
     saveState();
     renderIcons();
   }
 
+  function allIconDefs() { return BUILTIN_ICONS; }
+
   function isOnDesktop(id) {
-    if (desktopState.icons?.[id] !== undefined) return !desktopState.icons[id].hidden;
-    return !!DEFAULT_ICONS.find(d => d.id === id);
+    return !desktopState.hidden?.[id];
   }
 
-  window._desktopAddApp = (appDef) => addToDesktop(appDef);
-  window._desktopRemoveApp = (id) => removeFromDesktop(id);
-  window._desktopIsOn = (id) => isOnDesktop(id);
+  window._desktopAddApp = async (appDef) => {
+    await fetch('/api/files/desktop/app', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ app_id: appDef.id, label: appDef.label }),
+    });
+    await loadDesktopFiles();
+    renderIcons();
+  };
+  window._desktopRemoveApp = async (id) => {
+    const entry = _desktopEntries.find(e => e.type === 'app' && e.app_id === id);
+    if (entry) {
+      await fetch(`/api/files/desktop/entry?path=${encodeURIComponent(entry.path)}`, { method: 'DELETE' });
+      await loadDesktopFiles();
+      renderIcons();
+    }
+  };
+  window._desktopIsOn = (id) => {
+    return _desktopEntries.some(e => e.type === 'app' && e.app_id === id);
+  };
 
-  function createIcon({ id, label, emoji, app }) {
+  function createIcon({ id, label, emoji, app, favicon, url, fsEntry }) {
     const el = document.createElement('div');
     el.className = 'icon';
     el.dataset.id = id;
-    el.dataset.app = app;
-    el.innerHTML = `<span class="icon-emoji">${emoji}</span><span class="icon-label">${label}</span>`;
+    el.dataset.app = app || '';
+    const iconHtml = favicon
+      ? `<img src="${favicon}" style="width:2rem;height:2rem;object-fit:contain;" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'icon-emoji',textContent:'🔗'}))">`
+      : `<span class="icon-emoji">${emoji}</span>`;
+    el.innerHTML = `${iconHtml}<span class="icon-label">${label}</span>`;
 
     // drag-to-swap via mousedown+mousemove to avoid blocking dblclick
     let dragSrc = null;
@@ -264,28 +318,64 @@ const Desktop = (() => {
       if (fromIdx === -1 || toIdx === -1) return;
       allVisible.splice(fromIdx, 1);
       allVisible.splice(toIdx, 0, fromId);
-      const icons = desktopState.icons || {};
-      allVisible.forEach((iconId, i) => {
-        if (!icons[iconId]) icons[iconId] = {};
-        icons[iconId].order = i;
+      if (!desktopState.positions) desktopState.positions = {};
+      // save order for ALL currently rendered icons, not just the swapped ones
+      [...iconsContainer.querySelectorAll('.icon')].forEach((el, i) => {
+        const iconId = el.dataset.id;
+        if (!desktopState.positions[iconId]) desktopState.positions[iconId] = {};
+        desktopState.positions[iconId].order = i;
       });
-      desktopState.icons = icons;
+      // swap in DOM directly without full re-render
+      const fromEl = iconsContainer.querySelector(`[data-id="${fromId}"]`);
+      const toEl   = iconsContainer.querySelector(`[data-id="${id}"]`);
+      if (fromEl && toEl) {
+        const fromNext = fromEl.nextSibling;
+        if (toEl.nextSibling === fromEl) {
+          iconsContainer.insertBefore(fromEl, toEl);
+        } else {
+          iconsContainer.insertBefore(fromEl, toEl.nextSibling);
+          iconsContainer.insertBefore(toEl, fromNext);
+        }
+      }
+      // update order after DOM swap
+      [...iconsContainer.querySelectorAll('.icon')].forEach((el, i) => {
+        desktopState.positions[el.dataset.id] = { order: i };
+      });
       saveState();
-      renderIcons();
     });
 
     el.draggable = true;
-    el.addEventListener('dblclick', () => openApp(app));
+    el.addEventListener('dblclick', () => {
+      if (fsEntry) {
+        if (fsEntry.type === 'url')  { window.open(fsEntry.url, '_blank'); return; }
+        if (fsEntry.type === 'dir')  { FileManager.openWindow(fsEntry.path); return; }
+        if (fsEntry.type === 'app')  { openApp(fsEntry.app_id); return; }
+        if (fsEntry.type === 'file') {
+          if (ImageViewer.isImage(fsEntry.name))  { ImageViewer.openWindow(fsEntry.path, _desktopEntries); return; }
+          if (VideoPlayer.isVideo(fsEntry.name) || VideoPlayer.isAudio(fsEntry.name)) { VideoPlayer.openWindow(fsEntry.path); return; }
+        }
+        return;
+      }
+      if (url) { window.open(url, '_blank'); return; }
+      openApp(app);
+    });
 
     el.addEventListener('contextmenu', e => {
       e.preventDefault();
       e.stopPropagation();
-      const ctx = showIconCtx(e.clientX, e.clientY, [
-        { label: '🗑️ Remove from Desktop', action: 'remove', danger: true },
-      ]);
-      ctx.querySelector('[data-action="remove"]').addEventListener('click', () => {
-        removeFromDesktop(id);
+      const items = fsEntry
+        ? [ { label: '🗑️ Delete', action: 'remove', danger: true } ]
+        : [ { label: '🗑️ Remove from Desktop', action: 'remove', danger: true } ];
+      const ctx = showIconCtx(e.clientX, e.clientY, items);
+      ctx.querySelector('[data-action="remove"]').addEventListener('click', async () => {
         hideIconCtx();
+        if (fsEntry) {
+          await fetch(`/api/files/desktop/entry?path=${encodeURIComponent(fsEntry.path)}`, { method: 'DELETE' });
+          await loadDesktopFiles();
+          renderIcons();
+        } else {
+          removeFromDesktop(id);
+        }
       });
     });
 
@@ -561,24 +651,27 @@ const Desktop = (() => {
     });
   });
 
-  function _startMenuCtx(e, appId, label, emoji) {
+    function _startMenuCtx(e, appId, label, emoji) {
     e.preventDefault();
     e.stopPropagation();
-    const defs = allIconDefs();
-    const def = defs.find(d => d.id === appId) || {
-      id: appId, label, emoji: emoji || '📦', app: appId, x: 20, y: 20
-    };
-    const alreadyOn = !desktopState.icons?.[appId]?.hidden &&
-      (desktopState.icons?.[appId] !== undefined || DEFAULT_ICONS.find(d => d.id === appId));
+    const isBuiltin = BUILTIN_ICONS.find(d => d.id === appId);
+    const alreadyOn = isBuiltin
+      ? !desktopState.hidden?.[appId]
+      : window._desktopIsOn?.(appId);
     const ctx = showIconCtx(e.clientX, e.clientY, [
       alreadyOn
         ? { label: '🗑️ Remove from Desktop', action: 'remove', danger: true }
         : { label: '➕ Add to Desktop', action: 'add' },
     ]);
     ctx.querySelector('[data-action]').addEventListener('click', () => {
-      if (alreadyOn) removeFromDesktop(appId);
-      else addToDesktop(def);
       hideIconCtx();
+      if (isBuiltin) {
+        if (alreadyOn) removeFromDesktop(appId);
+        else addToDesktop({ id: appId });
+      } else {
+        if (alreadyOn) window._desktopRemoveApp?.(appId);
+        else window._desktopAddApp?.({ id: appId, label, emoji: emoji || '📦' });
+      }
     });
   }
 
@@ -600,6 +693,55 @@ const Desktop = (() => {
     ctxMenu.style.top  = Math.min(e.clientY, window.innerHeight - 120) + 'px';
     ctxMenu.classList.add('open');
   });
+  // ── New Link ──
+  const newLinkDialog = document.getElementById('new-link-dialog');
+  const newLinkUrl    = document.getElementById('new-link-url');
+  const newLinkLabel  = document.getElementById('new-link-label');
+
+  document.getElementById('ctx-new-link').addEventListener('click', () => {
+    ctxMenu.classList.remove('open');
+    newLinkUrl.value = '';
+    newLinkLabel.value = '';
+    newLinkDialog.style.display = 'flex';
+    setTimeout(() => newLinkUrl.focus(), 50);
+  });
+
+  document.getElementById('new-link-cancel').addEventListener('click', () => {
+    newLinkDialog.style.display = 'none';
+  });
+
+  document.getElementById('new-link-ok').addEventListener('click', () => addLink());
+  newLinkUrl.addEventListener('keydown', e => { if (e.key === 'Enter') addLink(); });
+  newLinkLabel.addEventListener('keydown', e => { if (e.key === 'Enter') addLink(); });
+
+  async function addLink() {
+    let url = newLinkUrl.value.trim();
+    if (!url) return;
+    if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
+    const label = newLinkLabel.value.trim() || new URL(url).hostname;
+    newLinkDialog.style.display = 'none';
+    await fetch('/api/files/desktop/link', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url, label }),
+    });
+    await loadDesktopFiles();
+    renderIcons();
+  }
+
+  document.getElementById('ctx-new-folder').addEventListener('click', async () => {
+    ctxMenu.classList.remove('open');
+    const name = prompt('Folder name:');
+    if (!name) return;
+    await fetch('/api/files/desktop/folder', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name }),
+    });
+    await loadDesktopFiles();
+    renderIcons();
+  });
+
   document.getElementById('ctx-files').addEventListener('click', () => { FileManager.openWindow(); ctxMenu.classList.remove('open'); });
   document.getElementById('ctx-widgets').addEventListener('click', () => { WidgetStore.openWindow('desktop'); ctxMenu.classList.remove('open'); });
   document.getElementById('ctx-refresh').addEventListener('click', () => { location.reload(); });
@@ -712,6 +854,7 @@ const Desktop = (() => {
   async function init() {
     Settings.initDisplay();
     await loadState();
+    await loadDesktopFiles();
     renderIcons();
     await loadCurrentUser();
     // load settings before clock so format is correct on first render
@@ -720,7 +863,9 @@ const Desktop = (() => {
       window._vosSettings = await res.json();
     } catch (_) { window._vosSettings = {}; }
     startClock();
+    document.addEventListener('mvmos-plugins-loaded', () => renderIcons());
     mvmOS._loadAllPlugins();
+    _watchDesktop();
   }
 
   init();

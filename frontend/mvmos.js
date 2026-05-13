@@ -333,6 +333,8 @@ var mvmOS = (() => {
       for (const plugin of plugins) {
         await _loadPlugin(plugin.id);
       }
+      // re-render desktop icons now that all apps are registered
+      document.dispatchEvent(new CustomEvent('mvmos-plugins-loaded'));
     } catch (e) { console.error('mvmOS: failed to load plugins', e); }
   }
 

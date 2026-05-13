@@ -71,11 +71,26 @@
 
 <!-- Right-click context menu -->
 <div id="context-menu">
+  <div class="ctx-item" id="ctx-new-link">🔗 New Link</div>
+  <div class="ctx-item" id="ctx-new-folder">📁 New Folder</div>
   <div class="ctx-item" id="ctx-files">📁 Open Files</div>
   <div class="ctx-sep"></div>
   <div class="ctx-item" id="ctx-widgets">🔲 Widgets</div>
   <div class="ctx-sep"></div>
   <div class="ctx-item ctx-danger" id="ctx-refresh">↺ Refresh Desktop</div>
+</div>
+
+<!-- New Link dialog -->
+<div id="new-link-dialog" style="display:none;position:fixed;inset:0;z-index:99998;background:rgba(0,0,0,.5);align-items:center;justify-content:center;">
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px;min-width:320px;box-shadow:var(--shadow);">
+    <div style="font-weight:600;margin-bottom:14px;font-size:.95rem;">🔗 New Link</div>
+    <input id="new-link-url" type="url" placeholder="https://example.com" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:.85rem;padding:7px 10px;box-sizing:border-box;outline:none;margin-bottom:10px;">
+    <input id="new-link-label" type="text" placeholder="Label (optional)" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:.85rem;padding:7px 10px;box-sizing:border-box;outline:none;margin-bottom:14px;">
+    <div style="display:flex;gap:8px;justify-content:flex-end;">
+      <button class="s-btn" id="new-link-cancel">Cancel</button>
+      <button class="s-btn" id="new-link-ok" style="background:var(--accent);color:#fff;border-color:var(--accent);">Add</button>
+    </div>
+  </div>
 </div>
 
 <script src="/lib/xterm.js"></script>

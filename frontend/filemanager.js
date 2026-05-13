@@ -5,7 +5,7 @@ const FileManager = (() => {
 
   function loadPrefs() { return Settings.loadFMPrefs(); }
 
-  function openWindow() {
+  function openWindow(startPath) {
     fmCount++;
     const id = 'filemanager-' + fmCount;
 
@@ -17,7 +17,11 @@ const FileManager = (() => {
       appSettings: 'filemanager',
       onMount(body) {
         const fm = new FMInstance(body);
-        fetch('/api/files/places').then(r => r.json()).then(d => fm.navigate(d.home)).catch(() => fm.navigate('/'));
+        if (startPath) {
+          fm.navigate(startPath);
+        } else {
+          fetch('/api/files/places').then(r => r.json()).then(d => fm.navigate(d.home)).catch(() => fm.navigate('/'));
+        }
       },
     });
   }
@@ -61,6 +65,19 @@ const FileManager = (() => {
 
       // right-click context menu on list
       this.listEl.addEventListener('contextmenu', e => this.onContextMenu(e));
+
+      // keyboard copy/cut/paste
+      body.addEventListener('keydown', e => {
+        if (e.key === 'c' && (e.ctrlKey || e.metaKey) && this.selected) {
+          FMInstance._clipboard = { path: this.joinPath(this.currentPath, this.selected), cut: false };
+        }
+        if (e.key === 'x' && (e.ctrlKey || e.metaKey) && this.selected) {
+          FMInstance._clipboard = { path: this.joinPath(this.currentPath, this.selected), cut: true };
+        }
+        if (e.key === 'v' && (e.ctrlKey || e.metaKey) && FMInstance._clipboard) {
+          this.paste();
+        }
+      }, true);
     }
 
     async loadPlaces() {
@@ -301,8 +318,13 @@ const FileManager = (() => {
       if (row) {
         const name = row.dataset.name;
         items.push({ label: '✏️ Rename', action: () => this.renamePrompt(name) });
+        items.push({ label: '📋 Copy', action: () => { FMInstance._clipboard = { path: this.joinPath(this.currentPath, name), cut: false }; } });
+        items.push({ label: '✂️ Cut',  action: () => { FMInstance._clipboard = { path: this.joinPath(this.currentPath, name), cut: true  }; } });
         items.push({ label: '🗑️ Delete', action: () => this.deleteEntry(name), danger: true });
       } else {
+        if (FMInstance._clipboard) {
+          items.push({ label: '📋 Paste', action: () => this.paste() });
+        }
         items.push({ label: '⬛ Open in Terminal', action: () => {
           Terminal.openWindow();
           setTimeout(() => document.dispatchEvent(new CustomEvent('terminal-run', { detail: `cd ${this.currentPath}` })), 500);
@@ -325,6 +347,18 @@ const FileManager = (() => {
       document.body.appendChild(menu);
       const dismiss = e => { menu.remove(); document.removeEventListener('click', dismiss); };
       setTimeout(() => document.addEventListener('click', dismiss), 0);
+    }
+
+    async paste() {
+      const cb = FMInstance._clipboard;
+      if (!cb) return;
+      await fetch('/api/files/copy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ src: cb.path, dst_dir: this.currentPath, move: cb.cut }),
+      });
+      if (cb.cut) FMInstance._clipboard = null;
+      this.navigate(this.currentPath);
     }
 
     async renamePrompt(name) {
