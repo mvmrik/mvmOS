@@ -55,6 +55,13 @@ const Terminal = (() => {
 
         ws.onopen = () => {
           sendResize();
+          const runHandler = e => {
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.send(new TextEncoder().encode(e.detail + '\n'));
+            }
+          };
+          document.addEventListener('terminal-run', runHandler);
+          ws.onclose_orig = ws.onclose;
         };
         ws.onmessage = e => {
           const data = e.data instanceof ArrayBuffer

@@ -574,6 +574,12 @@ const Settings = (() => {
         </div>
         <div id="about-update-output" style="display:none;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:10px;font-size:.78rem;font-family:monospace;max-height:180px;overflow-y:auto;white-space:pre-wrap"></div>
         <button class="s-btn" id="about-update-btn" style="display:none;margin-top:8px">↑ Apply update &amp; restart</button>
+        <div id="about-update-manual" style="display:none;margin-top:8px;font-size:.8rem;color:var(--text-dim)">
+          SSH грешка — изпълни ръчно в терминала:<br>
+          <code id="about-update-cmd" style="display:block;margin-top:4px;padding:6px 8px;background:var(--surface);border-radius:4px;color:var(--text);font-size:.78rem;word-break:break-all"></code>
+          <button class="s-btn" id="about-update-copy-btn" style="margin-top:6px;font-size:.75rem">📋 Copy command</button>
+          <button class="s-btn" id="about-update-terminal-btn" style="margin-top:6px;margin-left:6px;font-size:.75rem">⬛ Open in Terminal</button>
+        </div>
       </div>
     `;
 
@@ -581,6 +587,18 @@ const Settings = (() => {
     const statusEl  = wrap.querySelector('#about-update-status');
     const updateBtn = wrap.querySelector('#about-update-btn');
     const outputEl  = wrap.querySelector('#about-update-output');
+    const manualEl  = wrap.querySelector('#about-update-manual');
+    const cmdEl     = wrap.querySelector('#about-update-cmd');
+    const copyBtn   = wrap.querySelector('#about-update-copy-btn');
+    const termBtn   = wrap.querySelector('#about-update-terminal-btn');
+
+    copyBtn.addEventListener('click', () => {
+      navigator.clipboard.writeText(cmdEl.textContent).then(() => { copyBtn.textContent = '✓ Copied!'; setTimeout(() => { copyBtn.textContent = '📋 Copy command'; }, 2000); });
+    });
+    termBtn.addEventListener('click', () => {
+      Terminal.openWindow();
+      setTimeout(() => document.dispatchEvent(new CustomEvent('terminal-run', { detail: cmdEl.textContent })), 500);
+    });
 
     async function doCheck(silent) {
       checkBtn.disabled = true;
@@ -636,6 +654,13 @@ const Settings = (() => {
             statusEl.style.color = '#50fa7b';
             statusEl.textContent = '✓ Update applied — reconnecting…';
             setTimeout(() => location.reload(), 3000);
+          } else if (text.startsWith('__EXIT_')) {
+            statusEl.style.color = '#f38ba8';
+            statusEl.textContent = '✗ Update failed';
+            updateBtn.disabled = false;
+            const repoDir = outputEl.dataset.repoDir || window.location.origin;
+            cmdEl.textContent = `cd $(systemctl show mvmos -p WorkingDirectory --value) && git pull origin main && sudo systemctl restart mvmos`;
+            manualEl.style.display = 'block';
           } else {
             outputEl.textContent += text + '\n';
             outputEl.scrollTop = outputEl.scrollHeight;
