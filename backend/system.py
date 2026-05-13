@@ -9,6 +9,15 @@ from .db import load_config
 router = APIRouter(prefix="/api/system", tags=["system"])
 
 REPO_DIR = os.path.join(os.path.dirname(__file__), "..")
+VERSION_FILE = os.path.join(REPO_DIR, "version.txt")
+VERSION_URL = "https://raw.githubusercontent.com/mvmrik/mvmOS/main/version.txt"
+
+
+def _local_version() -> str:
+    try:
+        return open(VERSION_FILE).read().strip()
+    except Exception:
+        return "0.0.0"
 
 
 def _git(args):
@@ -20,7 +29,7 @@ def _git(args):
 @router.get("/info")
 async def system_info(session=Depends(get_current_session)):
     cfg = load_config()
-    version = cfg.get("app", "version", fallback="0.2.0-beta")
+    version = _local_version()
 
     # git info
     commit = _git(["rev-parse", "--short", "HEAD"]).stdout.strip()
@@ -65,17 +74,19 @@ async def system_info(session=Depends(get_current_session)):
 
 @router.get("/check-update")
 async def check_update(session=Depends(get_current_session)):
-    fetch = _git(["fetch", "origin"])
-    if fetch.returncode != 0:
-        return JSONResponse({"error": f"git fetch failed: {fetch.stderr.strip()}"}, status_code=502)
-    local  = _git(["rev-parse", "HEAD"]).stdout.strip()
-    remote = _git(["rev-parse", "origin/main"]).stdout.strip()
-    behind = _git(["rev-list", "--count", "HEAD..origin/main"]).stdout.strip()
+    import httpx
+    local = _local_version()
+    try:
+        async with httpx.AsyncClient(timeout=8) as client:
+            r = await client.get(VERSION_URL)
+            r.raise_for_status()
+            remote = r.text.strip()
+    except Exception as e:
+        return JSONResponse({"error": f"Could not reach GitHub: {e}"}, status_code=502)
     return JSONResponse({
         "up_to_date": local == remote,
-        "commits_behind": int(behind) if behind.isdigit() else 0,
-        "local": local[:7],
-        "remote": remote[:7],
+        "local": local,
+        "remote": remote,
     })
 
 

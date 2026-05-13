@@ -594,7 +594,7 @@ const Settings = (() => {
         updateBtn.style.display = 'none';
       } else {
         statusEl.style.color = '#f1fa8c';
-        statusEl.textContent = `${d.commits_behind} new commit${d.commits_behind !== 1 ? 's' : ''} available (${d.local} → ${d.remote})`;
+        statusEl.textContent = `New version available: ${d.local} → ${d.remote}`;
         updateBtn.style.display = '';
       }
     });
