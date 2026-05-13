@@ -99,7 +99,7 @@ async def do_update(session=Depends(get_current_session)):
     subprocess.run(["git", "config", "--global", "--add", "safe.directory", REPO_DIR], capture_output=True)
     async def generate():
         proc = await asyncio.create_subprocess_exec(
-            "git", "pull", "origin", "main",
+            "git", "pull", "https://github.com/mvmrik/mvmOS.git", "main",
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.STDOUT,
             cwd=os.path.abspath(REPO_DIR),
