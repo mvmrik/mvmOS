@@ -67,8 +67,6 @@ chmod 600 "$SCRIPT_DIR/config.ini"
 echo "  [4/4] Installing systemd service..."
 SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
 
-sudo usermod -aG shadow "$CURRENT_USER" 2>/dev/null || true
-
 sudo tee "$SERVICE_FILE" > /dev/null <<EOF
 [Unit]
 Description=mvmOS Web Desktop
@@ -76,8 +74,9 @@ After=network.target
 
 [Service]
 Type=simple
-User=$CURRENT_USER
+User=root
 WorkingDirectory=$SCRIPT_DIR
+Environment=MVMOS_OWNER=$CURRENT_USER
 ExecStart=$VENV_DIR/bin/uvicorn backend.main:app --host 0.0.0.0 --port $PORT
 Restart=on-failure
 RestartSec=5
