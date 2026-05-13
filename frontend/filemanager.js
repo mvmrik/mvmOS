@@ -113,8 +113,26 @@ const FileManager = (() => {
 
     async navigate(path) {
       this.currentPath = path;
-      this.breadEl.textContent = path;
       this.selected = null;
+      // breadcrumb buttons
+      this.breadEl.innerHTML = '';
+      const parts = path.split('/').filter((p, i) => i === 0 || p);
+      let built = '';
+      parts.forEach((part, i) => {
+        built = i === 0 ? '/' : built.replace(/\/$/, '') + '/' + part;
+        const seg = built;
+        const btn = document.createElement('span');
+        btn.className = 'fm-bread-btn';
+        btn.textContent = i === 0 ? '/' : part;
+        btn.addEventListener('click', () => this.navigate(seg));
+        if (i > 0) {
+          const sep = document.createElement('span');
+          sep.className = 'fm-bread-sep';
+          sep.textContent = '/';
+          this.breadEl.appendChild(sep);
+        }
+        this.breadEl.appendChild(btn);
+      });
       this.updateActivePlacea(path);
 
       try {

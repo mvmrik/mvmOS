@@ -516,8 +516,23 @@ html, body {
   font-size: 0.8rem;
   color: var(--text-dim);
   overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 0;
+}
+.fm-bread-btn {
+  color: var(--text);
+  cursor: pointer;
+  padding: 1px 4px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+.fm-bread-btn:hover { background: var(--surface2); }
+.fm-bread-sep {
+  color: var(--text-dim);
+  padding: 0 1px;
+  flex-shrink: 0;
 }
 .fm-body {
   display: flex;
