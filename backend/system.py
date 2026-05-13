@@ -97,7 +97,10 @@ async def check_update(session=Depends(get_current_session)):
 async def do_update(session=Depends(get_current_session)):
     async def generate():
         user = session.get("effective_user", "")
-        cmd = ["sudo", "-u", user, "git", "pull", "origin", "main"] if user else ["git", "pull", "origin", "main"]
+        if user:
+            cmd = ["su", user, "-c", f"cd {os.path.abspath(REPO_DIR)} && git pull origin main"]
+        else:
+            cmd = ["git", "pull", "origin", "main"]
         proc = await asyncio.create_subprocess_exec(
             *cmd,
             stdout=asyncio.subprocess.PIPE,
