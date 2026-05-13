@@ -120,6 +120,63 @@ html, body {
   flex-shrink: 0;
 }
 
+#cal-popup {
+  position: fixed;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  z-index: 9400;
+  padding: 10px;
+  min-width: 220px;
+  user-select: none;
+}
+.cal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.cal-title { font-size: .85rem; font-weight: 600; color: var(--text); }
+.cal-nav {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  font-size: 1.1rem;
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+  border-radius: 3px;
+}
+.cal-nav:hover { background: var(--surface2); color: var(--text); }
+.cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+}
+.cal-dow {
+  font-size: .68rem;
+  font-weight: 600;
+  color: var(--text-dim);
+  text-align: center;
+  padding: 2px 0 4px;
+}
+.cal-day {
+  font-size: .78rem;
+  text-align: center;
+  padding: 4px 2px;
+  border-radius: 3px;
+  color: var(--text-dim);
+  cursor: default;
+}
+.cal-day:hover { background: var(--surface2); color: var(--text); }
+.cal-today {
+  background: var(--accent);
+  color: #fff !important;
+  font-weight: 700;
+  border-radius: 50%;
+}
+
 #notif-btn {
   position: relative;
   margin-left: auto;
@@ -372,6 +429,28 @@ html, body {
   overflow: hidden;
 }
 #context-menu.open { display: flex; }
+
+#taskbar-ctx-menu {
+  position: fixed;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  z-index: 99999;
+  display: none;
+  flex-direction: column;
+  min-width: 160px;
+  overflow: hidden;
+}
+#taskbar-ctx-menu.open { display: flex; }
+
+#taskbar-widgets {
+  display: flex;
+  align-items: center;
+  height: 100%;
+  border-right: 1px solid var(--border);
+  margin-right: 4px;
+}
 .ctx-item {
   padding: 8px 14px;
   cursor: pointer;
@@ -691,7 +770,8 @@ html, body {
 
 /* ── App Store ── */
 .as-wrap { display:flex; height:100%; overflow:hidden; }
-.as-sidebar { width:130px; flex-shrink:0; background:var(--surface2); border-right:1px solid var(--border); display:flex; flex-direction:column; padding:10px 0; gap:2px; }
+.as-sidebar { width:140px; flex-shrink:0; background:var(--surface2); border-right:1px solid var(--border); display:flex; flex-direction:column; padding:10px 0; gap:2px; overflow-y:auto; }
+.as-sidebar-group-label { padding:8px 14px 2px; font-size:.67rem; font-weight:700; color:var(--text-dim); text-transform:uppercase; letter-spacing:.07em; }
 .as-tab { display:flex; align-items:center; gap:8px; padding:9px 14px; font-size:.83rem; color:var(--text-dim); cursor:pointer; border-left:3px solid transparent; transition:background .12s,color .12s,border-color .12s; }
 .as-tab:hover { background:var(--surface3,rgba(255,255,255,.06)); color:var(--text); }
 .as-tab.active { color:var(--accent); border-left-color:var(--accent); background:var(--surface3,rgba(255,255,255,.06)); }

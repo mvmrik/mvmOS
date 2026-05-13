@@ -32,34 +32,108 @@ const Desktop = (() => {
   function startClock() {
     const clock = document.getElementById('clock');
 
+    function formatDate(now, fmt) {
+      const d = String(now.getDate()).padStart(2, '0');
+      const m = String(now.getMonth() + 1).padStart(2, '0');
+      const y = now.getFullYear();
+      if (fmt === 'MM/DD/YYYY') return `${m}/${d}/${y}`;
+      if (fmt === 'YYYY-MM-DD') return `${y}-${m}-${d}`;
+      return `${d}/${m}/${y}`;
+    }
+
     function tick() {
       const now = new Date();
       const s = window._vosSettings || {};
       const hour12 = s.time_format === '12';
-
-      let timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12 });
-
-      // date part
-      const fmt = s.date_format || 'DD/MM/YYYY';
-      const d = String(now.getDate()).padStart(2, '0');
-      const m = String(now.getMonth() + 1).padStart(2, '0');
-      const y = now.getFullYear();
-      let dateStr;
-      if (fmt === 'MM/DD/YYYY')      dateStr = `${m}/${d}/${y}`;
-      else if (fmt === 'YYYY-MM-DD') dateStr = `${y}-${m}-${d}`;
-      else                           dateStr = `${d}/${m}/${y}`;
-
-      clock.textContent = `${dateStr}  ${timeStr}`;
+      const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12 });
+      if (s.show_date) {
+        clock.textContent = `${formatDate(now, s.date_format || 'DD/MM/YYYY')}  ${timeStr}`;
+      } else {
+        clock.textContent = timeStr;
+      }
     }
 
     tick();
     setInterval(tick, 10000);
+    window.addEventListener('settings-changed', e => { window._vosSettings = e.detail; tick(); });
 
-    // re-tick when settings change
-    window.addEventListener('settings-changed', e => {
-      window._vosSettings = e.detail;
-      tick();
-    });
+    // ── Calendar popup ──
+    let calPopup = null;
+
+    function openCalendar() {
+      if (calPopup) { calPopup.remove(); calPopup = null; return; }
+      const s = window._vosSettings || {};
+      const sundayFirst = s.week_starts === 'sunday';
+      const now = new Date();
+      let viewYear = now.getFullYear();
+      let viewMonth = now.getMonth();
+
+      calPopup = document.createElement('div');
+      calPopup.id = 'cal-popup';
+      document.body.appendChild(calPopup);
+
+      function renderCal() {
+        const today = new Date();
+        const firstDay = new Date(viewYear, viewMonth, 1).getDay(); // 0=Sun
+        const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
+        const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+        const DAY_LABELS_MON = ['Mo','Tu','We','Th','Fr','Sa','Su'];
+        const DAY_LABELS_SUN = ['Su','Mo','Tu','We','Th','Fr','Sa'];
+        const dayLabels = sundayFirst ? DAY_LABELS_SUN : DAY_LABELS_MON;
+
+        // offset: how many empty cells before day 1
+        let offset = sundayFirst ? firstDay : (firstDay === 0 ? 6 : firstDay - 1);
+
+        let cells = '';
+        for (let i = 0; i < offset; i++) cells += '<span></span>';
+        for (let d = 1; d <= daysInMonth; d++) {
+          const isToday = d === today.getDate() && viewMonth === today.getMonth() && viewYear === today.getFullYear();
+          cells += `<span class="cal-day${isToday ? ' cal-today' : ''}">${d}</span>`;
+        }
+
+        calPopup.innerHTML = `
+          <div class="cal-header">
+            <button class="cal-nav" id="cal-prev">‹</button>
+            <span class="cal-title">${MONTH_NAMES[viewMonth]} ${viewYear}</span>
+            <button class="cal-nav" id="cal-next">›</button>
+          </div>
+          <div class="cal-grid">
+            ${dayLabels.map(l => `<span class="cal-dow">${l}</span>`).join('')}
+            ${cells}
+          </div>
+        `;
+
+        calPopup.querySelector('#cal-prev').addEventListener('click', e => {
+          e.stopPropagation();
+          viewMonth--; if (viewMonth < 0) { viewMonth = 11; viewYear--; }
+          renderCal();
+        });
+        calPopup.querySelector('#cal-next').addEventListener('click', e => {
+          e.stopPropagation();
+          viewMonth++; if (viewMonth > 11) { viewMonth = 0; viewYear++; }
+          renderCal();
+        });
+      }
+
+      renderCal();
+
+      // position above clock
+      const rect = clock.getBoundingClientRect();
+      calPopup.style.right = (window.innerWidth - rect.right) + 'px';
+      calPopup.style.bottom = (window.innerHeight - rect.top + 6) + 'px';
+
+      setTimeout(() => {
+        document.addEventListener('click', function handler(e) {
+          if (!calPopup?.contains(e.target) && e.target !== clock) {
+            calPopup?.remove(); calPopup = null;
+            document.removeEventListener('click', handler);
+          }
+        });
+      }, 0);
+    }
+
+    clock.style.cursor = 'pointer';
+    clock.addEventListener('click', e => { e.stopPropagation(); openCalendar(); });
   }
 
   // ── Default icons ──
@@ -315,12 +389,41 @@ const Desktop = (() => {
   });
   document.getElementById('ctx-terminal').addEventListener('click', () => { Terminal.openWindow(); ctxMenu.classList.remove('open'); });
   document.getElementById('ctx-files').addEventListener('click', () => { FileManager.openWindow(); ctxMenu.classList.remove('open'); });
+  document.getElementById('ctx-widgets').addEventListener('click', () => { WidgetStore.openWindow('desktop'); ctxMenu.classList.remove('open'); });
   document.getElementById('ctx-refresh').addEventListener('click', () => { location.reload(); });
+
+  // ── Taskbar context menu ──
+  const taskbarCtx = document.getElementById('taskbar-ctx-menu');
+  let _editModeOn = false;
+
+  document.getElementById('taskbar').addEventListener('contextmenu', e => {
+    if (e.target.closest('#taskbar-windows') || e.target.closest('#start-btn')) return;
+    e.preventDefault();
+    e.stopPropagation();
+    taskbarCtx.style.left = Math.min(e.clientX, window.innerWidth - 180) + 'px';
+    taskbarCtx.style.bottom = (window.innerHeight - e.clientY + 4) + 'px';
+    taskbarCtx.style.top = 'auto';
+    taskbarCtx.classList.add('open');
+    // update edit label
+    document.getElementById('tctx-edit').textContent = _editModeOn ? '✅ Done Editing' : '✏️ Edit Widgets';
+  });
+
+  document.getElementById('tctx-widgets').addEventListener('click', () => {
+    taskbarCtx.classList.remove('open');
+    WidgetStore.openWindow();
+  });
+
+  document.getElementById('tctx-edit').addEventListener('click', () => {
+    taskbarCtx.classList.remove('open');
+    _editModeOn = !_editModeOn;
+    mvmOS._setEditMode(_editModeOn);
+  });
 
   // close menus on outside click
   document.addEventListener('click', () => {
     ctxMenu.classList.remove('open');
     startMenu.classList.remove('open');
+    taskbarCtx.classList.remove('open');
   });
 
   // ── Switch User ──

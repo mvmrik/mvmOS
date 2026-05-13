@@ -175,6 +175,16 @@ const Settings = (() => {
               </div>
             </div>
 
+            <div class="settings-section">
+              <div class="settings-section-title">🎨 Theme</div>
+              <div id="theme-picker-wrap" style="display:flex;flex-wrap:wrap;gap:10px;padding:4px 0">
+                <div style="color:var(--text-dim);font-size:.83rem">Loading themes…</div>
+              </div>
+              <div style="margin-top:10px">
+                <button class="s-btn-sm" id="s-open-theme-store">Browse Themes in App Store</button>
+              </div>
+            </div>
+
           </div>
 
           <!-- Regional panel -->
@@ -203,6 +213,11 @@ const Settings = (() => {
                     <span>12-hour &nbsp;<span class="preview-time" id="prev-12"></span></span>
                   </label>
                 </div>
+              </div>
+
+              <div class="settings-row">
+                <label>Show date in taskbar</label>
+                <input type="checkbox" id="s-show-date" ${s.show_date ? 'checked' : ''} style="accent-color:var(--accent);width:15px;height:15px;cursor:pointer;">
               </div>
 
               <div class="settings-row">
@@ -294,11 +309,13 @@ const Settings = (() => {
         body.querySelector(`#sp-${tab.dataset.tab}`).classList.add('active');
         if (tab.dataset.tab === 'users') renderUsers(body);
         if (tab.dataset.tab === 'about') renderAbout(body);
+        if (tab.dataset.tab === 'display') renderThemePicker(body);
       });
     });
 
     if (activeTab === 'users') renderUsers(body);
     if (activeTab === 'about') renderAbout(body);
+    if (activeTab === 'display' || !activeTab) renderThemePicker(body);
 
     // Display — auto-save on slider change
     const iconSlider = body.querySelector('#s-icon-size');
@@ -332,6 +349,7 @@ const Settings = (() => {
           timezone:    body.querySelector('#s-timezone').value,
           time_format: body.querySelector('input[name="time_format"]:checked').value,
           date_format: body.querySelector('#s-date-format').value,
+          show_date:   body.querySelector('#s-show-date').checked,
           week_starts: body.querySelector('input[name="week_starts"]:checked').value,
           language:    body.querySelector('#s-language').value,
         });
@@ -341,6 +359,7 @@ const Settings = (() => {
     body.querySelector('#s-date-format').addEventListener('change', saveRegional);
     body.querySelectorAll('input[name="time_format"]').forEach(el => el.addEventListener('change', saveRegional));
     body.querySelectorAll('input[name="week_starts"]').forEach(el => el.addEventListener('change', saveRegional));
+    body.querySelector('#s-show-date').addEventListener('change', saveRegional);
     body.querySelector('#s-language').addEventListener('change', saveRegional);
 
     // File Manager — instant
@@ -611,6 +630,49 @@ const Settings = (() => {
         }
       }
     });
+  }
+
+  async function renderThemePicker(body) {
+    const wrap = body.querySelector('#theme-picker-wrap');
+    if (!wrap) return;
+    wrap.innerHTML = '<div style="color:var(--text-dim);font-size:.83rem">Loading…</div>';
+
+    let themes;
+    try {
+      const res = await fetch('/api/themes');
+      themes = await res.json();
+    } catch (_) {
+      wrap.innerHTML = '<div style="color:#e05555;font-size:.83rem">Failed to load themes.</div>';
+      return;
+    }
+
+    if (!themes.length) {
+      wrap.innerHTML = '<div style="color:var(--text-dim);font-size:.83rem">No themes installed. Browse the App Store to install themes.</div>';
+    } else {
+      wrap.innerHTML = themes.map(t => `
+        <div class="theme-card ${t.is_active ? 'active' : ''}" data-id="${t.id}" title="${t.description}" style="
+          display:flex;flex-direction:column;align-items:center;gap:6px;
+          background:var(--surface2);border:2px solid ${t.is_active ? 'var(--accent)' : 'var(--border)'};
+          border-radius:8px;padding:12px 10px;width:90px;cursor:pointer;transition:border-color .15s;text-align:center">
+          <span style="font-size:1.6rem;line-height:1">${t.icon}</span>
+          <span style="font-size:.75rem;color:var(--text);font-weight:600;word-break:break-word">${t.name}</span>
+          ${t.is_active ? '<span style="font-size:.67rem;color:var(--accent)">✓ Active</span>' : ''}
+        </div>
+      `).join('');
+
+      wrap.querySelectorAll('.theme-card').forEach(card => {
+        card.addEventListener('click', async () => {
+          if (card.classList.contains('active')) return;
+          await mvmOS._applyTheme(card.dataset.id);
+          renderThemePicker(body);
+        });
+      });
+    }
+
+    const storeBtn = body.querySelector('#s-open-theme-store');
+    if (storeBtn) {
+      storeBtn.onclick = () => AppStore.openWindow({ section: 'themes' });
+    }
   }
 
   return { openWindow, get, initDisplay, loadFMPrefs };

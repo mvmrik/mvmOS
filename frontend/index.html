@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>mvmOS</title>
 <link rel="stylesheet" href="/style.css">
+<link id="theme-css" rel="stylesheet" href="/api/themes/active/css">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css">
 </head>
 <body>
@@ -54,10 +55,19 @@
   </form>
 </div>
 
+<!-- Taskbar context menu -->
+<div id="taskbar-ctx-menu">
+  <div class="ctx-item" id="tctx-widgets">🔲 Widgets</div>
+  <div class="ctx-sep"></div>
+  <div class="ctx-item" id="tctx-edit">✏️ Edit Widgets</div>
+</div>
+
 <!-- Right-click context menu -->
 <div id="context-menu">
   <div class="ctx-item" id="ctx-terminal">🖥️ Open Terminal</div>
   <div class="ctx-item" id="ctx-files">📁 Open Files</div>
+  <div class="ctx-sep"></div>
+  <div class="ctx-item" id="ctx-widgets">🔲 Widgets</div>
   <div class="ctx-sep"></div>
   <div class="ctx-item ctx-danger" id="ctx-refresh">↺ Refresh Desktop</div>
 </div>

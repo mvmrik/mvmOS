@@ -5,3 +5,6 @@ __pycache__/
 *.py[cod]
 .env
 *.log
+apps/
+widgets/
+themes/
