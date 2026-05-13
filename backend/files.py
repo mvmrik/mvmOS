@@ -6,7 +6,7 @@ import grp
 import subprocess
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
 from pydantic import BaseModel
 from .auth import get_current_session
 
@@ -169,6 +169,15 @@ class ChownRequest(BaseModel):
     owner: str
     group: str = ""
 
+
+@router.get("/raw")
+async def raw_file(path: str, _session=Depends(get_current_session)):
+    import mimetypes
+    real = safe_path(path)
+    if not os.path.isfile(real):
+        raise HTTPException(status_code=404, detail="Not found")
+    mime, _ = mimetypes.guess_type(real)
+    return FileResponse(real, media_type=mime or "application/octet-stream")
 
 @router.post("/chown")
 async def chown(body: ChownRequest, _session=Depends(get_current_session)):

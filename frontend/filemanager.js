@@ -167,6 +167,7 @@ const FileManager = (() => {
     }
 
     render(entries) {
+      this._lastEntries = entries;
       if (!loadPrefs().showHidden) entries = entries.filter(e => !e.name.startsWith('.'));
       if (entries.length === 0) {
         this.listEl.innerHTML = '<div class="fm-empty">Empty folder</div>';
@@ -210,6 +211,16 @@ const FileManager = (() => {
           row.addEventListener('dblclick', e => {
             if (e.target.classList.contains('fm-editable')) return;
             this.navigate(this.joinPath(this.currentPath, entry.name));
+          });
+        } else {
+          row.addEventListener('dblclick', e => {
+            if (e.target.classList.contains('fm-editable')) return;
+            const fullPath = this.joinPath(this.currentPath, entry.name);
+            if (ImageViewer.isImage(entry.name)) {
+              ImageViewer.openWindow(fullPath, this._lastEntries);
+            } else if (VideoPlayer.isVideo(entry.name) || VideoPlayer.isAudio(entry.name)) {
+              VideoPlayer.openWindow(fullPath);
+            }
           });
         }
 
