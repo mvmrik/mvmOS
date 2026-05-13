@@ -451,8 +451,13 @@ const mvmOS = (() => {
     _closeCtxMenu();
     _ctxMenu = document.createElement('div');
     _ctxMenu.style.cssText = `position:fixed;left:${x}px;top:${y}px;z-index:99999;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:4px 0;min-width:140px;box-shadow:0 4px 16px rgba(0,0,0,.4)`;
+    const onDesktop = window._desktopIsOn?.(app.id) ?? false;
     const items = [
       { label: `▶ Open`, action: () => { _closeFlyout(); document.getElementById('start-menu').classList.remove('open'); fetch(`/api/plugins/${app.id}/open`, { method: 'POST' }).catch(() => {}); app.launch(); } },
+      { sep: true },
+      onDesktop
+        ? { label: `🗑️ Remove from Desktop`, action: () => { window._desktopRemoveApp?.(app.id); } }
+        : { label: `➕ Add to Desktop`, action: () => { window._desktopAddApp?.({ id: app.id, label: app.name, emoji: app.icon || '📦', app: app.id, x: 20, y: 20 }); } },
       { sep: true },
       { label: `🗑 Uninstall`, danger: true, action: async () => {
         if (!confirm(`Uninstall "${app.name}"?`)) return;

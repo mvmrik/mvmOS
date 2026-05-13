@@ -205,6 +205,15 @@ const Desktop = (() => {
     renderIcons();
   }
 
+  function isOnDesktop(id) {
+    if (desktopState.icons?.[id] !== undefined) return !desktopState.icons[id].hidden;
+    return !!DEFAULT_ICONS.find(d => d.id === id);
+  }
+
+  window._desktopAddApp = (appDef) => addToDesktop(appDef);
+  window._desktopRemoveApp = (id) => removeFromDesktop(id);
+  window._desktopIsOn = (id) => isOnDesktop(id);
+
   function createIcon({ id, label, emoji, app, x, y }) {
     const el = document.createElement('div');
     el.className = 'icon';
@@ -443,27 +452,35 @@ const Desktop = (() => {
       openApp(item.dataset.app);
       startMenu.classList.remove('open');
     });
+  });
+
+  function _startMenuCtx(e, appId, label, emoji) {
+    e.preventDefault();
+    e.stopPropagation();
+    const defs = allIconDefs();
+    const def = defs.find(d => d.id === appId) || {
+      id: appId, label, emoji: emoji || '📦', app: appId, x: 20, y: 20
+    };
+    const alreadyOn = !desktopState.icons?.[appId]?.hidden &&
+      (desktopState.icons?.[appId] !== undefined || DEFAULT_ICONS.find(d => d.id === appId));
+    const ctx = showIconCtx(e.clientX, e.clientY, [
+      alreadyOn
+        ? { label: '🗑️ Remove from Desktop', action: 'remove', danger: true }
+        : { label: '➕ Add to Desktop', action: 'add' },
+    ]);
+    ctx.querySelector('[data-action]').addEventListener('click', () => {
+      if (alreadyOn) removeFromDesktop(appId);
+      else addToDesktop(def);
+      hideIconCtx();
+    });
+  }
+
+  // built-in start menu items
+  startMenu.querySelectorAll('[data-app]').forEach(item => {
     item.addEventListener('contextmenu', e => {
-      e.preventDefault();
-      e.stopPropagation();
-      startMenu.classList.remove('open');
-      const appId = item.dataset.app;
-      const defs = allIconDefs();
-      const def = defs.find(d => d.id === appId) || {
-        id: appId, label: item.textContent.trim(), emoji: item.querySelector('.emoji')?.textContent || '📦', app: appId, x: 20, y: 20
-      };
-      const alreadyOn = !desktopState.icons?.[appId]?.hidden &&
-        (desktopState.icons?.[appId] !== undefined || DEFAULT_ICONS.find(d => d.id === appId));
-      const ctx = showIconCtx(e.clientX, e.clientY, [
-        alreadyOn
-          ? { label: '🗑️ Remove from Desktop', action: 'remove', danger: true }
-          : { label: '➕ Add to Desktop', action: 'add' },
-      ]);
-      ctx.querySelector('[data-action]').addEventListener('click', () => {
-        if (alreadyOn) removeFromDesktop(appId);
-        else addToDesktop(def);
-        hideIconCtx();
-      });
+      const emoji = item.querySelector('.emoji')?.textContent || '📦';
+      const label = item.textContent.trim();
+      _startMenuCtx(e, item.dataset.app, label, emoji);
     });
   });
 
