@@ -397,6 +397,7 @@ async def list_services(session=Depends(get_current_session)):
     for svc in KNOWN_SERVICES:
         if not _service_exists(svc["name"]):
             continue  # not installed
+        status = _service_status(svc["name"])
         result.append({
             **svc,
             "status": status,
