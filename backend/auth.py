@@ -22,6 +22,14 @@ def get_current_session(request: Request):
 
 
 def verify_linux_password(username: str, password: str) -> bool:
+    # Try PAM first (works without root)
+    try:
+        import pam
+        p = pam.pam()
+        return p.authenticate(username, password, service='login')
+    except ImportError:
+        pass
+    # Fallback: direct shadow check (requires root)
     try:
         shadow = spwd.getspnam(username)
         hashed = shadow.sp_pwdp
@@ -35,7 +43,7 @@ LOGIN_HTML = """<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>VirtualOS &mdash; Login</title>
+<title>mvmOS &mdash; Login</title>
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
   body{background:#0f0f0f;color:#e0e0e0;font-family:'Segoe UI',sans-serif;display:flex;align-items:center;justify-content:center;height:100vh}
@@ -66,7 +74,7 @@ LOGIN_HTML = """<!DOCTYPE html>
 </head>
 <body>
 <div class="card">
-  <h1>VirtualOS</h1>
+  <h1>mvmOS</h1>
   <p class="sub">Select your account</p>
   <div class="error" id="err"></div>
   <div class="users" id="user-list"></div>
@@ -157,13 +165,12 @@ async def login_page():
 
 
 def _login_users():
-    valid_shells = {'/bin/bash', '/bin/sh', '/bin/zsh', '/usr/bin/bash', '/usr/bin/zsh'}
     nologin = {'/usr/sbin/nologin', '/sbin/nologin', '/bin/false', '/dev/null'}
     users = []
     for pw in _pwd.getpwall():
         if pw.pw_shell in nologin:
             continue
-        if pw.pw_uid != 0 and pw.pw_uid < 1000:
+        if pw.pw_uid != 0 and pw.pw_uid < 500:
             continue
         users.append({"username": pw.pw_name, "uid": pw.pw_uid})
     return sorted(users, key=lambda u: u["uid"])

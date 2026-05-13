@@ -36,10 +36,13 @@ if [[ "$PY_VER" != "True" ]]; then
     exit 1
 fi
 
-# ── Ensure python3-venv is available ──────────────────────────────────────────
-if ! python3 -m venv --help &>/dev/null; then
-    echo "  Installing python3-venv..."
-    sudo apt-get install -y python3-venv
+# ── System dependencies ───────────────────────────────────────────────────────
+echo "  Checking system dependencies..."
+PKGS=()
+python3 -m venv --help &>/dev/null || PKGS+=(python3-venv)
+dpkg -s libpam-dev &>/dev/null || PKGS+=(libpam-dev)
+if [[ ${#PKGS[@]} -gt 0 ]]; then
+    sudo apt-get install -y "${PKGS[@]}"
 fi
 
 # ── Virtualenv ────────────────────────────────────────────────────────────────
@@ -54,7 +57,8 @@ echo "  [2/4] Installing Python packages..."
     "uvicorn[standard]>=0.29.0" \
     "ptyprocess>=0.7.0" \
     "python-multipart>=0.0.9" \
-    "httpx>=0.27.0"
+    "httpx>=0.27.0" \
+    "python-pam>=2.0.2"
 
 # ── config.ini ────────────────────────────────────────────────────────────────
 echo "  [3/4] Writing config.ini..."
