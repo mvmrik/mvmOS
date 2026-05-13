@@ -360,10 +360,16 @@ KNOWN_SERVICES = [
 ]
 
 
+def _service_exists(name: str) -> bool:
+    r = subprocess.run(["systemctl", "list-unit-files", f"{name}.service"],
+                       capture_output=True, text=True)
+    return name in r.stdout
+
+
 def _service_status(name: str) -> str:
     r = subprocess.run(["systemctl", "is-active", name],
                        capture_output=True, text=True)
-    return r.stdout.strip()  # active | inactive | failed | unknown
+    return r.stdout.strip()
 
 
 def _service_enabled(name: str) -> bool:
@@ -376,8 +382,7 @@ def _service_enabled(name: str) -> bool:
 async def list_services(session=Depends(get_current_session)):
     result = []
     for svc in KNOWN_SERVICES:
-        status = _service_status(svc["name"])
-        if status == "unknown":
+        if not _service_exists(svc["name"]):
             continue  # not installed
         result.append({
             **svc,
