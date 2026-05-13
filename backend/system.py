@@ -123,7 +123,7 @@ async def do_update(session=Depends(get_current_session)):
 
 def _restart():
     import sys, signal
-    os.kill(os.getpid(), signal.SIGTERM)
+    os.kill(os.getpid(), signal.SIGINT)
 
 
 # ── System hardware info ──────────────────────────────────────────────────────

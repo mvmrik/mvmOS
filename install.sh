@@ -77,7 +77,7 @@ Type=simple
 User=root
 WorkingDirectory=$SCRIPT_DIR
 ExecStart=$VENV_DIR/bin/uvicorn backend.main:app --host 0.0.0.0 --port $PORT
-Restart=on-failure
+Restart=always
 RestartSec=5
 Environment=PYTHONUNBUFFERED=1
 
