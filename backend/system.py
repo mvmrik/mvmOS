@@ -65,10 +65,12 @@ async def system_info(session=Depends(get_current_session)):
 
 @router.get("/check-update")
 async def check_update(session=Depends(get_current_session)):
-    _git(["fetch", "origin"])
+    fetch = _git(["fetch", "origin"])
+    if fetch.returncode != 0:
+        return JSONResponse({"error": f"git fetch failed: {fetch.stderr.strip()}"}, status_code=502)
     local  = _git(["rev-parse", "HEAD"]).stdout.strip()
     remote = _git(["rev-parse", "origin/main"]).stdout.strip()
-    behind = _git(["rev-list", "--count", f"HEAD..origin/main"]).stdout.strip()
+    behind = _git(["rev-list", "--count", "HEAD..origin/main"]).stdout.strip()
     return JSONResponse({
         "up_to_date": local == remote,
         "commits_behind": int(behind) if behind.isdigit() else 0,
