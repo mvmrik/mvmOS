@@ -96,9 +96,9 @@ var mvmOS = (() => {
     _appsMenuItem.className = 'start-menu-item';
     _appsMenuItem.id = 'start-apps-btn';
     _appsMenuItem.innerHTML = '<span class="emoji">⚡</span> Apps <span class="start-menu-item-arrow">›</span>';
-    const anchor = startMenu.querySelector('.start-menu-user');
-    startMenu.insertBefore(sep, anchor);
-    startMenu.insertBefore(_appsMenuItem, anchor);
+    const anchor = startMenu.querySelector('#start-menu-apps-anchor');
+    anchor.parentNode.insertBefore(sep, anchor);
+    anchor.parentNode.insertBefore(_appsMenuItem, anchor);
     _appsMenuItem.addEventListener('click', e => {
       e.stopPropagation();
       if (_flyout) { _closeFlyout(); } else { _openFlyout(_appsMenuItem); }

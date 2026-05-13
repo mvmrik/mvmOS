@@ -27,12 +27,22 @@
 
 <!-- Start menu -->
 <div id="start-menu">
+  <div class="start-menu-user">
+    <span class="start-menu-user-icon">👤</span>
+    <span id="current-user-label">…</span>
+  </div>
+  <div class="start-menu-search-wrap">
+    <input id="start-menu-search" class="start-menu-search" type="text" placeholder="Search…" autocomplete="off">
+  </div>
+  <div id="start-menu-results" style="display:none"></div>
+  <div id="start-menu-main">
   <div class="start-menu-item" data-app="terminal">
     <span class="emoji">🖥️</span> Terminal
   </div>
   <div class="start-menu-item" data-app="filemanager">
     <span class="emoji">📁</span> File Manager
   </div>
+  <div id="start-menu-apps-anchor"></div>
   <div class="start-menu-sep"></div>
   <div class="start-menu-item" data-app="settings">
     <span class="emoji">⚙️</span> Settings
@@ -41,9 +51,6 @@
     <span class="emoji">📦</span> App Store
   </div>
   <div class="start-menu-sep"></div>
-  <div class="start-menu-user">
-    <span class="start-menu-user-icon">👤</span>
-    <span id="current-user-label">…</span>
   </div>
   <div class="start-menu-item" id="switch-user-btn">
     <span class="emoji">🔄</span> Switch User
@@ -64,7 +71,6 @@
 
 <!-- Right-click context menu -->
 <div id="context-menu">
-  <div class="ctx-item" id="ctx-terminal">🖥️ Open Terminal</div>
   <div class="ctx-item" id="ctx-files">📁 Open Files</div>
   <div class="ctx-sep"></div>
   <div class="ctx-item" id="ctx-widgets">🔲 Widgets</div>

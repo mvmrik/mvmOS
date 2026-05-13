@@ -496,9 +496,63 @@ const Desktop = (() => {
 
   // ── Start menu ──
   const startMenu = document.getElementById('start-menu');
+  const startSearch = document.getElementById('start-menu-search');
+  const startResults = document.getElementById('start-menu-results');
+  const startMain = document.getElementById('start-menu-main');
+
+  function _startMenuAllApps() {
+    const apps = [
+      { id: 'terminal',    label: 'Terminal',     emoji: '🖥️' },
+      { id: 'filemanager', label: 'File Manager',  emoji: '📁' },
+      { id: 'settings',    label: 'Settings',      emoji: '⚙️' },
+      { id: 'appstore',    label: 'App Store',      emoji: '📦' },
+    ];
+    Object.values(window.mvmOS?._apps || {}).forEach(a => {
+      apps.push({ id: a.id, label: a.name, emoji: a.icon || '📦' });
+    });
+    return apps;
+  }
+
+  startSearch.addEventListener('input', () => {
+    const q = startSearch.value.trim().toLowerCase();
+    if (!q) {
+      startResults.style.display = 'none';
+      startMain.style.display = '';
+      return;
+    }
+    startMain.style.display = 'none';
+    startResults.style.display = '';
+    startResults.innerHTML = '';
+    const matches = _startMenuAllApps().filter(a => a.label.toLowerCase().includes(q));
+    if (!matches.length) {
+      startResults.innerHTML = '<div style="padding:8px 14px;font-size:.8rem;color:var(--text-dim)">No results</div>';
+      return;
+    }
+    matches.forEach(a => {
+      const el = document.createElement('div');
+      el.className = 'start-menu-item';
+      el.innerHTML = `<span class="emoji">${a.emoji}</span> ${a.label}`;
+      el.addEventListener('click', () => {
+        openApp(a.id);
+        startMenu.classList.remove('open');
+        startSearch.value = '';
+        startResults.style.display = 'none';
+        startMain.style.display = '';
+      });
+      startResults.appendChild(el);
+    });
+  });
+
   document.getElementById('start-btn').addEventListener('click', e => {
     e.stopPropagation();
     startMenu.classList.toggle('open');
+    if (startMenu.classList.contains('open')) {
+      setTimeout(() => startSearch.focus(), 50);
+    } else {
+      startSearch.value = '';
+      startResults.style.display = 'none';
+      startMain.style.display = '';
+    }
   });
   startMenu.querySelectorAll('[data-app]').forEach(item => {
     item.addEventListener('click', () => {
@@ -540,12 +594,12 @@ const Desktop = (() => {
   // ── Context menu ──
   const ctxMenu = document.getElementById('context-menu');
   desktop.addEventListener('contextmenu', e => {
+    if (e.target.closest('.window, .fm-list, .icon')) return;
     e.preventDefault();
     ctxMenu.style.left = Math.min(e.clientX, window.innerWidth  - 180) + 'px';
     ctxMenu.style.top  = Math.min(e.clientY, window.innerHeight - 120) + 'px';
     ctxMenu.classList.add('open');
   });
-  document.getElementById('ctx-terminal').addEventListener('click', () => { Terminal.openWindow(); ctxMenu.classList.remove('open'); });
   document.getElementById('ctx-files').addEventListener('click', () => { FileManager.openWindow(); ctxMenu.classList.remove('open'); });
   document.getElementById('ctx-widgets').addEventListener('click', () => { WidgetStore.openWindow('desktop'); ctxMenu.classList.remove('open'); });
   document.getElementById('ctx-refresh').addEventListener('click', () => { location.reload(); });

@@ -33,7 +33,7 @@ const FileManager = (() => {
         <div class="fm-container">
           <div class="fm-toolbar">
             <button class="fm-up">↑ Up</button>
-            <span class="fm-breadcrumb">/</span>
+            <span class="fm-breadcrumb"></span>
             <button class="fm-mkdir">+ Folder</button>
             <button class="fm-upload-btn">↑ Upload</button>
             <input type="file" class="fm-upload-input" style="display:none" multiple>
@@ -102,6 +102,27 @@ const FileManager = (() => {
       el.dataset.path = path;
       el.innerHTML = `<span class="fm-place-icon">${icon}</span><span>${name}</span>`;
       el.addEventListener('click', () => this.navigate(path));
+      el.addEventListener('contextmenu', e => {
+        e.preventDefault();
+        e.stopPropagation();
+        const menu = document.createElement('div');
+        menu.className = 'fm-ctx';
+        menu.style.cssText = `position:fixed;left:${e.clientX}px;top:${e.clientY}px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);z-index:99999;min-width:150px;overflow:hidden;`;
+        const item = document.createElement('div');
+        item.style.cssText = 'padding:8px 14px;cursor:pointer;font-size:.85rem;';
+        item.textContent = '⬛ Open in Terminal';
+        item.addEventListener('mouseenter', () => item.style.background = 'var(--surface2)');
+        item.addEventListener('mouseleave', () => item.style.background = '');
+        item.addEventListener('click', () => {
+          menu.remove();
+          Terminal.openWindow();
+          setTimeout(() => document.dispatchEvent(new CustomEvent('terminal-run', { detail: `cd ${path}` })), 500);
+        });
+        menu.appendChild(item);
+        document.body.appendChild(menu);
+        const dismiss = () => { menu.remove(); document.removeEventListener('click', dismiss); };
+        setTimeout(() => document.addEventListener('click', dismiss), 0);
+      });
       this.placesEl.appendChild(el);
     }
 
@@ -116,21 +137,21 @@ const FileManager = (() => {
       this.selected = null;
       // breadcrumb buttons
       this.breadEl.innerHTML = '';
-      const parts = path.split('/').filter((p, i) => i === 0 || p);
+      const parts = path.split('/').filter(p => p);
       let built = '';
       parts.forEach((part, i) => {
-        built = i === 0 ? '/' : built.replace(/\/$/, '') + '/' + part;
+        built += '/' + part;
         const seg = built;
-        const btn = document.createElement('span');
-        btn.className = 'fm-bread-btn';
-        btn.textContent = i === 0 ? '/' : part;
-        btn.addEventListener('click', () => this.navigate(seg));
         if (i > 0) {
           const sep = document.createElement('span');
           sep.className = 'fm-bread-sep';
           sep.textContent = '/';
           this.breadEl.appendChild(sep);
         }
+        const btn = document.createElement('span');
+        btn.className = 'fm-bread-btn';
+        btn.textContent = part;
+        btn.addEventListener('click', () => this.navigate(seg));
         this.breadEl.appendChild(btn);
       });
       this.updateActivePlacea(path);
@@ -270,6 +291,11 @@ const FileManager = (() => {
         const name = row.dataset.name;
         items.push({ label: '✏️ Rename', action: () => this.renamePrompt(name) });
         items.push({ label: '🗑️ Delete', action: () => this.deleteEntry(name), danger: true });
+      } else {
+        items.push({ label: '⬛ Open in Terminal', action: () => {
+          Terminal.openWindow();
+          setTimeout(() => document.dispatchEvent(new CustomEvent('terminal-run', { detail: `cd ${this.currentPath}` })), 500);
+        }});
       }
       items.push({ label: '📁 New Folder', action: () => this.mkdirPrompt() });
       items.push({ label: '🔄 Refresh', action: () => this.navigate(this.currentPath) });

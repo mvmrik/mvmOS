@@ -338,11 +338,29 @@ html, body {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 14px 4px;
-  font-size: .78rem;
-  color: var(--text-dim);
+  padding: 10px 14px 6px;
+  font-size: .82rem;
+  color: var(--text);
+  font-weight: 600;
+  border-bottom: 1px solid var(--border);
 }
 .start-menu-user-icon { font-size: 1rem; }
+.start-menu-search-wrap {
+  padding: 8px 10px 4px;
+}
+.start-menu-search {
+  width: 100%;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-size: .82rem;
+  padding: 5px 10px;
+  outline: none;
+  box-sizing: border-box;
+}
+.start-menu-search:focus { border-color: var(--accent); }
+#start-menu-results .start-menu-item { display: flex; }
 
 /* ── Windows ── */
 .window {
