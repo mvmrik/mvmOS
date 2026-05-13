@@ -95,6 +95,8 @@ async def check_update(session=Depends(get_current_session)):
 
 @router.post("/update")
 async def do_update(session=Depends(get_current_session)):
+    # ensure git trusts the repo dir regardless of owner
+    subprocess.run(["git", "config", "--global", "--add", "safe.directory", REPO_DIR], capture_output=True)
     async def generate():
         proc = await asyncio.create_subprocess_exec(
             "git", "pull", "origin", "main",

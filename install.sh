@@ -63,6 +63,9 @@ port = $PORT
 EOF
 chmod 600 "$SCRIPT_DIR/config.ini"
 
+# ── Git safe directory (needed when service runs as root) ─────────────────────
+sudo git config --global --add safe.directory "$SCRIPT_DIR" 2>/dev/null || true
+
 # ── systemd service ───────────────────────────────────────────────────────────
 echo "  [4/4] Installing systemd service..."
 SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
