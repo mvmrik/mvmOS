@@ -143,14 +143,66 @@ const Desktop = (() => {
     { id: 'settings', label: 'Settings', emoji: '⚙️', app: 'settings',   x: 20, y: 220 },
   ];
 
+  // all icons available (built-in + installed plugins)
+  function allIconDefs() {
+    const defs = [...DEFAULT_ICONS];
+    if (window.mvmOS) {
+      mvmOS._apps.forEach(a => {
+        if (!defs.find(d => d.id === a.id)) {
+          defs.push({ id: a.id, label: a.name, emoji: a.icon || '📦', app: a.id, x: 20, y: 20 });
+        }
+      });
+    }
+    return defs;
+  }
+
   function renderIcons() {
     desktop.querySelectorAll('.icon').forEach(el => el.remove());
     const saved = desktopState.icons || {};
 
-    DEFAULT_ICONS.forEach(def => {
-      const pos = saved[def.id] || { x: def.x, y: def.y };
+    allIconDefs().forEach(def => {
+      const state = saved[def.id];
+      if (state?.hidden) return;
+      const pos = state || { x: def.x, y: def.y };
       createIcon({ ...def, ...pos });
     });
+  }
+
+  // icon context menu
+  const iconCtxMenu = document.createElement('div');
+  iconCtxMenu.id = 'icon-ctx-menu';
+  iconCtxMenu.style.cssText = 'position:fixed;display:none;flex-direction:column;min-width:160px;z-index:99999';
+  iconCtxMenu.className = 'ctx-item-wrap';
+  document.body.appendChild(iconCtxMenu);
+
+  function showIconCtx(x, y, items) {
+    iconCtxMenu.innerHTML = items.map(it =>
+      it === 'sep'
+        ? `<div class="ctx-sep"></div>`
+        : `<div class="ctx-item${it.danger ? ' ctx-danger' : ''}" data-action="${it.action}">${it.label}</div>`
+    ).join('');
+    iconCtxMenu.style.cssText = `position:fixed;display:flex;flex-direction:column;min-width:160px;z-index:99999;
+      left:${Math.min(x, window.innerWidth-170)}px;top:${Math.min(y, window.innerHeight-120)}px;
+      background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
+      box-shadow:var(--shadow);overflow:hidden`;
+    return iconCtxMenu;
+  }
+
+  function hideIconCtx() { iconCtxMenu.style.display = 'none'; }
+
+  function removeFromDesktop(id) {
+    if (!desktopState.icons) desktopState.icons = {};
+    desktopState.icons[id] = { ...(desktopState.icons[id] || {}), hidden: true };
+    saveState();
+    renderIcons();
+  }
+
+  function addToDesktop(def) {
+    if (!desktopState.icons) desktopState.icons = {};
+    const state = desktopState.icons[def.id] || {};
+    desktopState.icons[def.id] = { ...state, hidden: false, x: state.x ?? def.x ?? 20, y: state.y ?? def.y ?? 20 };
+    saveState();
+    renderIcons();
   }
 
   function createIcon({ id, label, emoji, app, x, y }) {
@@ -165,6 +217,7 @@ const Desktop = (() => {
     makeDraggable(el, () => {
       if (!desktopState.icons) desktopState.icons = {};
       desktopState.icons[id] = {
+        ...(desktopState.icons[id] || {}),
         x: parseInt(el.style.left),
         y: parseInt(el.style.top),
       };
@@ -172,6 +225,19 @@ const Desktop = (() => {
     });
 
     el.addEventListener('dblclick', () => openApp(app));
+
+    el.addEventListener('contextmenu', e => {
+      e.preventDefault();
+      e.stopPropagation();
+      const ctx = showIconCtx(e.clientX, e.clientY, [
+        { label: '🗑️ Remove from Desktop', action: 'remove', danger: true },
+      ]);
+      ctx.querySelector('[data-action="remove"]').addEventListener('click', () => {
+        removeFromDesktop(id);
+        hideIconCtx();
+      });
+    });
+
     desktop.appendChild(el);
   }
 
@@ -377,6 +443,28 @@ const Desktop = (() => {
       openApp(item.dataset.app);
       startMenu.classList.remove('open');
     });
+    item.addEventListener('contextmenu', e => {
+      e.preventDefault();
+      e.stopPropagation();
+      startMenu.classList.remove('open');
+      const appId = item.dataset.app;
+      const defs = allIconDefs();
+      const def = defs.find(d => d.id === appId) || {
+        id: appId, label: item.textContent.trim(), emoji: item.querySelector('.emoji')?.textContent || '📦', app: appId, x: 20, y: 20
+      };
+      const alreadyOn = !desktopState.icons?.[appId]?.hidden &&
+        (desktopState.icons?.[appId] !== undefined || DEFAULT_ICONS.find(d => d.id === appId));
+      const ctx = showIconCtx(e.clientX, e.clientY, [
+        alreadyOn
+          ? { label: '🗑️ Remove from Desktop', action: 'remove', danger: true }
+          : { label: '➕ Add to Desktop', action: 'add' },
+      ]);
+      ctx.querySelector('[data-action]').addEventListener('click', () => {
+        if (alreadyOn) removeFromDesktop(appId);
+        else addToDesktop(def);
+        hideIconCtx();
+      });
+    });
   });
 
   // ── Context menu ──
@@ -424,6 +512,7 @@ const Desktop = (() => {
     ctxMenu.classList.remove('open');
     startMenu.classList.remove('open');
     taskbarCtx.classList.remove('open');
+    hideIconCtx();
   });
 
   // ── Switch User ──
