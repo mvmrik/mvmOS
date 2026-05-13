@@ -147,7 +147,7 @@ const Desktop = (() => {
   function allIconDefs() {
     const defs = [...DEFAULT_ICONS];
     if (window.mvmOS) {
-      mvmOS._apps.forEach(a => {
+      Object.values(mvmOS._apps).forEach(a => {
         if (!defs.find(d => d.id === a.id)) {
           defs.push({ id: a.id, label: a.name, emoji: a.icon || '📦', app: a.id, x: 20, y: 20 });
         }
@@ -156,24 +156,33 @@ const Desktop = (() => {
     return defs;
   }
 
+  // container for grid icons
+  const iconsContainer = document.createElement('div');
+  iconsContainer.id = 'desktop-icons';
+  desktop.appendChild(iconsContainer);
+
   function renderIcons() {
-    desktop.querySelectorAll('.icon').forEach(el => el.remove());
+    iconsContainer.innerHTML = '';
     const saved = desktopState.icons || {};
-    const rendered = new Set();
+
+    // build list of all visible icons with order
+    const toRender = [];
+    const seen = new Set();
 
     allIconDefs().forEach(def => {
       const state = saved[def.id];
       if (state?.hidden) return;
-      const pos = state || { x: def.x, y: def.y };
-      createIcon({ ...def, ...pos });
-      rendered.add(def.id);
+      toRender.push({ ...def, order: state?.order ?? 9999 });
+      seen.add(def.id);
     });
 
-    // render saved icons that aren't in allIconDefs yet (e.g. mvmOS app added before plugin loaded)
     Object.entries(saved).forEach(([id, state]) => {
-      if (rendered.has(id) || state?.hidden) return;
-      createIcon({ id, label: state.label || id, emoji: state.emoji || '📦', app: id, x: state.x ?? 20, y: state.y ?? 20 });
+      if (seen.has(id) || state?.hidden) return;
+      toRender.push({ id, label: state.label || id, emoji: state.emoji || '📦', app: id, order: state.order ?? 9999 });
     });
+
+    toRender.sort((a, b) => a.order - b.order);
+    toRender.forEach(def => createIcon(def));
   }
 
   // icon context menu
@@ -208,18 +217,6 @@ const Desktop = (() => {
   function addToDesktop(def) {
     if (!desktopState.icons) desktopState.icons = {};
     const state = desktopState.icons[def.id] || {};
-    if (state.x === undefined) {
-      // find a free slot — scan existing icons and offset
-      const occupied = Object.values(desktopState.icons).filter(s => !s.hidden);
-      const ICON_W = 80, ICON_H = 90, PAD = 16, START_X = 20, START_Y = 20;
-      const desktopH = desktop.clientHeight || window.innerHeight - 44;
-      const cols = Math.max(1, Math.floor((desktop.clientWidth || 200) / (ICON_W + PAD)));
-      let slot = occupied.length;
-      const col = slot % cols;
-      const row = Math.floor(slot / cols);
-      state.x = START_X + col * (ICON_W + PAD);
-      state.y = START_Y + row * (ICON_H + PAD);
-    }
     desktopState.icons[def.id] = { ...state, hidden: false, label: def.label, emoji: def.emoji };
     saveState();
     renderIcons();
@@ -234,25 +231,50 @@ const Desktop = (() => {
   window._desktopRemoveApp = (id) => removeFromDesktop(id);
   window._desktopIsOn = (id) => isOnDesktop(id);
 
-  function createIcon({ id, label, emoji, app, x, y }) {
+  function createIcon({ id, label, emoji, app }) {
     const el = document.createElement('div');
     el.className = 'icon';
     el.dataset.id = id;
     el.dataset.app = app;
-    el.style.left = x + 'px';
-    el.style.top  = y + 'px';
     el.innerHTML = `<span class="icon-emoji">${emoji}</span><span class="icon-label">${label}</span>`;
 
-    makeDraggable(el, () => {
-      if (!desktopState.icons) desktopState.icons = {};
-      desktopState.icons[id] = {
-        ...(desktopState.icons[id] || {}),
-        x: parseInt(el.style.left),
-        y: parseInt(el.style.top),
-      };
+    // drag-to-swap via mousedown+mousemove to avoid blocking dblclick
+    let dragSrc = null;
+    el.addEventListener('mousedown', e => { if (e.button === 0) dragSrc = id; });
+    el.addEventListener('mousemove', e => {
+      if (dragSrc && e.buttons === 1) el.classList.add('dragging');
+    });
+    el.addEventListener('mouseup', () => { el.classList.remove('dragging'); dragSrc = null; });
+
+    el.addEventListener('dragstart', e => {
+      e.dataTransfer.setData('text/plain', id);
+      el.classList.add('dragging');
+    });
+    el.addEventListener('dragend', () => el.classList.remove('dragging'));
+    el.addEventListener('dragover', e => { e.preventDefault(); el.classList.add('drag-over'); });
+    el.addEventListener('dragleave', () => el.classList.remove('drag-over'));
+    el.addEventListener('drop', e => {
+      e.preventDefault();
+      el.classList.remove('drag-over');
+      const fromId = e.dataTransfer.getData('text/plain');
+      if (fromId === id) return;
+      const allVisible = [...iconsContainer.querySelectorAll('.icon')].map(i => i.dataset.id);
+      const fromIdx = allVisible.indexOf(fromId);
+      const toIdx = allVisible.indexOf(id);
+      if (fromIdx === -1 || toIdx === -1) return;
+      allVisible.splice(fromIdx, 1);
+      allVisible.splice(toIdx, 0, fromId);
+      const icons = desktopState.icons || {};
+      allVisible.forEach((iconId, i) => {
+        if (!icons[iconId]) icons[iconId] = {};
+        icons[iconId].order = i;
+      });
+      desktopState.icons = icons;
       saveState();
+      renderIcons();
     });
 
+    el.draggable = true;
     el.addEventListener('dblclick', () => openApp(app));
 
     el.addEventListener('contextmenu', e => {
@@ -267,7 +289,7 @@ const Desktop = (() => {
       });
     });
 
-    desktop.appendChild(el);
+    iconsContainer.appendChild(el);
   }
 
   // ── Icon drag ──
@@ -306,11 +328,16 @@ const Desktop = (() => {
     if (app === 'settings') { Settings.openWindow(); return; }
     if (app === 'appstore') { AppStore.openWindow(); return; }
     // mvmOS plugin app
-    const pluginApp = window.mvmOS?._apps?.[app];
-    if (pluginApp) {
-      fetch(`/api/plugins/${app}/open`, { method: 'POST' }).catch(() => {});
-      pluginApp.launch();
-    }
+    const tryLaunch = (attempts) => {
+      const pluginApp = window.mvmOS?._apps?.[app];
+      if (pluginApp?.launch) {
+        fetch(`/api/plugins/${app}/open`, { method: 'POST' }).catch(() => {});
+        pluginApp.launch();
+      } else if (attempts > 0) {
+        setTimeout(() => tryLaunch(attempts - 1), 300);
+      }
+    };
+    tryLaunch(5);
   }
 
   // ── Window factory ──

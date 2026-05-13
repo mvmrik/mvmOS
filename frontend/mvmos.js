@@ -1,5 +1,5 @@
 // mvmOS Plugin API
-const mvmOS = (() => {
+var mvmOS = (() => {
   const _apps = {};
 
   // ── Storage (namespaced localStorage) ────────────────────────────────────

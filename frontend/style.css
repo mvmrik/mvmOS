@@ -37,8 +37,19 @@ html, body {
 }
 
 /* ── Icons ── */
-.icon {
+#desktop-icons {
   position: absolute;
+  top: 10px;
+  left: 10px;
+  bottom: 10px;
+  display: flex;
+  flex-direction: column;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  gap: var(--icon-gap, 8px);
+  pointer-events: none;
+}
+.icon {
   width: var(--icon-width, 76px);
   display: flex;
   flex-direction: column;
@@ -48,9 +59,12 @@ html, body {
   border-radius: var(--radius);
   cursor: pointer;
   transition: background 0.15s;
+  pointer-events: all;
 }
 .icon:hover { background: rgba(255,255,255,0.07); }
 .icon.selected { background: rgba(42,110,224,0.35); }
+.icon.dragging { opacity: 0.4; }
+.icon.drag-over { background: rgba(42,110,224,0.3); outline: 2px dashed var(--accent); border-radius: var(--radius); }
 .icon .icon-emoji { font-size: var(--icon-emoji-size, 2rem); line-height: 1; }
 .icon .icon-label {
   font-size: var(--icon-label-size, 0.75rem);

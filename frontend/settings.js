@@ -80,6 +80,7 @@ const Settings = (() => {
     document.documentElement.style.setProperty('--icon-width',      ICON_WIDTHS[iIdx]);
     document.documentElement.style.setProperty('--icon-emoji-size', ICON_FONTS[iIdx]);
     document.documentElement.style.setProperty('--icon-label-size', ICON_LABELS[iIdx]);
+    document.documentElement.style.setProperty('--icon-gap',        ['4px','6px','8px','10px','12px'][iIdx]);
     document.documentElement.style.fontSize = TEXT_SCALES[tIdx];
   }
 
