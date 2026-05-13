@@ -193,6 +193,19 @@ class ChownRequest(BaseModel):
     group: str = ""
 
 
+class WriteRequest(BaseModel):
+    path: str
+    content: str
+
+@router.post("/write")
+async def write_file(body: WriteRequest, _session=Depends(get_current_session)):
+    real = safe_path(body.path)
+    if os.path.isdir(real):
+        raise HTTPException(status_code=400, detail="Path is a directory")
+    with open(real, 'w', encoding='utf-8') as f:
+        f.write(body.content)
+    return {"ok": True}
+
 @router.get("/raw")
 async def raw_file(path: str, _session=Depends(get_current_session)):
     import mimetypes
