@@ -76,7 +76,6 @@ After=network.target
 Type=simple
 User=root
 WorkingDirectory=$SCRIPT_DIR
-Environment=MVMOS_OWNER=$CURRENT_USER
 ExecStart=$VENV_DIR/bin/uvicorn backend.main:app --host 0.0.0.0 --port $PORT
 Restart=on-failure
 RestartSec=5

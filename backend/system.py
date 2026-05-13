@@ -95,14 +95,9 @@ async def check_update(session=Depends(get_current_session)):
 
 @router.post("/update")
 async def do_update(session=Depends(get_current_session)):
-    # ensure git trusts the repo dir regardless of owner
-    subprocess.run(["git", "config", "--global", "--add", "safe.directory", REPO_DIR], capture_output=True)
     async def generate():
-        owner = os.environ.get("MVMOS_OWNER", "")
-        if owner:
-            cmd = ["sudo", "-u", owner, "git", "pull", "origin", "main"]
-        else:
-            cmd = ["git", "pull", "origin", "main"]
+        user = session.get("effective_user", "")
+        cmd = ["sudo", "-u", user, "git", "pull", "origin", "main"] if user else ["git", "pull", "origin", "main"]
         proc = await asyncio.create_subprocess_exec(
             *cmd,
             stdout=asyncio.subprocess.PIPE,
