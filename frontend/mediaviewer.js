@@ -112,3 +112,76 @@ const VideoPlayer = (() => {
 
   return { openWindow, isVideo, isAudio };
 })();
+
+
+const TextEditor = (() => {
+  const TEXT_EXTS = ['txt','md','json','js','py','sh','css','html','xml','yaml','yml','ini','conf','log','csv','ts','env'];
+
+  function isText(name) {
+    const ext = name.split('.').pop().toLowerCase();
+    return TEXT_EXTS.includes(ext);
+  }
+
+  function openWindow(path) {
+    const name = path.split('/').pop();
+    const id = 'texteditor-' + btoa(path).slice(0, 12);
+    Desktop.createWindow({
+      id,
+      title: '📝 ' + name,
+      width: 720,
+      height: 500,
+      onMount(body) {
+        body.style.cssText = 'display:flex;flex-direction:column;height:100%;';
+        body.innerHTML = `
+          <div style="display:flex;align-items:center;gap:8px;padding:5px 10px;background:var(--surface);border-bottom:1px solid var(--border);flex-shrink:0;">
+            <span style="font-size:.8rem;color:var(--text-dim);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${path}</span>
+            <span id="te-status" style="font-size:.78rem;color:var(--text-dim);"></span>
+            <button class="s-btn" id="te-save" style="font-size:.78rem;">💾 Save</button>
+          </div>
+          <textarea id="te-area" spellcheck="false" style="flex:1;width:100%;background:var(--surface2);color:var(--text);font-family:var(--mono);font-size:.85rem;padding:12px;border:none;outline:none;resize:none;box-sizing:border-box;line-height:1.5;"></textarea>
+        `;
+        const area   = body.querySelector('#te-area');
+        const status = body.querySelector('#te-status');
+        const saveBtn = body.querySelector('#te-save');
+
+        // load content
+        fetch(`/api/files/raw?path=${encodeURIComponent(path)}&_=${Date.now()}`)
+          .then(r => r.text())
+          .then(text => { area.value = text; status.textContent = ''; })
+          .catch(() => { status.textContent = 'Failed to load'; });
+
+        let dirty = false;
+        area.addEventListener('input', () => {
+          dirty = true;
+          status.textContent = '● unsaved';
+          status.style.color = '#f38ba8';
+        });
+
+        async function save() {
+          saveBtn.disabled = true;
+          const res = await fetch('/api/files/write', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ path, content: area.value }),
+          });
+          saveBtn.disabled = false;
+          if (res.ok) {
+            dirty = false;
+            status.textContent = '✓ saved';
+            status.style.color = '#50fa7b';
+            setTimeout(() => { if (!dirty) status.textContent = ''; }, 2000);
+          } else {
+            status.textContent = '✗ save failed';
+          }
+        }
+
+        saveBtn.addEventListener('click', save);
+        area.addEventListener('keydown', e => {
+          if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); save(); }
+        });
+      }
+    });
+  }
+
+  return { openWindow, isText };
+})();

@@ -139,7 +139,7 @@ const Desktop = (() => {
   // ── Default icons ──
   const BUILTIN_ICONS = [
     { id: 'terminal', label: 'Terminal', emoji: '🖥️', app: 'terminal' },
-    { id: 'files',    label: 'Files',    emoji: '📁', app: 'filemanager' },
+    { id: 'files',    label: 'Files',    emoji: '🗂️', app: 'filemanager' },
     { id: 'settings', label: 'Settings', emoji: '⚙️', app: 'settings' },
   ];
 
@@ -149,6 +149,8 @@ const Desktop = (() => {
   desktop.appendChild(iconsContainer);
 
   let _desktopEntries = []; // from ~/Desktop filesystem
+  const _desktopSelected = new Set(); // selected icon ids
+  let _desktopLastClicked = null;
 
   function _watchDesktop() {
     const es = new EventSource('/api/files/desktop/watch');
@@ -345,7 +347,34 @@ const Desktop = (() => {
     });
 
     el.draggable = true;
+
+    el.addEventListener('click', e => {
+      if (e.ctrlKey || e.metaKey) {
+        if (_desktopSelected.has(id)) { _desktopSelected.delete(id); el.classList.remove('selected'); }
+        else { _desktopSelected.add(id); el.classList.add('selected'); }
+        _desktopLastClicked = id;
+      } else if (e.shiftKey && _desktopLastClicked) {
+        const icons = [...iconsContainer.querySelectorAll('.icon')];
+        const ids = icons.map(i => i.dataset.id);
+        const a = ids.indexOf(_desktopLastClicked), b = ids.indexOf(id);
+        const [lo, hi] = a < b ? [a, b] : [b, a];
+        _desktopSelected.clear();
+        icons.forEach((ic, i) => {
+          if (i >= lo && i <= hi) { _desktopSelected.add(ic.dataset.id); ic.classList.add('selected'); }
+          else ic.classList.remove('selected');
+        });
+      } else {
+        _desktopSelected.clear();
+        iconsContainer.querySelectorAll('.icon.selected').forEach(ic => ic.classList.remove('selected'));
+        _desktopSelected.add(id);
+        el.classList.add('selected');
+        _desktopLastClicked = id;
+      }
+    });
+
     el.addEventListener('dblclick', () => {
+      _desktopSelected.clear();
+      iconsContainer.querySelectorAll('.icon.selected').forEach(ic => ic.classList.remove('selected'));
       if (fsEntry) {
         if (fsEntry.type === 'url')  { window.open(fsEntry.url, '_blank'); return; }
         if (fsEntry.type === 'dir')  { FileManager.openWindow(fsEntry.path); return; }
@@ -353,6 +382,7 @@ const Desktop = (() => {
         if (fsEntry.type === 'file') {
           if (ImageViewer.isImage(fsEntry.name))  { ImageViewer.openWindow(fsEntry.path, _desktopEntries); return; }
           if (VideoPlayer.isVideo(fsEntry.name) || VideoPlayer.isAudio(fsEntry.name)) { VideoPlayer.openWindow(fsEntry.path); return; }
+          if (TextEditor.isText(fsEntry.name)) { TextEditor.openWindow(fsEntry.path); return; }
         }
         return;
       }
@@ -363,19 +393,58 @@ const Desktop = (() => {
     el.addEventListener('contextmenu', e => {
       e.preventDefault();
       e.stopPropagation();
-      const items = fsEntry
-        ? [ { label: '🗑️ Delete', action: 'remove', danger: true } ]
-        : [ { label: '🗑️ Remove from Desktop', action: 'remove', danger: true } ];
+      // ensure right-clicked icon is in selection; if not, reset to just this one
+      if (!_desktopSelected.has(id)) {
+        _desktopSelected.clear();
+        iconsContainer.querySelectorAll('.icon.selected').forEach(ic => ic.classList.remove('selected'));
+        _desktopSelected.add(id);
+        el.classList.add('selected');
+        _desktopLastClicked = id;
+      }
+      // re-sync DOM selection in case set and DOM drifted
+      iconsContainer.querySelectorAll('.icon').forEach(ic => {
+        ic.classList.toggle('selected', _desktopSelected.has(ic.dataset.id));
+      });
+      const selEntries = _desktopEntries.filter(en => {
+        const eid = en.type === 'app' ? 'app-' + en.app_id : 'fs-' + en.name;
+        return _desktopSelected.has(eid);
+      });
+      const multi = _desktopSelected.size > 1;
+      const items = [];
+      if (fsEntry && (fsEntry.type === 'file' || fsEntry.type === 'dir' || fsEntry.type === 'url')) {
+        items.push({ label: `📋 Copy${multi ? ' ('+_desktopSelected.size+')' : ''}`, action: 'copy' });
+        items.push({ label: `✂️ Cut${multi ? ' ('+_desktopSelected.size+')' : ''}`,  action: 'cut'  });
+        items.push('sep');
+      }
+      if (fsEntry) {
+        items.push({ label: `🗑️ Delete${multi ? ' ('+_desktopSelected.size+')' : ''}`, action: 'remove', danger: true });
+      } else {
+        items.push({ label: '🗑️ Remove from Desktop', action: 'remove', danger: true });
+      }
       const ctx = showIconCtx(e.clientX, e.clientY, items);
-      ctx.querySelector('[data-action="remove"]').addEventListener('click', async () => {
+      ctx.querySelector('[data-action="remove"]')?.addEventListener('click', async () => {
         hideIconCtx();
         if (fsEntry) {
-          await fetch(`/api/files/desktop/entry?path=${encodeURIComponent(fsEntry.path)}`, { method: 'DELETE' });
+          const toDelete = selEntries.length ? selEntries : [fsEntry];
+          for (const en of toDelete) {
+            await fetch(`/api/files/desktop/entry?path=${encodeURIComponent(en.path)}`, { method: 'DELETE' });
+          }
+          _desktopSelected.clear();
           await loadDesktopFiles();
           renderIcons();
         } else {
           removeFromDesktop(id);
         }
+      });
+      ctx.querySelector('[data-action="copy"]')?.addEventListener('click', () => {
+        hideIconCtx();
+        const paths = selEntries.length ? selEntries.map(en => en.path) : [fsEntry.path];
+        window._fmClipboard = { paths, cut: false };
+      });
+      ctx.querySelector('[data-action="cut"]')?.addEventListener('click', () => {
+        hideIconCtx();
+        const paths = selEntries.length ? selEntries.map(en => en.path) : [fsEntry.path];
+        window._fmClipboard = { paths, cut: true };
       });
     });
 
@@ -686,9 +755,21 @@ const Desktop = (() => {
 
   // ── Context menu ──
   const ctxMenu = document.getElementById('context-menu');
+  const ctxPaste = document.getElementById('ctx-paste');
+  const ctxPasteSep = document.getElementById('ctx-paste-sep');
+  desktop.addEventListener('click', e => {
+    if (!e.target.closest('.icon')) {
+      _desktopSelected.clear();
+      iconsContainer.querySelectorAll('.icon.selected').forEach(ic => ic.classList.remove('selected'));
+    }
+  });
+
   desktop.addEventListener('contextmenu', e => {
     if (e.target.closest('.window, .fm-list, .icon')) return;
     e.preventDefault();
+    const hasCb = !!window._fmClipboard;
+    ctxPaste.style.display = hasCb ? '' : 'none';
+    ctxPasteSep.style.display = hasCb ? '' : 'none';
     ctxMenu.style.left = Math.min(e.clientX, window.innerWidth  - 180) + 'px';
     ctxMenu.style.top  = Math.min(e.clientY, window.innerHeight - 120) + 'px';
     ctxMenu.classList.add('open');
@@ -728,6 +809,26 @@ const Desktop = (() => {
     await loadDesktopFiles();
     renderIcons();
   }
+
+  ctxPaste.addEventListener('click', async () => {
+    ctxMenu.classList.remove('open');
+    const cb = window._fmClipboard;
+    if (!cb) return;
+    const placesRes = await fetch('/api/files/places');
+    const places = await placesRes.json();
+    const desktopDir = places.home + '/Desktop';
+    const srcPaths = cb.paths || [cb.path];
+    for (const src of srcPaths) {
+      await fetch('/api/files/copy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ src, dst_dir: desktopDir, move: cb.cut }),
+      });
+    }
+    if (cb.cut) window._fmClipboard = null;
+    await loadDesktopFiles();
+    renderIcons();
+  });
 
   document.getElementById('ctx-new-folder').addEventListener('click', async () => {
     ctxMenu.classList.remove('open');

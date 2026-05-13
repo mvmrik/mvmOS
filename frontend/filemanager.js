@@ -31,6 +31,8 @@ const FileManager = (() => {
       this.body = body;
       this.currentPath = '/';
       this.selected = null;
+      this.selectedSet = new Set(); // multi-select
+      this._lastClickedName = null;
       window.addEventListener('fm-prefs-changed', () => this.navigate(this.currentPath));
 
       body.innerHTML = `
@@ -68,14 +70,20 @@ const FileManager = (() => {
 
       // keyboard copy/cut/paste
       body.addEventListener('keydown', e => {
-        if (e.key === 'c' && (e.ctrlKey || e.metaKey) && this.selected) {
-          FMInstance._clipboard = { path: this.joinPath(this.currentPath, this.selected), cut: false };
+        const names = this.selectedSet.size > 0 ? [...this.selectedSet] : (this.selected ? [this.selected.name] : []);
+        if (e.key === 'c' && (e.ctrlKey || e.metaKey) && names.length) {
+          window._fmClipboard = { paths: names.map(n => this.joinPath(this.currentPath, n)), cut: false };
         }
-        if (e.key === 'x' && (e.ctrlKey || e.metaKey) && this.selected) {
-          FMInstance._clipboard = { path: this.joinPath(this.currentPath, this.selected), cut: true };
+        if (e.key === 'x' && (e.ctrlKey || e.metaKey) && names.length) {
+          window._fmClipboard = { paths: names.map(n => this.joinPath(this.currentPath, n)), cut: true };
         }
-        if (e.key === 'v' && (e.ctrlKey || e.metaKey) && FMInstance._clipboard) {
+        if (e.key === 'v' && (e.ctrlKey || e.metaKey) && window._fmClipboard) {
           this.paste();
+        }
+        if (e.key === 'a' && (e.ctrlKey || e.metaKey)) {
+          e.preventDefault();
+          this._lastEntries?.forEach(en => this.selectedSet.add(en.name));
+          this.listEl.querySelectorAll('.fm-entry').forEach(r => r.classList.add('selected'));
         }
       }, true);
     }
@@ -125,17 +133,34 @@ const FileManager = (() => {
         const menu = document.createElement('div');
         menu.className = 'fm-ctx';
         menu.style.cssText = `position:fixed;left:${e.clientX}px;top:${e.clientY}px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);z-index:99999;min-width:150px;overflow:hidden;`;
-        const item = document.createElement('div');
-        item.style.cssText = 'padding:8px 14px;cursor:pointer;font-size:.85rem;';
-        item.textContent = '⬛ Open in Terminal';
-        item.addEventListener('mouseenter', () => item.style.background = 'var(--surface2)');
-        item.addEventListener('mouseleave', () => item.style.background = '');
-        item.addEventListener('click', () => {
-          menu.remove();
+        const addItem = (text, onClick) => {
+          const item = document.createElement('div');
+          item.style.cssText = 'padding:8px 14px;cursor:pointer;font-size:.85rem;';
+          item.textContent = text;
+          item.addEventListener('mouseenter', () => item.style.background = 'var(--surface2)');
+          item.addEventListener('mouseleave', () => item.style.background = '');
+          item.addEventListener('click', () => { menu.remove(); onClick(); });
+          menu.appendChild(item);
+        };
+        if (window._fmClipboard) {
+          addItem('📋 Paste', async () => {
+            const cb = window._fmClipboard;
+            const paths = cb.paths || [cb.path];
+            for (const src of paths) {
+              await fetch('/api/files/copy', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ src, dst_dir: path, move: cb.cut }),
+              });
+            }
+            if (cb.cut) window._fmClipboard = null;
+            this.navigate(this.currentPath);
+          });
+        }
+        addItem('⬛ Open in Terminal', () => {
           Terminal.openWindow();
           setTimeout(() => document.dispatchEvent(new CustomEvent('terminal-run', { detail: `cd ${path}` })), 500);
         });
-        menu.appendChild(item);
         document.body.appendChild(menu);
         const dismiss = () => { menu.remove(); document.removeEventListener('click', dismiss); };
         setTimeout(() => document.addEventListener('click', dismiss), 0);
@@ -152,6 +177,8 @@ const FileManager = (() => {
     async navigate(path) {
       this.currentPath = path;
       this.selected = null;
+      this.selectedSet.clear();
+      this._lastClickedName = null;
       // breadcrumb buttons
       this.breadEl.innerHTML = '';
       const parts = path.split('/').filter(p => p);
@@ -219,9 +246,36 @@ const FileManager = (() => {
 
         row.addEventListener('click', e => {
           if (e.target.classList.contains('fm-editable')) return;
-          this.listEl.querySelectorAll('.fm-entry').forEach(r => r.classList.remove('selected'));
-          row.classList.add('selected');
-          this.selected = entry;
+          if (e.ctrlKey || e.metaKey) {
+            if (this.selectedSet.has(entry.name)) {
+              this.selectedSet.delete(entry.name);
+              row.classList.remove('selected');
+            } else {
+              this.selectedSet.add(entry.name);
+              row.classList.add('selected');
+            }
+            this.selected = entry;
+            this._lastClickedName = entry.name;
+          } else if (e.shiftKey && this._lastClickedName) {
+            const rows = [...this.listEl.querySelectorAll('.fm-entry')];
+            const names = rows.map(r => r.dataset.name);
+            const a = names.indexOf(this._lastClickedName);
+            const b = names.indexOf(entry.name);
+            const [lo, hi] = a < b ? [a, b] : [b, a];
+            this.selectedSet.clear();
+            rows.forEach((r, i) => {
+              if (i >= lo && i <= hi) { this.selectedSet.add(r.dataset.name); r.classList.add('selected'); }
+              else r.classList.remove('selected');
+            });
+            this.selected = entry;
+          } else {
+            this.selectedSet.clear();
+            this.listEl.querySelectorAll('.fm-entry').forEach(r => r.classList.remove('selected'));
+            this.selectedSet.add(entry.name);
+            row.classList.add('selected');
+            this.selected = entry;
+            this._lastClickedName = entry.name;
+          }
         });
 
         if (entry.type === 'dir') {
@@ -233,10 +287,19 @@ const FileManager = (() => {
           row.addEventListener('dblclick', e => {
             if (e.target.classList.contains('fm-editable')) return;
             const fullPath = this.joinPath(this.currentPath, entry.name);
-            if (ImageViewer.isImage(entry.name)) {
+            if (entry.name.endsWith('.url')) {
+              fetch(`/api/files/raw?path=${encodeURIComponent(fullPath)}`)
+                .then(r => r.text())
+                .then(text => {
+                  const match = text.match(/^URL=(.+)$/m);
+                  if (match) window.open(match[1].trim(), '_blank');
+                });
+            } else if (ImageViewer.isImage(entry.name)) {
               ImageViewer.openWindow(fullPath, this._lastEntries);
             } else if (VideoPlayer.isVideo(entry.name) || VideoPlayer.isAudio(entry.name)) {
               VideoPlayer.openWindow(fullPath);
+            } else if (TextEditor.isText(entry.name)) {
+              TextEditor.openWindow(fullPath);
             }
           });
         }
@@ -317,12 +380,13 @@ const FileManager = (() => {
       const items = [];
       if (row) {
         const name = row.dataset.name;
-        items.push({ label: '✏️ Rename', action: () => this.renamePrompt(name) });
-        items.push({ label: '📋 Copy', action: () => { FMInstance._clipboard = { path: this.joinPath(this.currentPath, name), cut: false }; } });
-        items.push({ label: '✂️ Cut',  action: () => { FMInstance._clipboard = { path: this.joinPath(this.currentPath, name), cut: true  }; } });
-        items.push({ label: '🗑️ Delete', action: () => this.deleteEntry(name), danger: true });
+        const names = this.selectedSet.size > 1 ? [...this.selectedSet] : [name];
+        if (names.length === 1) items.push({ label: '✏️ Rename', action: () => this.renamePrompt(name) });
+        items.push({ label: `📋 Copy${names.length > 1 ? ' ('+names.length+')' : ''}`, action: () => { window._fmClipboard = { paths: names.map(n => this.joinPath(this.currentPath, n)), cut: false }; } });
+        items.push({ label: `✂️ Cut${names.length > 1 ? ' ('+names.length+')' : ''}`,  action: () => { window._fmClipboard = { paths: names.map(n => this.joinPath(this.currentPath, n)), cut: true  }; } });
+        items.push({ label: `🗑️ Delete${names.length > 1 ? ' ('+names.length+')' : ''}`, action: () => this.deleteEntries(names), danger: true });
       } else {
-        if (FMInstance._clipboard) {
+        if (window._fmClipboard) {
           items.push({ label: '📋 Paste', action: () => this.paste() });
         }
         items.push({ label: '⬛ Open in Terminal', action: () => {
@@ -350,14 +414,29 @@ const FileManager = (() => {
     }
 
     async paste() {
-      const cb = FMInstance._clipboard;
+      const cb = window._fmClipboard;
       if (!cb) return;
-      await fetch('/api/files/copy', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ src: cb.path, dst_dir: this.currentPath, move: cb.cut }),
-      });
-      if (cb.cut) FMInstance._clipboard = null;
+      const paths = cb.paths || [cb.path];
+      for (const src of paths) {
+        await fetch('/api/files/copy', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ src, dst_dir: this.currentPath, move: cb.cut }),
+        });
+      }
+      if (cb.cut) window._fmClipboard = null;
+      this.navigate(this.currentPath);
+    }
+
+    async deleteEntries(names) {
+      if (!confirm(`Delete ${names.length} item(s)?`)) return;
+      for (const name of names) {
+        await fetch('/api/files/delete', {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ path: this.joinPath(this.currentPath, name) }),
+        });
+      }
       this.navigate(this.currentPath);
     }
 
@@ -428,7 +507,8 @@ const FileManager = (() => {
       const ext = name.split('.').pop().toLowerCase();
       const map = { js: '📜', py: '🐍', sh: '⚙️', txt: '📄', md: '📝', json: '📋',
                     png: '🖼️', jpg: '🖼️', jpeg: '🖼️', gif: '🖼️', svg: '🖼️',
-                    pdf: '📕', zip: '📦', tar: '📦', gz: '📦', mp4: '🎬', mp3: '🎵' };
+                    pdf: '📕', zip: '📦', tar: '📦', gz: '📦', mp4: '🎬', mp3: '🎵',
+                    url: '🔗', mvmos: '🚀' };
       return map[ext] || '📄';
     }
   }
