@@ -22,14 +22,6 @@ def get_current_session(request: Request):
 
 
 def verify_linux_password(username: str, password: str) -> bool:
-    # Try PAM first (works without root)
-    try:
-        import pam
-        p = pam.pam()
-        return p.authenticate(username, password, service='login')
-    except ImportError:
-        pass
-    # Fallback: direct shadow check (requires root)
     try:
         shadow = spwd.getspnam(username)
         hashed = shadow.sp_pwdp
