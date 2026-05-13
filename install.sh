@@ -37,11 +37,9 @@ if [[ "$PY_VER" != "True" ]]; then
 fi
 
 # ── Ensure python3-venv is available ──────────────────────────────────────────
-if ! python3 -m venv --help &>/dev/null; then
-    echo "  Installing python3-venv..."
-    PY_VER=$(python3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
-    sudo apt-get install -y "python${PY_VER}-venv" || sudo apt-get install -y python3-venv
-fi
+echo "  Installing system dependencies..."
+PY_VER=$(python3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
+sudo apt-get install -y -q "python${PY_VER}-venv" python3-venv 2>/dev/null || true
 
 # ── Virtualenv ────────────────────────────────────────────────────────────────
 echo "  [1/4] Creating virtualenv..."
