@@ -582,22 +582,35 @@ const Settings = (() => {
     const updateBtn = wrap.querySelector('#about-update-btn');
     const outputEl  = wrap.querySelector('#about-update-output');
 
-    checkBtn.addEventListener('click', async () => {
+    async function doCheck(silent) {
       checkBtn.disabled = true;
-      statusEl.textContent = 'Checking…';
-      const r = await fetch('/api/system/check-update');
-      const d = await r.json();
-      checkBtn.disabled = false;
-      if (d.up_to_date) {
-        statusEl.style.color = '#50fa7b';
-        statusEl.textContent = '✓ Already up to date';
-        updateBtn.style.display = 'none';
-      } else {
-        statusEl.style.color = '#f1fa8c';
-        statusEl.textContent = `New version available: ${d.local} → ${d.remote}`;
-        updateBtn.style.display = '';
+      if (!silent) statusEl.textContent = 'Checking…';
+      try {
+        const r = await fetch('/api/system/check-update');
+        const d = await r.json();
+        if (d.error) { statusEl.style.color = '#f38ba8'; statusEl.textContent = d.error; return; }
+        if (d.up_to_date) {
+          if (!silent) { statusEl.style.color = '#50fa7b'; statusEl.textContent = '✓ Already up to date'; }
+          updateBtn.style.display = 'none';
+        } else {
+          statusEl.style.color = '#f1fa8c';
+          statusEl.textContent = `New version available: ${d.local} → ${d.remote}`;
+          updateBtn.style.display = '';
+          if (d.notes) {
+            outputEl.style.display = 'block';
+            outputEl.textContent = d.notes;
+          }
+        }
+      } catch (_) {
+        if (!silent) { statusEl.style.color = '#f38ba8'; statusEl.textContent = 'Check failed.'; }
+      } finally {
+        checkBtn.disabled = false;
       }
-    });
+    }
+
+    checkBtn.addEventListener('click', () => doCheck(false));
+    // auto-check silently when About tab opens
+    doCheck(true);
 
     updateBtn.addEventListener('click', async () => {
       updateBtn.disabled = true;

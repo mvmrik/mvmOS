@@ -10,7 +10,7 @@ router = APIRouter(prefix="/api/system", tags=["system"])
 
 REPO_DIR = os.path.join(os.path.dirname(__file__), "..")
 VERSION_FILE = os.path.join(REPO_DIR, "version.txt")
-VERSION_URL = "https://raw.githubusercontent.com/mvmrik/mvmOS/main/version.txt"
+RELEASES_URL = "https://api.github.com/repos/mvmrik/mvmOS/releases/latest"
 
 
 def _local_version() -> str:
@@ -77,16 +77,19 @@ async def check_update(session=Depends(get_current_session)):
     import httpx
     local = _local_version()
     try:
-        async with httpx.AsyncClient(timeout=8) as client:
-            r = await client.get(VERSION_URL)
+        async with httpx.AsyncClient(timeout=8, headers={"Accept": "application/vnd.github+json"}) as client:
+            r = await client.get(RELEASES_URL)
             r.raise_for_status()
-            remote = r.text.strip()
+            data = r.json()
+            remote = data["tag_name"].lstrip("v")
+            notes = data.get("body", "")
     except Exception as e:
         return JSONResponse({"error": f"Could not reach GitHub: {e}"}, status_code=502)
     return JSONResponse({
         "up_to_date": local == remote,
         "local": local,
         "remote": remote,
+        "notes": notes,
     })
 
 
