@@ -2,7 +2,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SERVICE_NAME="virtualos"
+SERVICE_NAME="mvmos"
 VENV_DIR="$SCRIPT_DIR/venv"
 CURRENT_USER="$(whoami)"
 
@@ -17,27 +17,13 @@ echo ""
 echo "  Web Desktop for Linux Servers — Installer"
 echo "  ──────────────────────────────────────────"
 echo ""
+echo "  Login uses your existing Linux system users."
+echo "  No separate username/password needed."
+echo ""
 
 # ── Port ──────────────────────────────────────────────────────────────────────
 read -rp "  Port [8080]: " PORT
 PORT="${PORT:-8080}"
-
-# ── Username ──────────────────────────────────────────────────────────────────
-read -rp "  Admin username [admin]: " USERNAME
-USERNAME="${USERNAME:-admin}"
-
-# ── Password ──────────────────────────────────────────────────────────────────
-read -rsp "  Admin password (leave blank to auto-generate): " PASSWORD
-echo ""
-if [[ -z "$PASSWORD" ]]; then
-    PASSWORD="$(tr -dc 'A-Za-z0-9!@#%^&*' < /dev/urandom | head -c 18)"
-    echo ""
-    echo "  ┌─────────────────────────────────────────────┐"
-    echo "  │  Generated password: $PASSWORD"
-    echo "  │  SAVE THIS — it will not be shown again.    │"
-    echo "  └─────────────────────────────────────────────┘"
-    echo ""
-fi
 
 # ── Python check ──────────────────────────────────────────────────────────────
 if ! command -v python3 &>/dev/null; then
@@ -57,38 +43,29 @@ if ! python3 -m venv --help &>/dev/null; then
 fi
 
 # ── Virtualenv ────────────────────────────────────────────────────────────────
-echo "  [1/5] Creating virtualenv..."
+echo "  [1/4] Creating virtualenv..."
 python3 -m venv "$VENV_DIR"
 
 # ── Pip packages ─────────────────────────────────────────────────────────────
-echo "  [2/5] Installing Python packages..."
+echo "  [2/4] Installing Python packages..."
 "$VENV_DIR/bin/pip" install --quiet --upgrade pip
 "$VENV_DIR/bin/pip" install --quiet \
     "fastapi>=0.110.0" \
     "uvicorn[standard]>=0.29.0" \
     "ptyprocess>=0.7.0" \
-    "passlib[bcrypt]>=1.7.4" \
     "python-multipart>=0.0.9" \
-    "bcrypt==4.0.1"
-
-# ── Hash password ─────────────────────────────────────────────────────────────
-echo "  [3/5] Hashing password..."
-HASH=$("$VENV_DIR/bin/python3" -c "from passlib.hash import bcrypt; print(bcrypt.hash('$PASSWORD'))")
+    "httpx>=0.27.0"
 
 # ── config.ini ────────────────────────────────────────────────────────────────
-echo "  [4/5] Writing config.ini..."
+echo "  [3/4] Writing config.ini..."
 cat > "$SCRIPT_DIR/config.ini" <<EOF
 [server]
 port = $PORT
-
-[auth]
-username = $USERNAME
-password_hash = $HASH
 EOF
 chmod 600 "$SCRIPT_DIR/config.ini"
 
 # ── systemd service ───────────────────────────────────────────────────────────
-echo "  [5/5] Installing systemd service..."
+echo "  [4/4] Installing systemd service..."
 SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
 
 sudo tee "$SERVICE_FILE" > /dev/null <<EOF
@@ -117,7 +94,6 @@ echo ""
 echo "  ✓ mvmOS is running!"
 echo ""
 
-# Try to detect the server's IP
 SERVER_IP=$(hostname -I 2>/dev/null | awk '{print $1}')
 if [[ -n "$SERVER_IP" ]]; then
     echo "  Access it at:  http://$SERVER_IP:$PORT"
@@ -126,10 +102,7 @@ else
 fi
 
 echo ""
-echo "  Username : $USERNAME"
-if [[ -n "${PASSWORD:-}" ]]; then
-    echo "  Password : (shown above)"
-fi
+echo "  Log in with any Linux system user on this machine."
 echo ""
 echo "  Service commands:"
 echo "    sudo systemctl status  $SERVICE_NAME"
