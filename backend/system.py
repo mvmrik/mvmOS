@@ -107,8 +107,8 @@ async def do_update(session=Depends(get_current_session)):
             yield f"data: {line.decode(errors='replace').rstrip()}\n\n"
         await proc.wait()
         if proc.returncode == 0:
+            _patch_service()
             yield "data: __RESTARTING__\n\n"
-            # restart uvicorn by replacing the process
             asyncio.get_event_loop().call_later(1, _restart)
         else:
             yield f"data: __EXIT_{proc.returncode}__\n\n"
@@ -116,6 +116,19 @@ async def do_update(session=Depends(get_current_session)):
     return StreamingResponse(generate(), media_type="text/event-stream",
                              headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
+
+def _patch_service():
+    service_path = "/etc/systemd/system/mvmos.service"
+    try:
+        with open(service_path, "r") as f:
+            content = f.read()
+        if "Restart=on-failure" in content:
+            content = content.replace("Restart=on-failure", "Restart=always")
+            with open(service_path, "w") as f:
+                f.write(content)
+            subprocess.run(["systemctl", "daemon-reload"], capture_output=True)
+    except Exception:
+        pass
 
 def _restart():
     import sys, signal
