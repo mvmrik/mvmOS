@@ -159,12 +159,20 @@ const Desktop = (() => {
   function renderIcons() {
     desktop.querySelectorAll('.icon').forEach(el => el.remove());
     const saved = desktopState.icons || {};
+    const rendered = new Set();
 
     allIconDefs().forEach(def => {
       const state = saved[def.id];
       if (state?.hidden) return;
       const pos = state || { x: def.x, y: def.y };
       createIcon({ ...def, ...pos });
+      rendered.add(def.id);
+    });
+
+    // render saved icons that aren't in allIconDefs yet (e.g. mvmOS app added before plugin loaded)
+    Object.entries(saved).forEach(([id, state]) => {
+      if (rendered.has(id) || state?.hidden) return;
+      createIcon({ id, label: state.label || id, emoji: state.emoji || '📦', app: id, x: state.x ?? 20, y: state.y ?? 20 });
     });
   }
 
@@ -200,7 +208,7 @@ const Desktop = (() => {
   function addToDesktop(def) {
     if (!desktopState.icons) desktopState.icons = {};
     const state = desktopState.icons[def.id] || {};
-    desktopState.icons[def.id] = { ...state, hidden: false, x: state.x ?? def.x ?? 20, y: state.y ?? def.y ?? 20 };
+    desktopState.icons[def.id] = { ...state, hidden: false, label: def.label, emoji: def.emoji, x: state.x ?? def.x ?? 20, y: state.y ?? def.y ?? 20 };
     saveState();
     renderIcons();
   }
