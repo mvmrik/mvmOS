@@ -39,7 +39,8 @@ fi
 # ── Ensure python3-venv is available ──────────────────────────────────────────
 if ! python3 -m venv --help &>/dev/null; then
     echo "  Installing python3-venv..."
-    sudo apt-get install -y python3-venv
+    PY_VER=$(python3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
+    sudo apt-get install -y "python${PY_VER}-venv" || sudo apt-get install -y python3-venv
 fi
 
 # ── Virtualenv ────────────────────────────────────────────────────────────────
