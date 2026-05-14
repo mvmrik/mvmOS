@@ -510,8 +510,7 @@ var mvmOS = (() => {
       const count = updates.length;
       _pushNotif(
         `${count} update${count !== 1 ? 's' : ''} available`,
-        updates.slice(0, 3).map(u => `${u.icon} ${u.name} ${u.current_version} → ${u.new_version}`).join('\n')
-          + (count > 3 ? `\n…and ${count - 3} more` : ''),
+        'Open Update Manager to see what\'s new.',
         () => UpdateManager.openWindow(),
         'Open Update Manager'
       );

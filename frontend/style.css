@@ -823,11 +823,6 @@ html, body {
 }
 .settings-tabs {
   width: 130px;
-  flex-shrink: 0;
-  background: var(--surface2);
-  border-right: 1px solid var(--border);
-  display: flex;
-  flex-direction: column;
   padding: 10px 0;
   gap: 2px;
 }
@@ -856,6 +851,7 @@ html, body {
   flex: 1;
   overflow-y: auto;
   padding: 16px 20px;
+  min-height: 0;
 }
 .settings-panel { display: none; }
 .settings-panel.active { display: block; }
@@ -1054,6 +1050,9 @@ html, body {
   .window.window-mobile .window-body {
     overflow: hidden !important;
     height: calc(100% - 36px) !important;
+  }
+  .window.window-mobile .window-body .as-main {
+    overflow-y: auto;
   }
   .window.window-mobile .window-resize { display: none; }
 

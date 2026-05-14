@@ -116,7 +116,10 @@ const Settings = (() => {
       width: 620,
       height: 480,
       onMount(body) {
-        loadSettings().then(s => render(body, s, tab));
+        loadSettings().then(s => {
+          render(body, s, tab);
+          Desktop.initMobileSidebar(body);
+        });
       },
     });
     Desktop.focusWindow('settings');
@@ -140,9 +143,9 @@ const Settings = (() => {
     body.style.overflow = 'hidden';
     body.style.padding = '0';
     body.innerHTML = `
-      <div class="settings-wrap">
+      <div class="settings-wrap as-wrap">
 
-        <nav class="settings-tabs">
+        <nav class="settings-tabs as-sidebar">
           <div class="settings-tab ${activeTab==='display'?'active':''}" data-tab="display">🖥️ Display</div>
           <div class="settings-tab ${activeTab==='regional'?'active':''}" data-tab="regional">🌐 Regional</div>
           <div class="settings-tab ${activeTab==='filemanager'?'active':''}" data-tab="filemanager">📁 File Manager</div>
@@ -151,7 +154,7 @@ const Settings = (() => {
           <div class="settings-tab ${activeTab==='about'?'active':''}" data-tab="about" style="margin-top:auto">ℹ️ About</div>
         </nav>
 
-        <div class="settings-panels">
+        <div class="settings-panels as-main">
 
           <!-- Display panel -->
           <div class="settings-panel ${activeTab==='display'?'active':''}" id="sp-display">

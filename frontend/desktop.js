@@ -1,7 +1,7 @@
 // ── Window manager & desktop shell ──────────────────────────────────────────
 
 const Desktop = (() => {
-  let zCounter = 100;
+  let zCounter = 8000;
   let windows = {};     // id → { el, title, minimized }
   let desktopState = { icons: {}, nextId: 1 };
 
@@ -617,49 +617,20 @@ const Desktop = (() => {
     if (onMount) onMount(body);
 
     // on mobile, add sidebar toggle if window has .as-sidebar
-    if (mobile) {
-      const sidebar = body.querySelector('.as-sidebar, .fm-places');
-      if (sidebar) {
-        const menuBtn = document.createElement('button');
-        menuBtn.className = 'wbtn as-mobile-menu-btn';
-        menuBtn.title = 'Menu';
-        menuBtn.textContent = '☰';
-        menuBtn.style.cssText = 'display:flex;font-size:1rem;margin-right:4px';
-        titlebar.querySelector('.window-controls').after(menuBtn);
-
-        // close sidebar when a tab inside it is clicked
-        sidebar.addEventListener('click', () => {
-          sidebar.classList.remove('mobile-open');
-          body.querySelector('.as-sidebar-overlay')?.remove();
-        });
-
-        menuBtn.addEventListener('click', e => {
-          e.stopPropagation();
-          const isOpen = sidebar.classList.toggle('mobile-open');
-          if (isOpen) {
-            const overlay = document.createElement('div');
-            overlay.className = 'as-sidebar-overlay';
-            const container = sidebar.parentElement;
-            if (container) { container.style.position = 'relative'; container.appendChild(overlay); }
-            overlay.addEventListener('click', () => {
-              sidebar.classList.remove('mobile-open');
-              overlay.remove();
-            });
-          } else {
-            body.querySelector('.as-sidebar-overlay')?.remove();
-          }
-        });
-      }
-    }
+    if (mobile) _initMobileSidebar(body);
 
     return el;
   }
 
   function focusWindow(id) {
-    Object.values(windows).forEach(w => w.el.classList.remove('focused'));
+    Object.values(windows).forEach(w => {
+      w.el.classList.remove('focused');
+      if (isMobile()) w.el.style.display = 'none';
+    });
     document.querySelectorAll('.taskbar-item').forEach(t => t.classList.remove('active'));
     if (windows[id]) {
       windows[id].el.classList.add('focused');
+      windows[id].el.style.display = '';
       windows[id].el.style.zIndex = ++zCounter;
       const tb = taskbarWindows.querySelector(`[data-win-id="${id}"]`);
       if (tb) tb.classList.add('active');
@@ -1104,8 +1075,45 @@ const Desktop = (() => {
     }
   }
 
+  function _initMobileSidebar(body) {
+    if (!isMobile()) return;
+    const sidebar = body.querySelector('.as-sidebar, .fm-places');
+    if (!sidebar) return;
+    if (body.querySelector('.as-mobile-menu-btn')) return; // already added
+    const titlebar = body.closest('.window')?.querySelector('.window-titlebar');
+    if (!titlebar) return;
+    const menuBtn = document.createElement('button');
+    menuBtn.className = 'wbtn as-mobile-menu-btn';
+    menuBtn.title = 'Menu';
+    menuBtn.textContent = '☰';
+    menuBtn.style.cssText = 'display:flex;font-size:1rem;margin-right:4px';
+    titlebar.querySelector('.window-controls').after(menuBtn);
+
+    sidebar.addEventListener('click', () => {
+      sidebar.classList.remove('mobile-open');
+      body.querySelector('.as-sidebar-overlay')?.remove();
+    });
+
+    menuBtn.addEventListener('click', e => {
+      e.stopPropagation();
+      const isOpen = sidebar.classList.toggle('mobile-open');
+      if (isOpen) {
+        const overlay = document.createElement('div');
+        overlay.className = 'as-sidebar-overlay';
+        const container = sidebar.parentElement;
+        if (container) { container.style.position = 'relative'; container.appendChild(overlay); }
+        overlay.addEventListener('click', () => {
+          sidebar.classList.remove('mobile-open');
+          overlay.remove();
+        });
+      } else {
+        body.querySelector('.as-sidebar-overlay')?.remove();
+      }
+    });
+  }
+
   init();
   _initMobilePages();
 
-  return { createWindow, closeWindow, focusWindow };
+  return { createWindow, closeWindow, focusWindow, initMobileSidebar: _initMobileSidebar };
 })();
