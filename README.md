@@ -21,9 +21,8 @@ A browser-based virtual desktop for headless Linux servers. No Node.js, no build
 
 ```bash
 git clone <repo>
-cd mvmos.mvmrik.com
-chmod +x install.sh
-./install.sh
+cd mvmOS
+bash install.sh
 ```
 
 The installer will ask for a port (default `8080`) and admin username, generate a password, set up a Python virtualenv and create a systemd service.
