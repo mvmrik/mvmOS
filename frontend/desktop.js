@@ -5,6 +5,8 @@ const Desktop = (() => {
   let windows = {};     // id → { el, title, minimized }
   let desktopState = { icons: {}, nextId: 1 };
 
+  function isMobile() { return window.innerWidth < 768; }
+
   const desktop = document.getElementById('desktop');
   const taskbarWindows = document.getElementById('taskbar-windows');
 
@@ -512,36 +514,41 @@ const Desktop = (() => {
     el.className = 'window';
     el.dataset.winId = id;
 
-    // center on screen
-    const cx = Math.max(20, (window.innerWidth  - width)  / 2 + Math.random() * 40 - 20);
-    const cy = Math.max(20, (window.innerHeight - height - 44) / 2 + Math.random() * 40 - 20);
-    el.style.cssText = `left:${cx}px;top:${cy}px;width:${width}px;height:${height}px`;
+    const mobile = isMobile();
+    if (mobile) {
+      el.classList.add('window-mobile');
+      el.style.cssText = 'left:0;top:0;width:100%;height:100%';
+    } else {
+      const cx = Math.max(20, (window.innerWidth  - width)  / 2 + Math.random() * 40 - 20);
+      const cy = Math.max(20, (window.innerHeight - height - 44) / 2 + Math.random() * 40 - 20);
+      el.style.cssText = `left:${cx}px;top:${cy}px;width:${width}px;height:${height}px`;
+    }
 
     el.innerHTML = `
       <div class="window-titlebar">
         <div class="window-controls">
           <button class="wbtn wbtn-close"  title="Close"></button>
-          <button class="wbtn wbtn-min"    title="Minimize"></button>
-          <button class="wbtn wbtn-max"    title="Maximize"></button>
+          ${!mobile ? '<button class="wbtn wbtn-min" title="Minimize"></button>' : ''}
+          ${!mobile ? '<button class="wbtn wbtn-max" title="Maximize"></button>' : ''}
         </div>
         <div class="window-title">${title}</div>
         ${appSettings ? '<button class="wbtn-appsettings" title="App settings">⚙</button>' : ''}
       </div>
       <div class="window-body"></div>
-      <div class="window-resize"></div>
+      ${!mobile ? '<div class="window-resize"></div>' : ''}
     `;
 
     const titlebar = el.querySelector('.window-titlebar');
     const body     = el.querySelector('.window-body');
 
-    // window drag
-    makeWindowDraggable(el, titlebar);
-    // window resize
-    makeWindowResizable(el, el.querySelector('.window-resize'), () => onResize && onResize(el));
+    if (!mobile) {
+      makeWindowDraggable(el, titlebar);
+      makeWindowResizable(el, el.querySelector('.window-resize'), () => onResize && onResize(el));
+    }
 
     el.querySelector('.wbtn-close').addEventListener('click', () => closeWindow(id));
-    el.querySelector('.wbtn-min').addEventListener('click', () => toggleMinimize(id));
-    el.querySelector('.wbtn-max').addEventListener('click', () => toggleMaximize(el));
+    el.querySelector('.wbtn-min')?.addEventListener('click', () => toggleMinimize(id));
+    el.querySelector('.wbtn-max')?.addEventListener('click', () => toggleMaximize(el));
 
     if (appSettings) {
       const btn = el.querySelector('.wbtn-appsettings');
@@ -969,7 +976,64 @@ const Desktop = (() => {
     _watchDesktop();
   }
 
+  // ── Mobile swipe pages ────────────────────────────────────────────────────
+  let _mobilePage = 0; // 0 = desktop/icons, 1 = widgets page
+  let _swipeStartX = null;
+
+  function _initMobilePages() {
+    if (!isMobile()) return;
+
+    // create widget page
+    const widgetPage = document.createElement('div');
+    widgetPage.id = 'mobile-widget-page';
+    widgetPage.style.cssText = 'position:fixed;inset:0 0 44px 0;overflow-y:auto;display:flex;flex-direction:column;align-items:center;padding:16px 12px;gap:12px;transform:translateX(100%);transition:transform .3s ease;background:var(--desktop-bg,#0d1117);z-index:50';
+    document.body.appendChild(widgetPage);
+    window._mobileWidgetPage = widgetPage;
+
+    // move desktop widgets into widget page on mobile
+    function _collectWidgets() {
+      const existing = document.querySelectorAll('[data-desktop-widget]');
+      existing.forEach(w => {
+        w.style.cssText = 'position:relative;left:auto;top:auto;width:100%;max-width:420px;margin:0 auto';
+        widgetPage.appendChild(w);
+      });
+    }
+    // collect after widgets load
+    setTimeout(_collectWidgets, 2000);
+    // also observe for new widgets
+    new MutationObserver(_collectWidgets).observe(desktop, { childList: true });
+
+    // swipe handling on desktop
+    document.addEventListener('touchstart', e => {
+      _swipeStartX = e.touches[0].clientX;
+    }, { passive: true });
+
+    document.addEventListener('touchend', e => {
+      if (_swipeStartX === null) return;
+      const dx = e.changedTouches[0].clientX - _swipeStartX;
+      _swipeStartX = null;
+      if (Math.abs(dx) < 50) return;
+      if (dx < 0 && _mobilePage === 0) _setMobilePage(1);
+      else if (dx > 0 && _mobilePage === 1) _setMobilePage(0);
+    }, { passive: true });
+  }
+
+  function _setMobilePage(page) {
+    _mobilePage = page;
+    const widgetPage = document.getElementById('mobile-widget-page');
+    if (!widgetPage) return;
+    if (page === 1) {
+      desktop.style.transform = 'translateX(-100%)';
+      desktop.style.transition = 'transform .3s ease';
+      widgetPage.style.transform = 'translateX(0)';
+    } else {
+      desktop.style.transform = 'translateX(0)';
+      widgetPage.style.transform = 'translateX(100%)';
+    }
+  }
+
   init();
+  _initMobilePages();
 
   return { createWindow, closeWindow, focusWindow };
 })();

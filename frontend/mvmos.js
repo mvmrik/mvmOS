@@ -158,6 +158,46 @@ var mvmOS = (() => {
     bar.appendChild(wrap);
     def.init(wrap);
     _applyEditMode(wrap);
+    if (window.innerWidth < 768) _updateMobileTaskbarWidgets();
+  }
+
+  function _updateMobileTaskbarWidgets() {
+    if (window.innerWidth >= 768) return;
+    const bar = document.getElementById('taskbar-widgets');
+    if (!bar) return;
+    const wraps = [...bar.querySelectorAll('[data-widget-id]')];
+    if (wraps.length <= 1) return;
+    // hide all except last, add toggle button if not present
+    wraps.forEach((w, i) => { w.style.display = i === wraps.length - 1 ? 'flex' : 'none'; });
+    if (!bar.querySelector('#mobile-widget-toggle')) {
+      const btn = document.createElement('div');
+      btn.id = 'mobile-widget-toggle';
+      btn.style.cssText = 'display:flex;align-items:center;padding:0 6px;cursor:pointer;font-size:1.1rem;height:100%';
+      btn.textContent = '⠿';
+      btn.addEventListener('click', e => {
+        e.stopPropagation();
+        _toggleMobileWidgetPopup(bar, wraps);
+      });
+      bar.insertBefore(btn, bar.firstChild);
+    }
+  }
+
+  function _toggleMobileWidgetPopup(bar, wraps) {
+    let popup = document.getElementById('mobile-widget-popup');
+    if (popup) { popup.remove(); return; }
+    popup = document.createElement('div');
+    popup.id = 'mobile-widget-popup';
+    const barRect = bar.getBoundingClientRect();
+    popup.style.cssText = `position:fixed;bottom:44px;right:0;background:var(--surface2);border:1px solid var(--border);border-radius:8px 8px 0 0;padding:8px;display:flex;flex-direction:column;gap:6px;z-index:9999;min-width:180px;max-width:90vw`;
+    // clone visible widget content (all except last)
+    wraps.slice(0, -1).forEach(w => {
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex;align-items:center;padding:4px 0;border-bottom:1px solid var(--border)';
+      row.appendChild(w.cloneNode(true));
+      popup.appendChild(row);
+    });
+    document.body.appendChild(popup);
+    setTimeout(() => document.addEventListener('click', () => popup?.remove(), { once: true }), 50);
   }
 
   function _applyEditMode(wrap) {

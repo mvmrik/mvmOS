@@ -1004,3 +1004,29 @@ html, body {
 .as-pagination { display:flex; align-items:center; gap:10px; padding:8px 12px; border-top:1px solid var(--border); flex-shrink:0; background:var(--titlebar); }
 .as-pg-info { font-size:.78rem; color:var(--text-dim); flex:1; text-align:center; }
 .s-btn-full { width:100%; text-align:center; justify-content:center; }
+
+/* ── Mobile (< 768px) ───────────────────────────────────────────────────── */
+@media (max-width: 767px) {
+  /* Fullscreen windows */
+  .window.window-mobile {
+    position: fixed !important;
+    left: 0 !important; top: 0 !important;
+    width: 100% !important; height: 100% !important;
+    border-radius: 0;
+    z-index: 8000 !important;
+  }
+  .window.window-mobile .window-resize { display: none; }
+
+  /* Desktop swipe transition */
+  #desktop {
+    transition: transform .3s ease;
+  }
+
+  /* Mobile widget page */
+  #mobile-widget-page [data-desktop-widget] .widget-titlebar { display: none; }
+  #mobile-widget-page [data-desktop-widget] { border-radius: 8px; overflow: hidden; }
+
+  /* Taskbar — hide min/max labels in taskbar-windows on small screens */
+  #taskbar-windows { max-width: 40vw; overflow: hidden; }
+  .taskbar-item { max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+}
