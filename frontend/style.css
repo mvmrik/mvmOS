@@ -31,7 +31,7 @@ html, body {
 /* ── Desktop ── */
 #desktop {
   position: fixed;
-  inset: 0 0 44px 0;
+  top: 0; left: 0; right: 0; bottom: 44px;
   background: linear-gradient(135deg, #0d1117 0%, #0f2027 50%, #0d1117 100%);
   overflow: hidden;
 }
@@ -1007,6 +1007,30 @@ html, body {
 
 /* ── Mobile (< 768px) ───────────────────────────────────────────────────── */
 @media (max-width: 767px) {
+  /* Sidebar as overlay */
+  .as-sidebar, .fm-places {
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    z-index: 100;
+    transform: translateX(-100%);
+    transition: transform .2s ease;
+    box-shadow: 4px 0 16px rgba(0,0,0,.4);
+    width: 200px !important;
+  }
+  .as-sidebar.mobile-open, .fm-places.mobile-open {
+    transform: translateX(0);
+  }
+  .as-sidebar-overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 99;
+    background: rgba(0,0,0,.4);
+  }
+  .as-mobile-menu-btn {
+    display: flex !important;
+  }
+
+
   /* Start menu fits screen */
   #start-menu {
     width: 90vw;
@@ -1019,9 +1043,17 @@ html, body {
   .window.window-mobile {
     position: fixed !important;
     left: 0 !important; top: 0 !important;
-    width: 100% !important; height: 100% !important;
+    width: 100vw !important;
+    height: calc(100vh - 44px) !important;
+    max-width: 100vw !important;
+    max-height: calc(100vh - 44px) !important;
     border-radius: 0;
     z-index: 8000 !important;
+    overflow: hidden !important;
+  }
+  .window.window-mobile .window-body {
+    overflow: hidden !important;
+    height: calc(100% - 36px) !important;
   }
   .window.window-mobile .window-resize { display: none; }
 
@@ -1037,4 +1069,6 @@ html, body {
   /* Taskbar — hide min/max labels in taskbar-windows on small screens */
   #taskbar-windows { max-width: 40vw; overflow: hidden; }
   .taskbar-item { max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #taskbar-widgets { display: none !important; }
+  #taskbar-windows { flex: 1; }
 }

@@ -47,6 +47,8 @@ const Terminal = (() => {
         term.loadAddon(fitAddon);
         term.open(container);
         fitAddon.fit();
+        // on mobile the window dimensions settle after paint — refit
+        if (window.innerWidth < 768) setTimeout(() => fitAddon.fit(), 100);
 
         // WebSocket
         const proto = location.protocol === 'https:' ? 'wss' : 'ws';

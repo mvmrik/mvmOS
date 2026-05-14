@@ -7,6 +7,15 @@ const Desktop = (() => {
 
   function isMobile() { return window.innerWidth < 768; }
 
+  // fix viewport height on mobile browsers where window.innerHeight is wrong
+  function _fixViewport() {
+    const el = document.getElementById('desktop');
+    if (el) el.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:44px;overflow:hidden;background:linear-gradient(135deg,#0d1117 0%,#0f2027 50%,#0d1117 100%)';
+  }
+  _fixViewport();
+  window.visualViewport?.addEventListener('resize', _fixViewport);
+  window.addEventListener('resize', _fixViewport);
+
   const desktop = document.getElementById('desktop');
   const taskbarWindows = document.getElementById('taskbar-windows');
 
@@ -63,7 +72,13 @@ const Desktop = (() => {
     let calPopup = null;
 
     function openCalendar() {
-      if (calPopup) { calPopup.remove(); calPopup = null; return; }
+      if (calPopup) {
+        if (isMobile()) {
+          const bar = document.getElementById('taskbar-widgets');
+          if (bar) calPopup.querySelectorAll('[data-widget-id]').forEach(w => { w.style.display = 'none'; bar.appendChild(w); });
+        }
+        calPopup.remove(); calPopup = null; return;
+      }
       const s = window._vosSettings || {};
       const sundayFirst = s.week_starts === 'sunday';
       const now = new Date();
@@ -119,14 +134,34 @@ const Desktop = (() => {
 
       renderCal();
 
+      // on mobile, show taskbar widgets above calendar
+      if (isMobile()) {
+        const widgetSection = document.createElement('div');
+        widgetSection.style.cssText = 'display:flex;flex-direction:column;gap:8px;padding-bottom:10px;border-bottom:1px solid var(--border);margin-bottom:10px';
+        const bar = document.getElementById('taskbar-widgets');
+        if (bar) {
+          [...bar.querySelectorAll('[data-widget-id]')].forEach(w => {
+            w.style.display = 'flex';
+            w.style.minHeight = '36px';
+            widgetSection.appendChild(w);
+          });
+        }
+        if (widgetSection.children.length) calPopup.insertBefore(widgetSection, calPopup.firstChild);
+      }
+
       // position above clock
       const rect = clock.getBoundingClientRect();
       calPopup.style.right = (window.innerWidth - rect.right) + 'px';
-      calPopup.style.bottom = (window.innerHeight - rect.top + 6) + 'px';
+      calPopup.style.bottom = '44px';
 
       setTimeout(() => {
         document.addEventListener('click', function handler(e) {
           if (!calPopup?.contains(e.target) && e.target !== clock) {
+            // return widgets to taskbar on mobile (hidden)
+            if (isMobile()) {
+              const bar = document.getElementById('taskbar-widgets');
+              if (bar) calPopup?.querySelectorAll('[data-widget-id]').forEach(w => { w.style.display = 'none'; bar.appendChild(w); });
+            }
             calPopup?.remove(); calPopup = null;
             document.removeEventListener('click', handler);
           }
@@ -517,7 +552,7 @@ const Desktop = (() => {
     const mobile = isMobile();
     if (mobile) {
       el.classList.add('window-mobile');
-      el.style.cssText = 'left:0;top:0;width:100%;height:100%';
+      el.style.cssText = 'position:fixed;left:0;top:0;width:100vw;height:calc(100vh - 44px);z-index:8000;overflow:hidden';
     } else {
       const cx = Math.max(20, (window.innerWidth  - width)  / 2 + Math.random() * 40 - 20);
       const cy = Math.max(20, (window.innerHeight - height - 44) / 2 + Math.random() * 40 - 20);
@@ -580,6 +615,43 @@ const Desktop = (() => {
     taskbarWindows.appendChild(tbItem);
 
     if (onMount) onMount(body);
+
+    // on mobile, add sidebar toggle if window has .as-sidebar
+    if (mobile) {
+      const sidebar = body.querySelector('.as-sidebar, .fm-places');
+      if (sidebar) {
+        const menuBtn = document.createElement('button');
+        menuBtn.className = 'wbtn as-mobile-menu-btn';
+        menuBtn.title = 'Menu';
+        menuBtn.textContent = '☰';
+        menuBtn.style.cssText = 'display:flex;font-size:1rem;margin-right:4px';
+        titlebar.querySelector('.window-controls').after(menuBtn);
+
+        // close sidebar when a tab inside it is clicked
+        sidebar.addEventListener('click', () => {
+          sidebar.classList.remove('mobile-open');
+          body.querySelector('.as-sidebar-overlay')?.remove();
+        });
+
+        menuBtn.addEventListener('click', e => {
+          e.stopPropagation();
+          const isOpen = sidebar.classList.toggle('mobile-open');
+          if (isOpen) {
+            const overlay = document.createElement('div');
+            overlay.className = 'as-sidebar-overlay';
+            const container = sidebar.parentElement;
+            if (container) { container.style.position = 'relative'; container.appendChild(overlay); }
+            overlay.addEventListener('click', () => {
+              sidebar.classList.remove('mobile-open');
+              overlay.remove();
+            });
+          } else {
+            body.querySelector('.as-sidebar-overlay')?.remove();
+          }
+        });
+      }
+    }
+
     return el;
   }
 

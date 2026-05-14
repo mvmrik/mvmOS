@@ -17,26 +17,49 @@ var mvmOS = (() => {
   // ── Flyout panel (two-level: categories → apps) ───────────────────────────
   let _flyout = null;
 
-  function _closeFlyout() { _flyout?.remove(); _flyout = null; }
+  function _closeFlyout() {
+    if (_flyout) { _flyout.remove(); _flyout = null; }
+    document.querySelector('.start-submenu-inline')?.remove();
+  }
 
   function _openFlyout(anchorEl) {
     _closeFlyout();
-    const rect = anchorEl.getBoundingClientRect();
-    _flyout = document.createElement('div');
-    _flyout.className = 'start-submenu open';
-    _flyout.style.left = rect.right + 4 + 'px';
-    _flyout.style.top  = rect.top + 'px';
-    document.body.appendChild(_flyout);
-    _renderCategories();
-    const fr = _flyout.getBoundingClientRect();
-    if (fr.bottom > window.innerHeight - 10) {
-      _flyout.style.top = Math.max(8, window.innerHeight - fr.height - 10) + 'px';
+    if (window.innerWidth < 768) {
+      // on mobile: cover the start menu exactly
+      const startMenu = document.getElementById('start-menu');
+      const r = startMenu.getBoundingClientRect();
+      _flyout = document.createElement('div');
+      _flyout.className = 'start-submenu-inline';
+      _flyout.style.cssText = `position:fixed;left:${r.left}px;top:${r.top}px;width:${r.width}px;height:${r.height}px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);display:flex;flex-direction:column;z-index:9600;overflow-y:auto;box-shadow:var(--shadow)`;
+      document.body.appendChild(_flyout);
+    } else {
+      const rect = anchorEl.getBoundingClientRect();
+      _flyout = document.createElement('div');
+      _flyout.className = 'start-submenu open';
+      _flyout.style.left = rect.right + 4 + 'px';
+      _flyout.style.top  = rect.top + 'px';
+      document.body.appendChild(_flyout);
+      const fr = _flyout.getBoundingClientRect();
+      if (fr.bottom > window.innerHeight - 10) {
+        _flyout.style.top = Math.max(8, window.innerHeight - fr.height - 10) + 'px';
+      }
     }
+    _renderCategories();
   }
 
   function _renderCategories() {
     if (!_flyout) return;
     _flyout.innerHTML = '';
+    if (window.innerWidth < 768) {
+      const back = document.createElement('div');
+      back.className = 'start-submenu-item start-submenu-back';
+      back.innerHTML = '<span class="emoji">‹</span> Back';
+      back.addEventListener('click', e => { e.stopPropagation(); _closeFlyout(); });
+      _flyout.appendChild(back);
+      const sep = document.createElement('div');
+      sep.style.cssText = 'height:1px;background:var(--border);margin:2px 0';
+      _flyout.appendChild(sep);
+    }
     const cats = {};
     Object.values(_apps).forEach(app => {
       const cat = app.category || 'Utilities';
@@ -165,39 +188,34 @@ var mvmOS = (() => {
     if (window.innerWidth >= 768) return;
     const bar = document.getElementById('taskbar-widgets');
     if (!bar) return;
-    const wraps = [...bar.querySelectorAll('[data-widget-id]')];
-    if (wraps.length <= 1) return;
-    // hide all except last, add toggle button if not present
-    wraps.forEach((w, i) => { w.style.display = i === wraps.length - 1 ? 'flex' : 'none'; });
-    if (!bar.querySelector('#mobile-widget-toggle')) {
-      const btn = document.createElement('div');
-      btn.id = 'mobile-widget-toggle';
-      btn.style.cssText = 'display:flex;align-items:center;padding:0 6px;cursor:pointer;font-size:1.1rem;height:100%';
-      btn.textContent = '⠿';
-      btn.addEventListener('click', e => {
-        e.stopPropagation();
-        _toggleMobileWidgetPopup(bar, wraps);
-      });
-      bar.insertBefore(btn, bar.firstChild);
-    }
+    // hide all widgets — they show in clock popup on mobile
+    bar.querySelectorAll('[data-widget-id]').forEach(w => { w.style.display = 'none'; });
   }
 
   function _toggleMobileWidgetPopup(bar, wraps) {
     let popup = document.getElementById('mobile-widget-popup');
-    if (popup) { popup.remove(); return; }
+    if (popup) {
+      wraps.forEach(w => { w.style.display = 'none'; bar.appendChild(w); });
+      popup.remove();
+      return;
+    }
     popup = document.createElement('div');
     popup.id = 'mobile-widget-popup';
-    const barRect = bar.getBoundingClientRect();
-    popup.style.cssText = `position:fixed;bottom:44px;right:0;background:var(--surface2);border:1px solid var(--border);border-radius:8px 8px 0 0;padding:8px;display:flex;flex-direction:column;gap:6px;z-index:9999;min-width:180px;max-width:90vw`;
-    // clone visible widget content (all except last)
-    wraps.slice(0, -1).forEach(w => {
-      const row = document.createElement('div');
-      row.style.cssText = 'display:flex;align-items:center;padding:4px 0;border-bottom:1px solid var(--border)';
-      row.appendChild(w.cloneNode(true));
-      popup.appendChild(row);
+    popup.style.cssText = 'position:fixed;bottom:52px;right:4px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 12px;display:flex;flex-direction:column;gap:0;z-index:10000;min-width:200px;max-width:90vw;box-shadow:0 -4px 16px rgba(0,0,0,.4)';
+    wraps.forEach(w => {
+      w.style.display = 'flex';
+      w.style.padding = '6px 0';
+      w.style.borderBottom = '1px solid var(--border)';
+      w.style.minHeight = '40px';
+      popup.appendChild(w);
     });
     document.body.appendChild(popup);
-    setTimeout(() => document.addEventListener('click', () => popup?.remove(), { once: true }), 50);
+    setTimeout(() => document.addEventListener('click', e => {
+      if (!popup.contains(e.target)) {
+        wraps.forEach(w => { w.style.display = 'none'; bar.appendChild(w); });
+        popup.remove();
+      }
+    }, { once: true }), 50);
   }
 
   function _applyEditMode(wrap) {
