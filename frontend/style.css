@@ -1007,6 +1007,14 @@ html, body {
 
 /* ── Mobile (< 768px) ───────────────────────────────────────────────────── */
 @media (max-width: 767px) {
+  /* Start menu fits screen */
+  #start-menu {
+    width: 90vw;
+    left: 5vw;
+    max-height: calc(100vh - 60px);
+    overflow-y: auto;
+  }
+
   /* Fullscreen windows */
   .window.window-mobile {
     position: fixed !important;
