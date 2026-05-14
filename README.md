@@ -1,21 +1,24 @@
 # mvmOS
 
-A browser-based virtual desktop for headless Linux servers. No Node.js, no build step — just Python + vanilla JS.
+A browser-based virtual Linux desktop for headless servers. Run it on any Linux machine and access a full desktop environment from your browser — no GUI, no VNC, no Node.js, no build step. Just Python + vanilla JS.
+
+Designed to make working on servers without a graphical interface much easier.
 
 **Current version:** 0.3.3-beta
 
-## Features
+## What's included
 
-- **Terminal** — real WebSocket PTY, full color, supports vim, htop, nano and any interactive program
-- **File manager** — browse, upload (including folders), rename, delete, copy/paste, search, image preview
-- **Desktop** — icons, shortcuts, drag-and-drop, multi-select, copy/paste
-- **Desktop widgets** — draggable, always-on components (system monitor, CPU graph, and more)
-- **App Store** — install apps from store repositories
-- **Widget Store** — install desktop and taskbar widgets
-- **Theme Store** — switch themes at runtime
-- **System monitor** — CPU, RAM, disk, running processes, services
-- **User switching** — file operations as any system user
+- **Full terminal** — real WebSocket PTY, full color, supports any interactive program (vim, htop, nano...)
+- **Full file manager** — browse, upload, rename, delete, copy/paste, search
+- **Desktop** — icons, shortcuts, drag-and-drop, multi-select
+- **Linux user support** — file operations run as real system users
 - **Settings** — persistent preferences per user
+
+## Apps, Widgets & Themes
+
+The core OS is intentionally minimal. Additional apps, widgets and themes are installed from a store — either the official [mvmos-store](https://github.com/mvmrik/mvmos-store) or any custom store repository you point it to.
+
+Anyone can create their own apps, widgets and themes. See the [mvmos-store developer guide](https://github.com/mvmrik/mvmos-store) for full documentation.
 
 ## Install
 
@@ -31,7 +34,8 @@ The installer will ask for a port (default `8080`) and admin username, generate 
 
 - Python 3.10+
 - Linux with systemd
-- nginx (recommended, for HTTPS and a real domain)
+
+For remote access over the internet, put it behind **nginx + HTTPS** or use a **Cloudflare Tunnel** — both work fine. For local use, no proxy needed.
 
 ## Dependencies
 
@@ -43,7 +47,3 @@ The installer will ask for a port (default `8080`) and admin username, generate 
 | `passlib[bcrypt]` | Password hashing |
 
 No npm, no build step. xterm.js is bundled locally.
-
-## Apps & Widgets
-
-Apps, widgets and themes are managed through a separate store repository. See [mvmos-store](https://github.com/mvmrik/mvmos-store) for the developer guide on building your own.
