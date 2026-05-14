@@ -3,17 +3,16 @@ var mvmOS = (() => {
   const _apps = {};
 
   // ── Storage (namespaced localStorage) ────────────────────────────────────
-  const storage = {
-    get(key) {
-      try { return JSON.parse(localStorage.getItem(`mvmos_app_${key}`)); } catch { return null; }
-    },
-    set(key, value) {
-      localStorage.setItem(`mvmos_app_${key}`, JSON.stringify(value));
-    },
-    remove(key) {
-      localStorage.removeItem(`mvmos_app_${key}`);
-    },
-  };
+  function _makeStorage(ns) {
+    const prefix = `mvmos_app_${ns}_`;
+    return {
+      get(key)        { try { return JSON.parse(localStorage.getItem(prefix + key)); } catch { return null; } },
+      set(key, value) { localStorage.setItem(prefix + key, JSON.stringify(value)); },
+      remove(key)     { localStorage.removeItem(prefix + key); },
+    };
+  }
+  // global fallback (shared, avoid using in new apps)
+  const storage = _makeStorage('_global');
 
   // ── Flyout panel (two-level: categories → apps) ───────────────────────────
   let _flyout = null;
@@ -114,6 +113,7 @@ var mvmOS = (() => {
   // ── Plugin registration ───────────────────────────────────────────────────
   function registerApp(def) {
     if (!def.id || !def.launch) { console.warn('mvmOS.registerApp: missing id or launch'); return; }
+    def.storage = _makeStorage(def.id);
     _apps[def.id] = def;
     _ensureAppsMenuItem();
   }
@@ -217,15 +217,33 @@ var mvmOS = (() => {
 
     const wrap = document.createElement('div');
     wrap.dataset.desktopWidget = def.id;
-    wrap.style.cssText = `position:absolute;left:${x}px;top:${y}px;z-index:10;user-select:none`;
+    wrap.style.cssText = `position:absolute;left:${x}px;top:${y}px;z-index:10;user-select:none;border-radius:var(--radius);overflow:visible;`;
     desktop.appendChild(wrap);
-    def.init(wrap);
 
-    // drag to move
+    // hover titlebar
+    const titlebar = document.createElement('div');
+    titlebar.className = 'widget-titlebar';
+    titlebar.innerHTML = `<span class="widget-title">${def.icon || ''} ${def.name || def.id}</span><button class="widget-close-btn window-btn close">✕</button>`;
+    wrap.appendChild(titlebar);
+
+    // body for widget content
+    const body = document.createElement('div');
+    body.className = 'widget-body';
+    wrap.appendChild(body);
+    def.init(body);
+
+    // close button
+    titlebar.querySelector('.widget-close-btn').addEventListener('click', e => {
+      e.stopPropagation();
+      fetch(`/api/widgets/${def.id}/position`, { method: 'DELETE' }).catch(() => {});
+      wrap.remove();
+      _removeWidget(def.id);
+    });
+
+    // drag to move — only from titlebar
     let dragging = false, ox = 0, oy = 0, saveTimer = null;
-    wrap.addEventListener('mousedown', e => {
-      if (e.button !== 0) return;
-      if (e.target.closest('button,input,select,a,canvas')) return;
+    titlebar.addEventListener('mousedown', e => {
+      if (e.button !== 0 || e.target.closest('button')) return;
       dragging = true;
       ox = e.clientX - wrap.offsetLeft;
       oy = e.clientY - wrap.offsetTop;
@@ -289,7 +307,13 @@ var mvmOS = (() => {
 
   async function _loadWidget(id) {
     try {
-      const res = await fetch(`/widgets/${id}/main.js?_=${Date.now()}`);
+      const base = `/widgets/${id}`;
+      let entry = 'main.js';
+      try {
+        const mf = await fetch(`${base}/manifest.json?_=${Date.now()}`);
+        if (mf.ok) { const j = await mf.json(); entry = j.entry || 'main.js'; }
+      } catch (_) {}
+      const res = await fetch(`${base}/${entry}?_=${Date.now()}`);
       if (!res.ok) {
         _pushNotif(`Widget needs reinstall: ${id}`, 'The widget files are missing. Please reinstall from the Widget Store.', null, null);
         return;
@@ -310,9 +334,15 @@ var mvmOS = (() => {
   // ── Plugin loader (from /apps/{id}/main.js file) ──────────────────────────
   async function _loadPlugin(id) {
     try {
-      const res = await fetch(`/apps/${id}/main.js?_=${Date.now()}`);
+      const base = `/apps/${id}`;
+      let entry = 'main.js';
+      let css = null;
+      try {
+        const mf = await fetch(`${base}/manifest.json?_=${Date.now()}`);
+        if (mf.ok) { const j = await mf.json(); entry = j.entry || 'main.js'; css = j.css || null; }
+      } catch (_) {}
+      const res = await fetch(`${base}/${entry}?_=${Date.now()}`);
       if (!res.ok) {
-        // file missing — app needs reinstall
         _pushNotif(
           `App needs reinstall: ${id}`,
           'The app files are missing. Please reinstall it from the App Store.',
@@ -320,6 +350,13 @@ var mvmOS = (() => {
           'Open App Store'
         );
         return;
+      }
+      if (css && !document.getElementById(`app-css-${id}`)) {
+        const link = document.createElement('link');
+        link.id = `app-css-${id}`;
+        link.rel = 'stylesheet';
+        link.href = `${base}/${css}?_=${Date.now()}`;
+        document.head.appendChild(link);
       }
       const code = await res.text();
       (new Function(code))();

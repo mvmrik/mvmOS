@@ -4,8 +4,6 @@ A browser-based virtual Linux desktop for headless servers. Run it on any Linux 
 
 Designed to make working on servers without a graphical interface much easier.
 
-**Current version:** 0.3.3-beta
-
 ## What's included
 
 - **Full terminal** — real WebSocket PTY, full color, supports any interactive program (vim, htop, nano...)
@@ -34,7 +32,7 @@ The installer will ask for a port (default `8080`) and admin username, generate 
 ## Requirements
 
 - Python 3.10+
-- Linux with systemd
+- Linux with systemd (Ubuntu, Debian, Fedora, Arch, openSUSE and others)
 
 For remote access over the internet, put it behind **nginx + HTTPS** or use a **Cloudflare Tunnel** — both work fine. For local use, no proxy needed.
 

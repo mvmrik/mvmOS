@@ -40,6 +40,8 @@ const FileManager = (() => {
           <div class="fm-toolbar">
             <button class="fm-up">↑ Up</button>
             <span class="fm-breadcrumb"></span>
+            <input class="fm-search" type="text" placeholder="Search…" autocomplete="off">
+            <button class="fm-search-deep" title="Search in subfolders">🔍</button>
             <button class="fm-mkdir">+ Folder</button>
             <button class="fm-upload-btn">↑ Upload</button>
             <input type="file" class="fm-upload-input" style="display:none" multiple>
@@ -47,13 +49,85 @@ const FileManager = (() => {
           <div class="fm-body">
             <nav class="fm-places"></nav>
             <div class="fm-list"></div>
+            <div class="fm-preview" style="display:none">
+              <button class="fm-preview-close">✕</button>
+              <img class="fm-preview-img" src="" alt="">
+              <div class="fm-preview-name"></div>
+              <div class="fm-preview-meta"></div>
+            </div>
+          </div>
+          <div class="fm-footer">
+            <span class="fm-footer-status"></span>
+            <div class="fm-progress-wrap" style="display:none">
+              <span class="fm-progress-label"></span>
+              <div class="fm-progress-bar"><div class="fm-progress-fill"></div></div>
+            </div>
           </div>
         </div>
       `;
 
-      this.listEl   = body.querySelector('.fm-list');
-      this.breadEl  = body.querySelector('.fm-breadcrumb');
-      this.placesEl = body.querySelector('.fm-places');
+      this.listEl     = body.querySelector('.fm-list');
+      this.breadEl    = body.querySelector('.fm-breadcrumb');
+      this.placesEl   = body.querySelector('.fm-places');
+      this.searchEl   = body.querySelector('.fm-search');
+
+      this.searchEl.addEventListener('input', () => {
+        const q = this.searchEl.value.trim().toLowerCase();
+        if (!this._lastEntries) return;
+        const filtered = q ? this._lastEntries.filter(e => e.name.toLowerCase().includes(q)) : this._lastEntries;
+        this.render(filtered, true);
+      });
+      this.searchEl.addEventListener('keydown', e => {
+        if (e.key === 'Escape') { this.searchEl.value = ''; this.render(this._lastEntries || []); }
+        if (e.key === 'Enter') deepSearch();
+      });
+
+      const deepSearch = async () => {
+        const q = this.searchEl.value.trim();
+        if (!q) return;
+        this.footerStatus.textContent = `Searching…`;
+        const res = await fetch(`/api/files/search?path=${encodeURIComponent(this.currentPath)}&q=${encodeURIComponent(q)}`);
+        if (!res.ok) { this.footerStatus.textContent = 'Search failed'; return; }
+        const data = await res.json();
+        this.footerStatus.textContent = `${data.results.length} result${data.results.length !== 1 ? 's' : ''} for "${q}"`;
+        this.listEl.innerHTML = '';
+        if (!data.results.length) {
+          this.listEl.innerHTML = '<div class="fm-empty">No results</div>';
+          return;
+        }
+        data.results.forEach(entry => {
+          const row = document.createElement('div');
+          row.className = 'fm-entry';
+          row.dataset.name = entry.name;
+          row.dataset.type = entry.type;
+          const icon = entry.type === 'dir' ? '📁' : this.fileIcon(entry.name);
+          const relPath = entry.path.replace(this.currentPath, '').replace(/^\//, '');
+          row.innerHTML = `
+            <span class="fm-icon">${icon}</span>
+            <span class="fm-name">${entry.name}</span>
+            <span class="fm-size" style="flex:1;color:var(--text-dim);font-size:.75rem;">${relPath}</span>
+          `;
+          row.addEventListener('dblclick', () => {
+            if (entry.type === 'dir') { this.navigate(entry.path); }
+            else { this.navigate(entry.path.substring(0, entry.path.lastIndexOf('/'))); }
+          });
+          this.listEl.appendChild(row);
+        });
+      };
+      body.querySelector('.fm-search-deep').addEventListener('click', deepSearch);
+      this.previewEl  = body.querySelector('.fm-preview');
+      this.previewImg = body.querySelector('.fm-preview-img');
+      this.previewName = body.querySelector('.fm-preview-name');
+      this.previewMeta = body.querySelector('.fm-preview-meta');
+      this._previewClosed = false;
+      body.querySelector('.fm-preview-close').addEventListener('click', () => {
+        this._previewClosed = true;
+        this.previewEl.style.display = 'none';
+      });
+      this.footerStatus  = body.querySelector('.fm-footer-status');
+      this.progressWrap  = body.querySelector('.fm-progress-wrap');
+      this.progressLabel = body.querySelector('.fm-progress-label');
+      this.progressFill  = body.querySelector('.fm-progress-fill');
 
       body.querySelector('.fm-up').addEventListener('click', () => this.goUp());
       body.querySelector('.fm-mkdir').addEventListener('click', () => this.mkdirPrompt());
@@ -64,6 +138,34 @@ const FileManager = (() => {
       const uploadInput = body.querySelector('.fm-upload-input');
       uploadBtn.addEventListener('click', () => uploadInput.click());
       uploadInput.addEventListener('change', () => this.uploadFiles(uploadInput.files));
+
+      // drag-and-drop upload from OS
+      // block dragover/drop on the whole body to prevent browser from navigating to dropped HTML files
+      const bodyDragOver = e => { e.preventDefault(); e.dataTransfer.dropEffect = 'none'; };
+      const bodyDrop = e => { e.preventDefault(); };
+      body.addEventListener('dragover', bodyDragOver);
+      body.addEventListener('drop', bodyDrop);
+
+      this.listEl.addEventListener('dragover', e => {
+        if (e.dataTransfer.types.includes('Files')) {
+          e.preventDefault();
+          e.stopPropagation();
+          e.dataTransfer.dropEffect = 'copy';
+          this.listEl.classList.add('fm-drop-hover');
+        }
+      });
+      this.listEl.addEventListener('dragleave', e => {
+        if (!this.listEl.contains(e.relatedTarget)) this.listEl.classList.remove('fm-drop-hover');
+      });
+      this.listEl.addEventListener('drop', e => {
+        e.preventDefault();
+        e.stopPropagation();
+        this.listEl.classList.remove('fm-drop-hover');
+        const items = [...e.dataTransfer.items].filter(i => i.kind === 'file');
+        if (items.length) {
+          this.uploadEntries(items.map(i => i.webkitGetAsEntry()).filter(Boolean));
+        }
+      });
 
       // right-click context menu on list
       this.listEl.addEventListener('contextmenu', e => this.onContextMenu(e));
@@ -117,8 +219,68 @@ const FileManager = (() => {
         this.placesEl.appendChild(sep2);
         this._addPlace('💻', 'Computer', '/');
 
+        // Bookmarks
+        const bookmarks = this._loadBookmarks();
+        if (bookmarks.length > 0) {
+          const sep3 = document.createElement('div');
+          sep3.className = 'fm-places-sep';
+          this.placesEl.appendChild(sep3);
+          const bLabel = document.createElement('div');
+          bLabel.className = 'fm-places-user';
+          bLabel.textContent = 'Bookmarks';
+          this.placesEl.appendChild(bLabel);
+          bookmarks.forEach(b => this._addBookmark(b.name, b.path));
+        }
+
+        // Add bookmark button
+        const addBtn = document.createElement('div');
+        addBtn.className = 'fm-place fm-bookmark-add';
+        addBtn.innerHTML = `<span class="fm-place-icon">＋</span><span>Add Bookmark</span>`;
+        addBtn.addEventListener('click', () => this._addCurrentAsBookmark());
+        this.placesEl.appendChild(addBtn);
+
         this.updateActivePlacea(this.currentPath);
       } catch (_) {}
+    }
+
+    _loadBookmarks() {
+      try { return JSON.parse(localStorage.getItem('fm-bookmarks') || '[]'); } catch { return []; }
+    }
+
+    _saveBookmarks(bookmarks) {
+      localStorage.setItem('fm-bookmarks', JSON.stringify(bookmarks));
+    }
+
+    _addCurrentAsBookmark() {
+      const path = this.currentPath;
+      const name = path.split('/').pop() || '/';
+      const bookmarks = this._loadBookmarks();
+      if (bookmarks.find(b => b.path === path)) return;
+      bookmarks.push({ name, path });
+      this._saveBookmarks(bookmarks);
+      this.loadPlaces();
+    }
+
+    _removeBookmark(path) {
+      const bookmarks = this._loadBookmarks().filter(b => b.path !== path);
+      this._saveBookmarks(bookmarks);
+      this.loadPlaces();
+    }
+
+    _addBookmark(name, path) {
+      const el = document.createElement('div');
+      el.className = 'fm-place';
+      el.dataset.path = path;
+      el.innerHTML = `<span class="fm-place-icon">🔖</span><span style="flex:1;overflow:hidden;text-overflow:ellipsis;">${name}</span><span class="fm-bookmark-remove" title="Remove">✕</span>`;
+      el.querySelector('.fm-bookmark-remove').addEventListener('click', e => {
+        e.stopPropagation();
+        this._removeBookmark(path);
+      });
+      el.addEventListener('click', e => {
+        if (e.target.classList.contains('fm-bookmark-remove')) return;
+        this.navigate(path);
+      });
+      this.placesEl.appendChild(el);
     }
 
     _addPlace(icon, name, path) {
@@ -179,6 +341,9 @@ const FileManager = (() => {
       this.selected = null;
       this.selectedSet.clear();
       this._lastClickedName = null;
+      this.footerStatus.textContent = '';
+      this.searchEl.value = '';
+      this.updatePreview(null);
       // breadcrumb buttons
       this.breadEl.innerHTML = '';
       const parts = path.split('/').filter(p => p);
@@ -210,9 +375,14 @@ const FileManager = (() => {
       }
     }
 
-    render(entries) {
-      this._lastEntries = entries;
+    render(entries, fromSearch = false) {
+      if (!fromSearch) this._lastEntries = entries;
       if (!loadPrefs().showHidden) entries = entries.filter(e => !e.name.startsWith('.'));
+      entries = [...entries].sort((a, b) => {
+        if (a.type === 'dir' && b.type !== 'dir') return -1;
+        if (a.type !== 'dir' && b.type === 'dir') return 1;
+        return a.name.localeCompare(b.name);
+      });
       if (entries.length === 0) {
         this.listEl.innerHTML = '<div class="fm-empty">Empty folder</div>';
         return;
@@ -276,6 +446,8 @@ const FileManager = (() => {
             this.selected = entry;
             this._lastClickedName = entry.name;
           }
+          this.updateFooterSelection();
+          this.updatePreview(this.selectedSet.size === 1 ? entry : null);
         });
 
         if (entry.type === 'dir') {
@@ -385,6 +557,7 @@ const FileManager = (() => {
         items.push({ label: `📋 Copy${names.length > 1 ? ' ('+names.length+')' : ''}`, action: () => { window._fmClipboard = { paths: names.map(n => this.joinPath(this.currentPath, n)), cut: false }; } });
         items.push({ label: `✂️ Cut${names.length > 1 ? ' ('+names.length+')' : ''}`,  action: () => { window._fmClipboard = { paths: names.map(n => this.joinPath(this.currentPath, n)), cut: true  }; } });
         items.push({ label: `🗑️ Delete${names.length > 1 ? ' ('+names.length+')' : ''}`, action: () => this.deleteEntries(names), danger: true });
+        if (names.length === 1) items.push({ label: 'ℹ️ Info', action: () => this.showInfo(this._lastEntries.find(e => e.name === name)) });
       } else {
         if (window._fmClipboard) {
           items.push({ label: '📋 Paste', action: () => this.paste() });
@@ -472,14 +645,92 @@ const FileManager = (() => {
       this.navigate(this.currentPath);
     }
 
-    async uploadFiles(files) {
-      for (const file of files) {
+    async uploadEntries(entries) {
+      // collect all files recursively with their relative paths
+      const collected = []; // {file, destDir}
+      const readEntry = async (entry, parentDir) => {
+        if (entry.isFile) {
+          await new Promise(resolve => entry.file(f => { collected.push({ file: f, destDir: parentDir }); resolve(); }));
+        } else if (entry.isDirectory) {
+          const dir = parentDir + '/' + entry.name;
+          await fetch('/api/files/mkdir', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ path: dir }),
+          });
+          await new Promise(r => setTimeout(r, 50)); // ensure dir exists before recursing
+          const reader = entry.createReader();
+          await new Promise(resolve => {
+            const readAll = (results) => {
+              if (!results.length) return resolve();
+              Promise.all(results.map(e => readEntry(e, dir))).then(() => reader.readEntries(readAll));
+            };
+            reader.readEntries(readAll);
+          });
+        }
+      };
+      await Promise.all(entries.map(e => readEntry(e, this.currentPath)));
+      this.uploadFileList(collected);
+    }
+
+    uploadFiles(files) {
+      this.uploadFileList([...files].map(f => ({ file: f, destDir: this.currentPath })));
+    }
+
+    uploadFileList(list) {
+      const MAX_SIZE = 2 * 1024 * 1024 * 1024;
+      let i = 0;
+      const total = list.length;
+      const uploadNext = () => {
+        if (i >= total) return;
+        const { file, destDir } = list[i++];
+        if (file.size > MAX_SIZE) {
+          this.progressWrap.style.display = 'none';
+          this.footerStatus.style.color = '#f38ba8';
+          this.footerStatus.textContent = `✗ ${file.name}: File too large (max 2GB)`;
+          setTimeout(() => { this.footerStatus.textContent = ''; this.footerStatus.style.color = ''; }, 5000);
+          if (i < total) uploadNext(); else this.navigate(this.currentPath);
+          return;
+        }
+        this.progressWrap.style.display = '';
+        this.progressLabel.textContent = `Uploading ${i}/${total}: ${file.name}`;
+        this.progressFill.style.width = '0%';
+
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', '/api/files/upload');
+        xhr.upload.addEventListener('progress', e => {
+          if (e.lengthComputable) this.progressFill.style.width = Math.round(e.loaded / e.total * 100) + '%';
+        });
+        xhr.addEventListener('load', () => {
+          if (xhr.status === 0 || xhr.status >= 400) {
+            const msg = xhr.status === 413 || xhr.status === 0 ? 'File too large' : `Error ${xhr.status}`;
+            this.progressWrap.style.display = 'none';
+            this.footerStatus.style.color = '#f38ba8';
+            this.footerStatus.textContent = `✗ ${file.name}: ${msg}`;
+            setTimeout(() => { this.footerStatus.textContent = ''; this.footerStatus.style.color = ''; }, 5000);
+            if (i < total) uploadNext(); else this.navigate(this.currentPath);
+            return;
+          }
+          if (i < total) { uploadNext(); return; }
+          this.progressWrap.style.display = 'none';
+          this.footerStatus.style.color = '#50fa7b';
+          this.footerStatus.textContent = `✓ Uploaded ${total} file${total > 1 ? 's' : ''}`;
+          setTimeout(() => { this.footerStatus.textContent = ''; this.footerStatus.style.color = ''; }, 3000);
+          this.navigate(this.currentPath);
+        });
+        xhr.addEventListener('error', () => {
+          this.progressWrap.style.display = 'none';
+          this.footerStatus.style.color = '#f38ba8';
+          this.footerStatus.textContent = `✗ Failed: ${file.name}`;
+          setTimeout(() => { this.footerStatus.textContent = ''; this.footerStatus.style.color = ''; }, 5000);
+          if (i < total) uploadNext(); else this.navigate(this.currentPath);
+        });
         const form = new FormData();
-        form.append('path', this.currentPath);
+        form.append('path', destDir);
         form.append('file', file);
-        await fetch('/api/files/upload', { method: 'POST', body: form });
-      }
-      this.navigate(this.currentPath);
+        xhr.send(form);
+      };
+      uploadNext();
     }
 
     goUp() {
@@ -487,6 +738,121 @@ const FileManager = (() => {
       const parts = this.currentPath.replace(/\/$/, '').split('/');
       parts.pop();
       this.navigate(parts.join('/') || '/');
+    }
+
+    showInfo(entry) {
+      if (!entry) return;
+      const isDir = entry.type === 'dir';
+      const icon = isDir ? '📁' : this.fileIcon(entry.name);
+      const rows = [
+        ['Name', entry.name],
+        ['Type', isDir ? 'Folder' : (entry.name.split('.').pop().toUpperCase() + ' file')],
+        ['Size', isDir ? '<span id="fm-info-size">calculating…</span>' : this.formatSize(entry.size)],
+        ['Modified', entry.modified ? entry.modified.slice(0, 16).replace('T', ' ') : '—'],
+        ['Permissions', entry.permissions || '—'],
+        ['Owner', entry.owner + (entry.group ? ':' + entry.group : '')],
+        ['Path', this.joinPath(this.currentPath, entry.name)],
+      ];
+      const win = document.createElement('div');
+      win.style.cssText = `position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);
+        background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
+        box-shadow:var(--shadow);z-index:99999;min-width:300px;max-width:420px;overflow:hidden;`;
+      win.innerHTML = `
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:var(--titlebar);border-bottom:1px solid var(--border);">
+          <span style="font-size:.9rem;font-weight:600;">${icon} ${entry.name}</span>
+          <button id="fm-info-close" style="background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:1.1rem;line-height:1;">✕</button>
+        </div>
+        <table style="width:100%;border-collapse:collapse;font-size:.82rem;">
+          ${rows.map(([k,v]) => `
+            <tr style="border-bottom:1px solid var(--border);">
+              <td style="padding:7px 14px;color:var(--text-dim);white-space:nowrap;width:100px;">${k}</td>
+              <td style="padding:7px 14px;word-break:break-all;">${v}</td>
+            </tr>`).join('')}
+          <tbody id="fm-info-extra"></tbody>
+        </table>
+      `;
+      document.body.appendChild(win);
+      win.querySelector('#fm-info-close').addEventListener('click', () => win.remove());
+      const dismiss = e => { if (!win.contains(e.target)) { win.remove(); document.removeEventListener('mousedown', dismiss); } };
+      setTimeout(() => document.addEventListener('mousedown', dismiss), 0);
+
+      const fullPath = this.joinPath(this.currentPath, entry.name);
+      const ext = entry.name.split('.').pop().toLowerCase();
+      const imgExts = ['jpg','jpeg','png','gif','webp','bmp','svg'];
+      const audExts = ['mp3','flac','wav','aac','opus','m4a'];
+      const vidExts = ['mp4','webm','ogg','mov','mkv','m4v'];
+
+      if (!isDir && imgExts.includes(ext)) {
+        const img = new Image();
+        img.onload = () => {
+          const el = win.querySelector('#fm-info-extra');
+          if (el) el.innerHTML = `<tr style="border-bottom:1px solid var(--border);">
+            <td style="padding:7px 14px;color:var(--text-dim);width:100px;">Resolution</td>
+            <td style="padding:7px 14px;">${img.naturalWidth} × ${img.naturalHeight} px</td></tr>`;
+        };
+        img.src = `/api/files/raw?path=${encodeURIComponent(fullPath)}`;
+      } else if (!isDir && (audExts.includes(ext) || vidExts.includes(ext))) {
+        const media = vidExts.includes(ext) ? document.createElement('video') : document.createElement('audio');
+        media.style.cssText = 'position:fixed;left:-9999px;visibility:hidden;';
+        media.preload = 'metadata';
+        document.body.appendChild(media);
+        media.onloadedmetadata = () => {
+          const d = media.duration;
+          const h = Math.floor(d / 3600), m = Math.floor((d % 3600) / 60), s = Math.floor(d % 60);
+          const dur = h > 0 ? `${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}` : `${m}:${String(s).padStart(2,'0')}`;
+          const el = win.querySelector('#fm-info-extra');
+          if (el) el.innerHTML = `<tr style="border-bottom:1px solid var(--border);">
+            <td style="padding:7px 14px;color:var(--text-dim);width:100px;">Duration</td>
+            <td style="padding:7px 14px;">${dur}</td></tr>`;
+          media.remove();
+        };
+        media.onerror = () => media.remove();
+        media.src = `/api/files/raw?path=${encodeURIComponent(fullPath)}`;
+      }
+
+      if (isDir) {
+        const fullPath = this.joinPath(this.currentPath, entry.name);
+        fetch(`/api/files/dirsize?path=${encodeURIComponent(fullPath)}`)
+          .then(r => r.json())
+          .then(d => {
+            const el = win.querySelector('#fm-info-size');
+            if (el) el.textContent = this.formatSize(d.size);
+          })
+          .catch(() => { const el = win.querySelector('#fm-info-size'); if (el) el.textContent = '—'; });
+      }
+    }
+
+    updatePreview(entry) {
+      const imgExts = ['jpg','jpeg','png','gif','webp','bmp','svg'];
+      if (!entry || entry.type === 'dir' || !imgExts.includes(entry.name.split('.').pop().toLowerCase())) {
+        if (!this._previewClosed) this.previewEl.style.display = 'none';
+        this.previewImg.src = '';
+        return;
+      }
+      const fullPath = this.joinPath(this.currentPath, entry.name);
+      this._previewClosed = false;
+      this.previewEl.style.display = '';
+      this.previewImg.src = `/api/files/raw?path=${encodeURIComponent(fullPath)}`;
+      this.previewName.textContent = entry.name;
+      this.previewMeta.textContent = this.formatSize(entry.size);
+      this.previewImg.onload = () => {
+        this.previewMeta.textContent = `${this.formatSize(entry.size)} · ${this.previewImg.naturalWidth}×${this.previewImg.naturalHeight}`;
+      };
+    }
+
+    updateFooterSelection() {
+      if (this.progressWrap.style.display !== 'none') return;
+      const names = [...this.selectedSet];
+      if (names.length === 0) { this.footerStatus.textContent = ''; return; }
+      const entries = (this._lastEntries || []).filter(e => names.includes(e.name));
+      const dirs = entries.filter(e => e.type === 'dir').length;
+      const files = entries.filter(e => e.type !== 'dir');
+      const totalSize = files.reduce((s, e) => s + (e.size || 0), 0);
+      const parts = [];
+      if (dirs > 0) parts.push(`${dirs} folder${dirs > 1 ? 's' : ''}`);
+      if (files.length > 0) parts.push(`${files.length} file${files.length > 1 ? 's' : ''}`);
+      if (totalSize > 0) parts.push(this.formatSize(totalSize));
+      this.footerStatus.textContent = parts.join(' · ');
     }
 
     joinPath(base, name) {

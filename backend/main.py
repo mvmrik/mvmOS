@@ -17,7 +17,7 @@ from .widgets import router as widgets_router
 from .themes import router as themes_router
 from .db import APPS_DIR, WIDGETS_DIR, THEMES_DIR
 
-app = FastAPI(title="mvmOS")
+app = FastAPI(title="mvmOS", redirect_slashes=False)
 
 init_db()
 

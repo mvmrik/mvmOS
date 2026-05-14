@@ -39,7 +39,17 @@ fi
 # ── Ensure python3-venv is available ──────────────────────────────────────────
 echo "  Installing system dependencies..."
 PY_VER=$(python3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
-sudo apt-get install -y -q "python${PY_VER}-venv" python3-venv 2>/dev/null || true
+if command -v apt-get &>/dev/null; then
+    sudo apt-get install -y -q "python${PY_VER}-venv" python3-venv 2>/dev/null || true
+elif command -v dnf &>/dev/null; then
+    sudo dnf install -y -q python3-virtualenv 2>/dev/null || true
+elif command -v zypper &>/dev/null; then
+    sudo zypper install -y python3-virtualenv 2>/dev/null || true
+elif command -v pacman &>/dev/null; then
+    sudo pacman -Sy --noconfirm python 2>/dev/null || true
+else
+    echo "  (Could not detect package manager — skipping venv install. If the next step fails, install python3-venv manually.)"
+fi
 
 # ── Virtualenv ────────────────────────────────────────────────────────────────
 echo "  [1/4] Creating virtualenv..."

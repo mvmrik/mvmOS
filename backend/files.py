@@ -99,7 +99,9 @@ async def upload_file(
     file: UploadFile = File(...),
     _session=Depends(get_current_session),
 ):
-    dest = safe_path(os.path.join(path, file.filename))
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="Empty filename")
+    dest = safe_path(os.path.join(path, os.path.basename(file.filename)))
     with open(dest, "wb") as f:
         f.write(await file.read())
     return {"ok": True, "name": file.filename}
@@ -205,6 +207,44 @@ async def write_file(body: WriteRequest, _session=Depends(get_current_session)):
     with open(real, 'w', encoding='utf-8') as f:
         f.write(body.content)
     return {"ok": True}
+
+@router.get("/search")
+async def search_files(path: str, q: str, _session=Depends(get_current_session)):
+    real = safe_path(path)
+    if not os.path.isdir(real):
+        raise HTTPException(status_code=400, detail="Not a directory")
+    results = []
+    q_lower = q.lower()
+    for dirpath, dirnames, filenames in os.walk(real):
+        dirnames[:] = [d for d in dirnames if not d.startswith('.')]
+        for name in dirnames + filenames:
+            if q_lower in name.lower():
+                full = os.path.join(dirpath, name)
+                st = os.stat(full)
+                results.append({
+                    "name": name,
+                    "path": full,
+                    "type": "dir" if os.path.isdir(full) else "file",
+                    "size": st.st_size,
+                    "modified": datetime.fromtimestamp(st.st_mtime).isoformat(),
+                })
+        if len(results) >= 200:
+            break
+    return JSONResponse({"results": results})
+
+@router.get("/dirsize")
+async def dir_size(path: str, _session=Depends(get_current_session)):
+    real = safe_path(path)
+    if not os.path.isdir(real):
+        raise HTTPException(status_code=400, detail="Not a directory")
+    total = 0
+    for dirpath, _, filenames in os.walk(real):
+        for f in filenames:
+            try:
+                total += os.path.getsize(os.path.join(dirpath, f))
+            except OSError:
+                pass
+    return {"size": total}
 
 @router.get("/raw")
 async def raw_file(path: str, _session=Depends(get_current_session)):
