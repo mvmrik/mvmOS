@@ -12,6 +12,7 @@ Designed to make working on servers without a graphical interface much easier.
 - **Full file manager** — browse, upload, rename, delete, copy/paste, search
 - **Desktop** — icons, shortcuts, drag-and-drop, multi-select
 - **Linux user support** — file operations run as real system users
+- **Package manager** — install and remove real Linux packages (APT) from thousands of available programs
 - **Settings** — persistent preferences per user
 
 ## Apps, Widgets & Themes
