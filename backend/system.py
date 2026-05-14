@@ -97,11 +97,22 @@ async def check_update(session=Depends(get_current_session)):
 async def do_update(session=Depends(get_current_session)):
     async def generate():
         cmd = ["git", "pull", "https://github.com/mvmrik/mvmOS.git", "main"]
+        repo_dir = os.path.abspath(REPO_DIR)
+        import pwd
+        try:
+            pw = pwd.getpwnam(session["effective_user"])
+            def _set_ids():
+                if os.getuid() == 0:
+                    os.setgid(pw.pw_gid)
+                    os.setuid(pw.pw_uid)
+        except KeyError:
+            _set_ids = None
         proc = await asyncio.create_subprocess_exec(
             *cmd,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.STDOUT,
-            cwd=os.path.abspath(REPO_DIR),
+            cwd=repo_dir,
+            preexec_fn=_set_ids,
         )
         async for line in proc.stdout:
             yield f"data: {line.decode(errors='replace').rstrip()}\n\n"
