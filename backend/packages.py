@@ -269,6 +269,69 @@ async def _stream_apt(cmd: list):
                              headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 
+_SYSTEM_SECTIONS = {'libs', 'libdevel', 'oldlibs', 'kernel', 'debug', 'introspection', 'virtual', 'fonts', 'localization', 'doc'}
+_SYSTEM_PREFIXES = ('lib', 'linux-', 'firmware-', 'initramfs', 'grub', 'udev', 'systemd', 'dbus', 'gir1')
+
+def _is_app_pkg(name: str, section: str) -> bool:
+    if section in _SYSTEM_SECTIONS:
+        return False
+    for prefix in _SYSTEM_PREFIXES:
+        if name.startswith(prefix):
+            return False
+    return True
+
+
+@router.get("/upgradable")
+async def upgradable(session=Depends(get_current_session)):
+    proc_update = await asyncio.create_subprocess_exec(
+        "apt-get", "update", "-qq",
+        stdout=asyncio.subprocess.DEVNULL,
+        stderr=asyncio.subprocess.DEVNULL,
+    )
+    await proc_update.wait()
+
+    proc = await asyncio.create_subprocess_exec(
+        "apt", "list", "--upgradable",
+        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL,
+    )
+    stdout, _ = await proc.communicate()
+
+    pkgs = []
+    for line in stdout.decode(errors="replace").splitlines():
+        m = re.match(r'^([^/]+)/\S+\s+(\S+)\s+\S+\s+\[upgradable from: (\S+)\]', line)
+        if not m:
+            continue
+        name, new_ver, cur_ver = m.group(1), m.group(2), m.group(3)
+        proc2 = await asyncio.create_subprocess_exec(
+            "apt-cache", "show", "--no-all-versions", name,
+            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL,
+        )
+        out2, _ = await proc2.communicate()
+        section = ""
+        description = ""
+        for l in out2.decode(errors="replace").splitlines():
+            if l.startswith("Section: "):
+                section = l.split(": ", 1)[1].strip().split("/")[-1]
+            if l.startswith("Description: ") or l.startswith("Description-en: "):
+                description = l.split(": ", 1)[1].strip()
+        pkgs.append({
+            "name": name,
+            "current_version": cur_ver,
+            "new_version": new_ver,
+            "section": section,
+            "description": description,
+            "is_app": _is_app_pkg(name, section),
+        })
+    return JSONResponse(pkgs)
+
+
+@router.post("/upgrade")
+async def upgrade(body: PkgRequest, session=Depends(get_current_session)):
+    if not re.match(r'^[a-z0-9][a-z0-9.+\-]+$', body.name):
+        return JSONResponse({"error": "Invalid package name"}, status_code=400)
+    return await _stream_apt(["apt-get", "install", "-y", "--only-upgrade", body.name])
+
+
 @router.post("/install")
 async def install(body: PkgRequest, session=Depends(get_current_session)):
     if not re.match(r'^[a-z0-9][a-z0-9.+\-]+$', body.name):

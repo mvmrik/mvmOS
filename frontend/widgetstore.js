@@ -4,13 +4,30 @@ const WidgetStore = (() => {
 
   function openWindow(filterType) {
     const existing = document.querySelector('.window[data-win-id="widgetstore"]');
-    if (existing) { Desktop.focusWindow('widgetstore'); return; }
+    if (existing) {
+      Desktop.focusWindow('widgetstore');
+      if (filterType !== undefined) {
+        const body = existing.querySelector('.window-body') ?? existing;
+        body._ws?._reloadWithFilter?.(filterType || '');
+      }
+      return;
+    }
     Desktop.createWindow({
       id: 'widgetstore',
       title: '🔲 Widget Store',
       width: 700,
       height: 500,
-      onMount(body) { render(body, filterType); },
+      onMount(body) { render(body, filterType || ''); },
+    });
+  }
+
+  function _applyFilterBtns(body, wt) {
+    body.querySelectorAll('.ws-wtype-btn').forEach(b => {
+      const match = b.dataset.wtype === wt;
+      b.classList.toggle('active', match);
+      b.style.background = match ? 'var(--accent)' : '';
+      b.style.color = match ? '#fff' : '';
+      b.style.borderColor = match ? 'var(--accent)' : '';
     });
   }
 
@@ -115,16 +132,60 @@ const WidgetStore = (() => {
         const panel = document.createElement('div');
         panel.className = 'as-panel';
         panel.id = panelId;
-        panel.innerHTML = `<div class="as-list" id="ws-store-list-${store.id}"><div class="as-loading">Loading…</div></div>`;
+        panel.innerHTML = `
+          <div class="as-toolbar" id="ws-filter-bar-${store.id}" style="gap:6px;flex-wrap:wrap">
+            <span style="font-size:.78rem;color:var(--text-dim);margin-right:4px">Show:</span>
+            ${['','desktop','taskbar'].map(v => `
+              <button class="s-btn-sm ws-wtype-btn${v===filterType ? ' active' : ''}" data-wtype="${v}"
+                style="${v===filterType ? 'background:var(--accent);color:#fff;border-color:var(--accent)' : ''}"
+              >${v === '' ? 'All' : v.charAt(0).toUpperCase() + v.slice(1)}</button>
+            `).join('')}
+          </div>
+          <div class="as-list" id="ws-store-list-${store.id}"><div class="as-loading">Loading…</div></div>
+        `;
         body.querySelector('.as-main').appendChild(panel);
+
+        panel.querySelectorAll('.ws-wtype-btn').forEach(btn => {
+          btn.addEventListener('click', () => {
+            panel.querySelectorAll('.ws-wtype-btn').forEach(b => {
+              b.classList.remove('active');
+              b.style.background = ''; b.style.color = ''; b.style.borderColor = '';
+            });
+            btn.classList.add('active');
+            btn.style.background = 'var(--accent)'; btn.style.color = '#fff'; btn.style.borderColor = 'var(--accent)';
+            const wt = btn.dataset.wtype;
+            loadStoreCategories(body, store, wt);
+            body._ws.refreshCurrent = () => loadStoreCategories(body, store, wt);
+          });
+        });
       }
 
       tab.addEventListener('click', () => {
         body._ws.activateTab(tab);
-        loadStoreCategories(body, store, filterType);
-        body._ws.refreshCurrent = () => loadStoreCategories(body, store, filterType);
+        const wt = _getFilter(body, store.id);
+        loadStoreCategories(body, store, wt);
+        body._ws.refreshCurrent = () => loadStoreCategories(body, store, wt);
       });
     });
+
+    // expose reload helper for openWindow when window already exists
+    body._ws._reloadWithFilter = (wt) => {
+      _applyFilterBtns(body, wt);
+      const activeStoreTab = body.querySelector('#ws-store-tabs .as-tab.active');
+      if (activeStoreTab) {
+        const storeId = activeStoreTab.dataset.tab.replace('wstore-', '');
+        const store = stores.find(s => String(s.id) === storeId);
+        if (store) {
+          loadStoreCategories(body, store, wt);
+          body._ws.refreshCurrent = () => loadStoreCategories(body, store, wt);
+          return;
+        }
+      }
+      if (stores.length) {
+        loadStoreCategories(body, stores[0], wt);
+        body._ws.refreshCurrent = () => loadStoreCategories(body, stores[0], wt);
+      }
+    };
 
     if (stores.length) {
       const firstTab = tabsEl.querySelector('.as-tab');
@@ -132,6 +193,11 @@ const WidgetStore = (() => {
       loadStoreCategories(body, stores[0], filterType);
       body._ws.refreshCurrent = () => loadStoreCategories(body, stores[0], filterType);
     }
+  }
+
+  function _getFilter(body, storeId) {
+    const active = body.querySelector(`#ws-filter-bar-${storeId} .ws-wtype-btn.active`);
+    return active ? active.dataset.wtype : '';
   }
 
   // ── Categories ────────────────────────────────────────────────────────────

@@ -865,7 +865,7 @@ const Desktop = (() => {
 
   document.getElementById('tctx-widgets').addEventListener('click', () => {
     taskbarCtx.classList.remove('open');
-    WidgetStore.openWindow();
+    WidgetStore.openWindow('taskbar');
   });
 
   document.getElementById('tctx-edit').addEventListener('click', () => {

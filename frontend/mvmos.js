@@ -445,18 +445,18 @@ var mvmOS = (() => {
 
   async function _checkUpdates() {
     try {
-      const res = await fetch('/api/plugins/manifest');
+      const res = await fetch('/api/updates');
       if (!res.ok) return;
-      const apps = await res.json();
-      if (apps.error) return;
-      apps.filter(a => a.update_available).forEach(a => {
-        _pushNotif(
-          `Update available: ${a.icon} ${a.name}`,
-          `Version ${a.version} is ready to install.`,
-          () => AppStore.openWindow('store-1'),
-          'Open App Store'
-        );
-      });
+      const updates = await res.json();
+      if (!updates.length) return;
+      const count = updates.length;
+      _pushNotif(
+        `${count} update${count !== 1 ? 's' : ''} available`,
+        updates.slice(0, 3).map(u => `${u.icon} ${u.name} ${u.current_version} → ${u.new_version}`).join('\n')
+          + (count > 3 ? `\n…and ${count - 3} more` : ''),
+        () => UpdateManager.openWindow(),
+        'Open Update Manager'
+      );
     } catch (_) {}
   }
 

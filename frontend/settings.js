@@ -147,6 +147,7 @@ const Settings = (() => {
           <div class="settings-tab ${activeTab==='regional'?'active':''}" data-tab="regional">🌐 Regional</div>
           <div class="settings-tab ${activeTab==='filemanager'?'active':''}" data-tab="filemanager">📁 File Manager</div>
           <div class="settings-tab ${activeTab==='users'?'active':''}" data-tab="users">👥 Users</div>
+          <div class="settings-tab ${activeTab==='updates'?'active':''}" data-tab="updates">🔄 Updates</div>
           <div class="settings-tab ${activeTab==='about'?'active':''}" data-tab="about" style="margin-top:auto">ℹ️ About</div>
         </nav>
 
@@ -289,6 +290,9 @@ const Settings = (() => {
             </div>
           </div>
 
+          <!-- Updates panel -->
+          <div class="settings-panel ${activeTab==='updates'?'active':''}" id="sp-updates" style="padding:0;overflow:hidden"></div>
+
           <!-- About panel -->
           <div class="settings-panel ${activeTab==='about'?'active':''}" id="sp-about">
             <div id="about-content" style="padding:8px 0"><div style="color:var(--text-dim);font-size:.85rem">Loading…</div></div>
@@ -309,12 +313,14 @@ const Settings = (() => {
         tab.classList.add('active');
         body.querySelector(`#sp-${tab.dataset.tab}`).classList.add('active');
         if (tab.dataset.tab === 'users') renderUsers(body);
+        if (tab.dataset.tab === 'updates') renderUpdates(body);
         if (tab.dataset.tab === 'about') renderAbout(body);
         if (tab.dataset.tab === 'display') renderThemePicker(body);
       });
     });
 
     if (activeTab === 'users') renderUsers(body);
+    if (activeTab === 'updates') renderUpdates(body);
     if (activeTab === 'about') renderAbout(body);
     if (activeTab === 'display' || !activeTab) renderThemePicker(body);
 
@@ -538,6 +544,13 @@ const Settings = (() => {
   async function get() {
     if (Object.keys(currentSettings).length === 0) await loadSettings();
     return currentSettings;
+  }
+
+  function renderUpdates(body) {
+    const panel = body.querySelector('#sp-updates');
+    if (!panel || panel._rendered) return;
+    panel._rendered = true;
+    UpdateManager.render(panel);
   }
 
   async function renderAbout(body) {

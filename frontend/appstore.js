@@ -23,10 +23,25 @@ const AppStore = (() => {
     if (typeof opts === 'string') {
       body?.querySelector?.(`.as-tab[data-tab="${opts}"]`)?.click();
     } else if (opts?.section === 'widgets') {
-      body._as._widgetFilter = opts.widgetType || '';
-      body?.querySelector?.('.as-tab[data-section="widgets"]')?.click();
+      const wt = opts.widgetType || '';
+      body._as._pendingWidgetFilter = wt;
+      const wsTab = body.querySelector('#as-widget-store-tabs .as-tab');
+      if (wsTab) {
+        wsTab.click();
+      } else {
+        // tabs not yet loaded — poll briefly then click
+        let attempts = 0;
+        const t = setInterval(() => {
+          const tab = body.querySelector('#as-widget-store-tabs .as-tab');
+          if (tab || ++attempts > 20) {
+            clearInterval(t);
+            if (tab) tab.click();
+          }
+        }, 50);
+      }
     } else if (opts?.section === 'themes') {
-      body?.querySelector?.('.as-tab[data-section="themes"]')?.click();
+      const thTab = body.querySelector('#as-theme-store-tabs .as-tab');
+      if (thTab) thTab.click();
     }
   }
 
@@ -328,12 +343,12 @@ const AppStore = (() => {
     });
     body.querySelector('#as-tstore-submit').addEventListener('click', () => submitAddThemeStore(body));
 
+    body._as = { browseState, activateTab, refreshCurrent: null };
+
     // ── Load stores → build dynamic tabs ──
     loadStoreTabs(body);
     loadWidgetStoreTabs(body);
     loadThemeStoreTabs(body);
-
-    body._as = { browseState, activateTab, refreshCurrent: null, _widgetFilter: '' };
   }
 
   // ── Store tabs (sidebar) ──────────────────────────────────────────────────
@@ -402,7 +417,7 @@ const AppStore = (() => {
       card.innerHTML = `
         <div style="font-size:1.8rem;line-height:1;height:2rem;display:flex;align-items:center;justify-content:center;margin-bottom:8px">${cat.icon || '📦'}</div>
         <div style="font-weight:600;color:var(--text);font-size:.83rem">${cat.name}</div>
-        <div style="color:var(--text-dim);font-size:.75rem;margin-top:4px">${cat.count || ''} apps</div>
+        <div style="color:var(--text-dim);font-size:.75rem;margin-top:4px">${cat.count ? cat.count + ' apps' : ''}</div>
       `;
       card.addEventListener('mouseenter', () => card.style.background = 'var(--surface)');
       card.addEventListener('mouseleave', () => card.style.background = 'var(--surface2)');
@@ -809,24 +824,84 @@ const AppStore = (() => {
         const panel = document.createElement('div');
         panel.className = 'as-panel';
         panel.id = panelId;
-        panel.innerHTML = `<div class="as-list" id="as-wstore-list-${store.id}"><div class="as-loading">Loading…</div></div>`;
+        panel.innerHTML = `
+          <div class="as-toolbar" id="as-wstore-filter-bar-${store.id}" style="gap:6px;flex-wrap:wrap">
+            <span style="font-size:.78rem;color:var(--text-dim);margin-right:4px">Show:</span>
+            ${['','desktop','taskbar'].map(v => `
+              <button class="s-btn-sm as-wtype-btn${v==='' ? ' active' : ''}" data-wtype="${v}"
+                style="${v==='' ? 'background:var(--accent);color:#fff;border-color:var(--accent)' : ''}"
+              >${v === '' ? 'All' : v.charAt(0).toUpperCase() + v.slice(1)}</button>
+            `).join('')}
+          </div>
+          <div class="as-list" id="as-wstore-list-${store.id}"><div class="as-loading">Loading…</div></div>
+        `;
         body.querySelector('.as-main').insertBefore(panel, body.querySelector('#as-output-wrap'));
+
+        // filter pill click handlers
+        panel.querySelectorAll('.as-wtype-btn').forEach(btn => {
+          btn.addEventListener('click', () => {
+            panel.querySelectorAll('.as-wtype-btn').forEach(b => {
+              b.classList.remove('active');
+              b.style.background = ''; b.style.color = ''; b.style.borderColor = '';
+            });
+            btn.classList.add('active');
+            btn.style.background = 'var(--accent)'; btn.style.color = '#fff'; btn.style.borderColor = 'var(--accent)';
+            const wt = btn.dataset.wtype;
+            loadWidgetStoreCategories(body, store, wt);
+            body._as.refreshCurrent = () => loadWidgetStoreCategories(body, store, wt);
+          });
+        });
       }
 
       tab.addEventListener('click', () => {
         body._as.activateTab(tab);
-        const filter = body._as._widgetFilter || '';
-        loadWidgetStoreCategories(body, store, filter);
-        body._as.refreshCurrent = () => loadWidgetStoreCategories(body, store, filter);
+        // apply pending filter from _applyOpts if present
+        const pending = body._as._pendingWidgetFilter;
+        if (pending !== undefined) {
+          delete body._as._pendingWidgetFilter;
+          _setWidgetFilter(body, store, pending);
+        } else {
+          const wt = _getWidgetFilter(body, store.id);
+          loadWidgetStoreCategories(body, store, wt);
+          body._as.refreshCurrent = () => loadWidgetStoreCategories(body, store, wt);
+        }
       });
     });
 
     if (stores.length) {
       const firstTab = tabsEl.querySelector('.as-tab');
       if (firstTab) body._as.activateTab(firstTab);
-      loadWidgetStoreCategories(body, stores[0], body._as._widgetFilter || '');
-      body._as.refreshCurrent = () => loadWidgetStoreCategories(body, stores[0], body._as._widgetFilter || '');
+      // apply pending filter if set before tabs loaded
+      const pending = body._as._pendingWidgetFilter;
+      if (pending !== undefined) {
+        delete body._as._pendingWidgetFilter;
+        _setWidgetFilter(body, stores[0], pending);
+      } else {
+        const wt = _getWidgetFilter(body, stores[0].id);
+        loadWidgetStoreCategories(body, stores[0], wt);
+        body._as.refreshCurrent = () => loadWidgetStoreCategories(body, stores[0], wt);
+      }
     }
+  }
+
+  function _getWidgetFilter(body, storeId) {
+    const active = body.querySelector(`#as-wstore-filter-bar-${storeId} .as-wtype-btn.active`);
+    return active ? active.dataset.wtype : '';
+  }
+
+  function _setWidgetFilter(body, store, wt) {
+    const bar = body.querySelector(`#as-wstore-filter-bar-${store.id}`);
+    if (bar) {
+      bar.querySelectorAll('.as-wtype-btn').forEach(b => {
+        const match = b.dataset.wtype === wt;
+        b.classList.toggle('active', match);
+        b.style.background = match ? 'var(--accent)' : '';
+        b.style.color = match ? '#fff' : '';
+        b.style.borderColor = match ? 'var(--accent)' : '';
+      });
+    }
+    loadWidgetStoreCategories(body, store, wt);
+    body._as.refreshCurrent = () => loadWidgetStoreCategories(body, store, wt);
   }
 
   async function loadWidgetStoreCategories(body, store, widgetType) {
@@ -850,7 +925,7 @@ const AppStore = (() => {
       card.innerHTML = `
         <div style="font-size:1.8rem;line-height:1;height:2rem;display:flex;align-items:center;justify-content:center;margin-bottom:8px">${cat.icon || '🔲'}</div>
         <div style="font-weight:600;color:var(--text);font-size:.83rem">${cat.name}</div>
-        <div style="color:var(--text-dim);font-size:.75rem;margin-top:4px">${cat.count || ''} widgets</div>
+        <div style="color:var(--text-dim);font-size:.75rem;margin-top:4px"></div>
       `;
       card.addEventListener('mouseenter', () => card.style.background = 'var(--surface)');
       card.addEventListener('mouseleave', () => card.style.background = 'var(--surface2)');
@@ -1063,7 +1138,6 @@ const AppStore = (() => {
       <div class="as-cat-card" data-manifest="${c.manifest_url}">
         <div class="as-cat-icon" style="height:2rem;display:flex;align-items:center;justify-content:center">${c.icon}</div>
         <div class="as-cat-label">${c.name}</div>
-        <div class="as-cat-count">${c.count || ''}</div>
       </div>
     `).join('');
 
@@ -1095,7 +1169,6 @@ const AppStore = (() => {
         <div class="as-cat-card" data-manifest="${c.manifest_url}">
           <div class="as-cat-icon" style="height:2rem;display:flex;align-items:center;justify-content:center">${c.icon}</div>
           <div class="as-cat-label">${c.name}</div>
-          <div class="as-cat-count">${c.count || ''}</div>
         </div>
       `).join('');
       gridEl.querySelectorAll('.as-cat-card').forEach(card => {
@@ -1277,3 +1350,264 @@ const WidgetStore = {
     AppStore.openWindow({ section: 'widgets', widgetType: widgetType || '' });
   }
 };
+
+// ── Update Manager ────────────────────────────────────────────────────────────
+const UpdateManager = (() => {
+  function openWindow() {
+    const existing = document.querySelector('.window[data-win-id="update-manager"]');
+    if (existing) { Desktop.focusWindow('update-manager'); return; }
+    Desktop.createWindow({
+      id: 'update-manager',
+      title: '🔄 Update Manager',
+      width: 600,
+      height: 460,
+      onMount(body) { render(body); },
+    });
+  }
+
+  function render(body) {
+    body.style.padding = '0';
+    body.style.overflow = 'hidden';
+    body.innerHTML = `
+      <div style="display:flex;flex-direction:column;height:100%">
+        <div style="display:flex;border-bottom:1px solid var(--border)">
+          <button class="um-tab active" data-tab="mvmos" style="flex:1;padding:10px;background:none;border:none;border-bottom:2px solid var(--accent);color:var(--text);font-size:.82rem;cursor:pointer">📦 mvmOS Updates</button>
+          <button class="um-tab" data-tab="system" style="flex:1;padding:10px;background:none;border:none;border-bottom:2px solid transparent;color:var(--text-dim);font-size:.82rem;cursor:pointer">🐧 System Packages</button>
+        </div>
+
+        <div id="um-panel-mvmos" style="display:flex;flex-direction:column;flex:1;overflow:hidden">
+          <div style="padding:10px 16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
+            <span style="font-size:.8rem;color:var(--text-dim)" id="um-mvmos-status">Checking…</span>
+            <button class="s-btn s-btn-sm" id="um-mvmos-all" style="display:none">↑ Update All</button>
+          </div>
+          <div id="um-mvmos-list" style="flex:1;overflow-y:auto;padding:6px 0"></div>
+        </div>
+
+        <div id="um-panel-system" style="display:none;flex-direction:column;flex:1;overflow:hidden">
+          <div style="padding:10px 16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:8px">
+            <span style="font-size:.8rem;color:var(--text-dim)" id="um-sys-status">Click Refresh to check</span>
+            <div style="display:flex;gap:6px;align-items:center">
+              <label style="font-size:.78rem;color:var(--text-dim);display:flex;align-items:center;gap:4px;cursor:pointer">
+                <input type="checkbox" id="um-sys-show-all"> Show system libraries
+              </label>
+              <button class="s-btn s-btn-sm" id="um-sys-refresh">↺ Refresh</button>
+              <button class="s-btn s-btn-sm" id="um-sys-all" style="display:none">↑ Update All</button>
+            </div>
+          </div>
+          <div id="um-sys-list" style="flex:1;overflow-y:auto;padding:6px 0;min-height:0">
+            <div class="as-loading">Press Refresh to check for system package updates.</div>
+          </div>
+          <div id="um-sys-log" style="display:none;flex-shrink:0;height:120px;background:#0d1117;border-top:1px solid var(--border);overflow-y:auto;padding:6px 10px;font-family:var(--mono);font-size:.72rem;color:#a6e3a1;white-space:pre-wrap;word-break:break-all"></div>
+        </div>
+      </div>
+    `;
+
+    // ── Tab switching ────────────────────────────────────────────────────────
+    body.querySelectorAll('.um-tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        body.querySelectorAll('.um-tab').forEach(t => {
+          t.classList.remove('active');
+          t.style.borderBottomColor = 'transparent';
+          t.style.color = 'var(--text-dim)';
+        });
+        tab.classList.add('active');
+        tab.style.borderBottomColor = 'var(--accent)';
+        tab.style.color = 'var(--text)';
+        body.querySelector('#um-panel-mvmos').style.display = tab.dataset.tab === 'mvmos' ? 'flex' : 'none';
+        body.querySelector('#um-panel-system').style.display = tab.dataset.tab === 'system' ? 'flex' : 'none';
+        if (tab.dataset.tab === 'system' && !body._sysFetched) {
+          body._sysFetched = true;
+          body.querySelector('#um-sys-refresh').click();
+        }
+      });
+    });
+
+    // ── mvmOS Updates ────────────────────────────────────────────────────────
+    let mvmosUpdates = [];
+    const mvmosList   = body.querySelector('#um-mvmos-list');
+    const mvmosStatus = body.querySelector('#um-mvmos-status');
+    const mvmosAllBtn = body.querySelector('#um-mvmos-all');
+
+    async function loadMvmOS() {
+      mvmosList.innerHTML = '<div class="as-loading">Loading…</div>';
+      const res = await fetch('/api/updates');
+      mvmosUpdates = await res.json();
+      renderMvmOS();
+    }
+
+    function renderMvmOS() {
+      if (!mvmosUpdates.length) {
+        mvmosStatus.textContent = 'Everything is up to date.';
+        mvmosAllBtn.style.display = 'none';
+        mvmosList.innerHTML = '<div class="as-loading" style="padding-top:40px">✓ No updates available</div>';
+        return;
+      }
+      mvmosStatus.textContent = `${mvmosUpdates.length} update${mvmosUpdates.length !== 1 ? 's' : ''} available`;
+      mvmosAllBtn.style.display = '';
+      mvmosList.innerHTML = '';
+      mvmosUpdates.forEach(u => {
+        const row = document.createElement('div');
+        row.className = 'as-pkg-row';
+        row.dataset.uid = u.id + '_' + u.type;
+        row.innerHTML = `
+          <div style="font-size:1.4rem;width:28px;text-align:center;flex-shrink:0">${u.icon}</div>
+          <div class="as-pkg-info">
+            <div class="as-pkg-top">
+              <span class="as-pkg-name">${u.name}</span>
+              <span style="font-size:.7rem;color:var(--text-dim);margin-left:6px">${u.type}</span>
+            </div>
+            <div class="as-pkg-desc">${u.description || ''}</div>
+            <div class="as-pkg-ver">${u.current_version} → <span style="color:var(--accent)">${u.new_version}</span></div>
+          </div>
+          <div class="as-pkg-actions">
+            <button class="s-btn s-btn-sm um-update-btn">↑ Update</button>
+          </div>
+        `;
+        row.querySelector('.um-update-btn').addEventListener('click', async e => {
+          const btn = e.target; btn.disabled = true; btn.textContent = 'Updating…';
+          await doMvmOSUpdate(u);
+          mvmosUpdates = mvmosUpdates.filter(x => !(x.id === u.id && x.type === u.type));
+          row.remove();
+          renderMvmOS();
+        });
+        mvmosList.appendChild(row);
+      });
+    }
+
+    mvmosAllBtn.addEventListener('click', async () => {
+      mvmosAllBtn.disabled = true; mvmosAllBtn.textContent = 'Updating…';
+      for (const u of [...mvmosUpdates]) {
+        const row = mvmosList.querySelector(`[data-uid="${u.id}_${u.type}"]`);
+        const btn = row?.querySelector('.um-update-btn');
+        if (btn) { btn.disabled = true; btn.textContent = 'Updating…'; }
+        await doMvmOSUpdate(u);
+        row?.remove();
+      }
+      mvmosUpdates = [];
+      renderMvmOS();
+    });
+
+    loadMvmOS();
+
+    // ── System Packages ───────────────────────────────────────────────────────
+    let sysPkgs = [];
+    const sysList    = body.querySelector('#um-sys-list');
+    const sysStatus  = body.querySelector('#um-sys-status');
+    const sysAllBtn  = body.querySelector('#um-sys-all');
+    const sysRefresh = body.querySelector('#um-sys-refresh');
+    const sysShowAll = body.querySelector('#um-sys-show-all');
+
+    function renderSys() {
+      const showAll = sysShowAll.checked;
+      const visible = showAll ? sysPkgs : sysPkgs.filter(p => p.is_app);
+      if (!visible.length) {
+        sysStatus.textContent = showAll ? 'No system updates.' : 'No application updates.';
+        sysAllBtn.style.display = 'none';
+        sysList.innerHTML = `<div class="as-loading" style="padding-top:40px">✓ ${showAll ? 'No updates' : 'No application updates'}${!showAll && sysPkgs.length ? ` (${sysPkgs.length} system library updates hidden)` : ''}</div>`;
+        return;
+      }
+      sysStatus.textContent = `${visible.length} update${visible.length !== 1 ? 's' : ''} available${!showAll && sysPkgs.length > visible.length ? ` · ${sysPkgs.length - visible.length} system libraries hidden` : ''}`;
+      sysAllBtn.style.display = '';
+      sysList.innerHTML = '';
+      visible.forEach(p => {
+        const row = document.createElement('div');
+        row.className = 'as-pkg-row';
+        row.dataset.pkg = p.name;
+        row.innerHTML = `
+          <div style="font-size:1.1rem;width:28px;text-align:center;flex-shrink:0">📦</div>
+          <div class="as-pkg-info">
+            <div class="as-pkg-top"><span class="as-pkg-name">${p.name}</span></div>
+            <div class="as-pkg-desc">${p.description || ''}</div>
+            <div class="as-pkg-ver">${p.current_version} → <span style="color:var(--accent)">${p.new_version}</span></div>
+          </div>
+          <div class="as-pkg-actions">
+            <button class="s-btn s-btn-sm um-sys-update-btn">↑ Update</button>
+          </div>
+        `;
+        row.querySelector('.um-sys-update-btn').addEventListener('click', async e => {
+          const btn = e.target; btn.disabled = true; btn.textContent = 'Updating…';
+          await doSysUpdate(p.name, body.querySelector('#um-sys-log'));
+          sysPkgs = sysPkgs.filter(x => x.name !== p.name);
+          row.remove();
+          renderSys();
+        });
+        sysList.appendChild(row);
+      });
+    }
+
+    sysRefresh.addEventListener('click', async () => {
+      sysRefresh.disabled = true; sysRefresh.textContent = '↺ Checking…';
+      sysList.innerHTML = '<div class="as-loading">Running apt update…</div>';
+      const res = await fetch('/api/packages/upgradable');
+      sysPkgs = await res.json();
+      sysRefresh.disabled = false; sysRefresh.textContent = '↺ Refresh';
+      renderSys();
+    });
+
+    sysShowAll.addEventListener('change', renderSys);
+
+    sysAllBtn.addEventListener('click', async () => {
+      sysAllBtn.disabled = true; sysAllBtn.textContent = 'Updating…';
+      const showAll = sysShowAll.checked;
+      const toUpdate = showAll ? [...sysPkgs] : sysPkgs.filter(p => p.is_app);
+      const logEl = body.querySelector('#um-sys-log');
+      for (const p of toUpdate) {
+        const row = sysList.querySelector(`[data-pkg="${p.name}"]`);
+        const btn = row?.querySelector('.um-sys-update-btn');
+        if (btn) { btn.disabled = true; btn.textContent = 'Updating…'; }
+        await doSysUpdate(p.name, logEl);
+        sysPkgs = sysPkgs.filter(x => x.name !== p.name);
+        row?.remove();
+      }
+      sysAllBtn.disabled = false; sysAllBtn.textContent = '↑ Update All';
+      renderSys();
+    });
+  }
+
+  async function doMvmOSUpdate(u) {
+    if (u.type === 'app') {
+      await fetch('/api/plugins/install', { method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ id: u.id, name: u.name, icon: u.icon, category: u.category,
+          version: u.new_version, description: u.description, base_url: u.base_url,
+          js_url: u.js_url, store_id: u.store_id }) });
+    } else if (u.type === 'widget') {
+      await fetch('/api/widgets/install', { method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ id: u.id, name: u.name, icon: u.icon, version: u.new_version,
+          description: u.description, widget_type: u.widget_type, base_url: u.base_url,
+          js_url: u.js_url, store_id: u.store_id }) });
+    } else if (u.type === 'theme') {
+      await fetch('/api/themes/install', { method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ id: u.id, name: u.name, icon: u.icon, version: u.new_version,
+          description: u.description, base_url: u.base_url, store_id: u.store_id }) });
+    }
+  }
+
+  async function doSysUpdate(name, logEl) {
+    if (logEl) { logEl.style.display = 'block'; logEl.textContent += `\n$ apt-get install --only-upgrade ${name}\n`; logEl.scrollTop = logEl.scrollHeight; }
+    await new Promise(async resolve => {
+      const res = await fetch('/api/packages/upgrade', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ name }),
+      });
+      const reader = res.body.getReader();
+      const dec = new TextDecoder();
+      let buf = '';
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += dec.decode(value, { stream: true });
+        const lines = buf.split('\n');
+        buf = lines.pop();
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          const text = line.slice(6);
+          if (text.startsWith('__EXIT_')) { resolve(); return; }
+          if (logEl) { logEl.textContent += text + '\n'; logEl.scrollTop = logEl.scrollHeight; }
+        }
+      }
+      resolve();
+    });
+  }
+
+  return { openWindow, render };
+})();

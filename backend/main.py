@@ -15,6 +15,8 @@ from .plugins import router as plugins_router
 from .system import router as system_router
 from .widgets import router as widgets_router
 from .themes import router as themes_router
+from .updates import router as updates_router
+from .cron import router as cron_router
 from .db import APPS_DIR, WIDGETS_DIR, THEMES_DIR
 
 app = FastAPI(title="mvmOS", redirect_slashes=False)
@@ -32,6 +34,8 @@ app.include_router(plugins_router)
 app.include_router(system_router)
 app.include_router(widgets_router)
 app.include_router(themes_router)
+app.include_router(updates_router)
+app.include_router(cron_router)
 
 FRONTEND_DIR = os.path.join(os.path.dirname(__file__), "..", "frontend")
 
