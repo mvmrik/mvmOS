@@ -129,6 +129,10 @@ window._i18n = {
   'display_size_m':               'С',
   'display_size_l':               'Г',
   'display_size_xl':              'МГ',
+  'display_widget_refresh':       'Обновяване на уиджети',
+  'display_widget_refresh_sec':   'секунди (мин. 1)',
+  'display_mobile':               '📱 Мобилни',
+  'display_single_click':         'Единичен клик за отваряне на иконите',
 
   // Settings — Regional
   'regional_title':               '🌐 Регионални',

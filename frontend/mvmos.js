@@ -443,10 +443,17 @@ var mvmOS = (() => {
     } catch(_) {}
   }
 
+    let _resourceInterval = null;
   function _startResourcePoller() {
     _pollResources();
-    setInterval(_pollResources, 3000);
+    const sec = Math.max(1, parseInt(window._vosSettings?.widget_refresh) || 3);
+    _resourceInterval = setInterval(_pollResources, sec * 1000);
   }
+
+  window.addEventListener('settings-changed', e => {
+    const sec = Math.max(1, parseInt(e.detail?.widget_refresh) || 3);
+    if (_resourceInterval) { clearInterval(_resourceInterval); _resourceInterval = setInterval(_pollResources, sec * 1000); }
+  });
 
   function onResources(fn) {
     _resourceListeners.push(fn);
@@ -619,6 +626,14 @@ var mvmOS = (() => {
   });
 
   function _init() {
+    // register built-in apps so desktop icons can find their icons
+    [
+      { id: 'terminal',    name: t('app_terminal'),    icon: '🖥️', launch: () => Terminal.openWindow() },
+      { id: 'filemanager', name: t('app_filemanager'), icon: '🗂️', launch: () => FileManager.openWindow() },
+      { id: 'appstore',    name: t('app_appstore'),    icon: '📦', launch: () => AppStore.openWindow() },
+      { id: 'settings',   name: t('app_settings'),    icon: '⚙️', launch: () => Settings.openWindow() },
+    ].forEach(def => { _apps[def.id] = def; });
+
     const btn   = document.getElementById('notif-btn');
     const panel = document.getElementById('notif-panel');
     if (btn && panel) {

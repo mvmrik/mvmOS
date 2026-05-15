@@ -182,12 +182,32 @@ const Settings = (() => {
             </div>
 
             <div class="settings-section">
+              <div class="settings-section-title">🔄 ${t('display_widget_refresh')}</div>
+              <div class="settings-row">
+                <label>${t('display_widget_refresh')}</label>
+                <div style="display:flex;align-items:center;gap:8px">
+                  <input type="number" id="s-widget-refresh" min="1" value="${parseInt(d.widget_refresh) || 3}"
+                    style="width:70px;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:4px 8px;color:var(--text);font-size:.85rem">
+                  <span style="color:var(--text-dim);font-size:.82rem">${t('display_widget_refresh_sec')}</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="settings-section">
               <div class="settings-section-title">🎨 Theme</div>
               <div id="theme-picker-wrap" style="display:flex;flex-wrap:wrap;gap:10px;padding:4px 0">
                 <div style="color:var(--text-dim);font-size:.83rem">Loading themes…</div>
               </div>
               <div style="margin-top:10px">
                 <button class="s-btn-sm" id="s-open-theme-store">${t('tstore_browse')}</button>
+              </div>
+            </div>
+
+            <div class="settings-section" style="border-top:1px solid var(--border);padding-top:16px">
+              <div class="settings-section-title">${t('display_mobile')}</div>
+              <div class="settings-row">
+                <label>${t('display_single_click')}</label>
+                <input type="checkbox" id="s-single-click" ${(d.single_click !== false) ? 'checked' : ''}>
               </div>
             </div>
 
@@ -355,6 +375,22 @@ const Settings = (() => {
 
     prevIcon.style.fontSize = ICON_FONT_PREVIEW[parseInt(iconSlider.value) - 1];
     prevText.style.fontSize = TEXT_PREVIEW[parseInt(textSlider.value) - 1];
+
+    const refreshInput = body.querySelector('#s-widget-refresh');
+    if (refreshInput) {
+      refreshInput.addEventListener('change', () => {
+        const val = Math.max(1, parseInt(refreshInput.value) || 3);
+        refreshInput.value = val;
+        saveSettings({ widget_refresh: val });
+      });
+    }
+
+    const singleClick = body.querySelector('#s-single-click');
+    if (singleClick) {
+      singleClick.addEventListener('change', () => {
+        saveSettings({ single_click: singleClick.checked });
+      });
+    }
 
     // Regional — auto-save on any change (debounced for selects)
     let regionalTimer;

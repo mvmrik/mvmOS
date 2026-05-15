@@ -23,6 +23,7 @@ const FileManager = (() => {
           } else {
             fetch('/api/files/places').then(r => r.json()).then(d => fm.navigate(d.home)).catch(() => fm.navigate('/'));
           }
+          Desktop.initMobileSidebar(body);
         });
       },
     });
@@ -339,6 +340,8 @@ const FileManager = (() => {
     }
 
     async navigate(path) {
+      if (this._navigating) return;
+      this._navigating = true;
       this.currentPath = path;
       this.selected = null;
       this.selectedSet.clear();
@@ -374,6 +377,8 @@ const FileManager = (() => {
         this.render(data.entries);
       } catch (e) {
         this.showError(t('fm_network_error'));
+      } finally {
+        this._navigating = false;
       }
     }
 

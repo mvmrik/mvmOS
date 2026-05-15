@@ -15,7 +15,7 @@ const AppStore = (() => {
       title: `📦 ${t('app_appstore')}`,
       width: 880,
       height: 580,
-      onMount(body) { (window.mvmOS?.i18nReady || Promise.resolve()).then(() => { render(body); if (opts) _applyOpts(body, opts); }); },
+      onMount(body) { (window.mvmOS?.i18nReady || Promise.resolve()).then(() => { render(body); if (opts) _applyOpts(body, opts); Desktop.initMobileSidebar(body); }); },
     });
   }
 

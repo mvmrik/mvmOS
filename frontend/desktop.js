@@ -213,8 +213,10 @@ const Desktop = (() => {
     if (entry.type === 'dir')  return { emoji: '📁' };
     if (entry.type === 'url')  return { favicon: `https://www.google.com/s2/favicons?sz=64&domain=${encodeURIComponent(entry.url || '')}` };
     if (entry.type === 'app')  {
+      const BUILTIN_ICONS_MAP = { terminal: '🖥️', filemanager: '🗂️', appstore: '📦', settings: '⚙️' };
       const appDef = window.mvmOS?._apps?.[entry.app_id];
-      return { emoji: appDef?.icon || '📦' };
+      const icon = appDef?.icon || BUILTIN_ICONS_MAP[entry.app_id] || '📦';
+      return icon.startsWith('/') || icon.startsWith('http') ? { favicon: icon } : { emoji: icon };
     }
     const img = ['jpg','jpeg','png','gif','webp','bmp','svg'];
     const vid = ['mp4','webm','ogg','mov','mkv'];
@@ -401,7 +403,7 @@ const Desktop = (() => {
       }
     });
 
-    el.addEventListener('dblclick', () => {
+    function _openIcon() {
       _desktopSelected.clear();
       iconsContainer.querySelectorAll('.icon.selected').forEach(ic => ic.classList.remove('selected'));
       if (fsEntry) {
@@ -417,6 +419,35 @@ const Desktop = (() => {
       }
       if (url) { window.open(url, '_blank'); return; }
       openApp(app);
+    }
+
+    let _wasDragged = false;
+    let _touchMoved = false;
+    let _tapCount = 0, _tapTimer = null;
+    const _hasTouch = () => navigator.maxTouchPoints > 0;
+
+    el.addEventListener('dragstart', () => { _wasDragged = true; });
+    el.addEventListener('touchstart', () => { _touchMoved = false; }, { passive: true });
+    el.addEventListener('touchmove', () => { _touchMoved = true; }, { passive: true });
+
+    // non-touch: dblclick
+    el.addEventListener('dblclick', () => {
+      if (_hasTouch()) return;
+      if (_wasDragged) return;
+      _openIcon();
+    });
+
+    // touch: count taps manually
+    el.addEventListener('click', e => {
+      if (!_hasTouch()) return;
+      if (_wasDragged) { _wasDragged = false; return; }
+      if (_touchMoved) { _touchMoved = false; return; }
+      const useSingle = isMobile() && window._vosSettings?.single_click !== false;
+      if (useSingle) { _openIcon(); return; }
+      _tapCount++;
+      clearTimeout(_tapTimer);
+      _tapTimer = setTimeout(() => { _tapCount = 0; }, 350);
+      if (_tapCount >= 2) { _tapCount = 0; clearTimeout(_tapTimer); _openIcon(); }
     });
 
     el.addEventListener('contextmenu', e => {
@@ -634,6 +665,11 @@ const Desktop = (() => {
     windows[id].el.remove();
     taskbarWindows.querySelector(`[data-win-id="${id}"]`)?.remove();
     delete windows[id];
+    // on mobile, focus the previous window if any
+    if (isMobile()) {
+      const remaining = Object.keys(windows);
+      if (remaining.length > 0) focusWindow(remaining[remaining.length - 1]);
+    }
   }
 
   function toggleMinimize(id) {
@@ -1021,15 +1057,24 @@ const Desktop = (() => {
     // create widget page
     const widgetPage = document.createElement('div');
     widgetPage.id = 'mobile-widget-page';
-    widgetPage.style.cssText = 'position:fixed;inset:0 0 44px 0;overflow-y:auto;display:flex;flex-direction:column;align-items:center;padding:16px 12px;gap:12px;transform:translateX(100%);transition:transform .3s ease;background:var(--desktop-bg,#0d1117);z-index:50';
+    widgetPage.style.cssText = 'position:fixed;inset:0 0 44px 0;overflow-y:auto;display:flex;flex-direction:column;align-items:center;padding:16px 12px 32px;gap:12px;transform:translateX(100%);transition:transform .3s ease;background:var(--desktop-bg,#0d1117);z-index:50;box-sizing:border-box';
     document.body.appendChild(widgetPage);
     window._mobileWidgetPage = widgetPage;
 
     // move desktop widgets into widget page on mobile
     function _collectWidgets() {
-      const existing = document.querySelectorAll('[data-desktop-widget]');
+      const existing = [...document.querySelectorAll('[data-desktop-widget]')];
+      existing.sort((a, b) => {
+        const ay = parseInt(a.dataset.wy || a.style.top) || 0;
+        const by = parseInt(b.dataset.wy || b.style.top) || 0;
+        const ax = parseInt(a.dataset.wx || a.style.left) || 0;
+        const bx = parseInt(b.dataset.wx || b.style.left) || 0;
+        return ay !== by ? ay - by : ax - bx;
+      });
       existing.forEach(w => {
-        w.style.cssText = 'position:relative;left:auto;top:auto;width:100%;max-width:420px;margin:0 auto';
+        if (!w.dataset.wx) { w.dataset.wx = parseInt(w.style.left) || 0; }
+        if (!w.dataset.wy) { w.dataset.wy = parseInt(w.style.top) || 0; }
+        w.style.cssText = 'position:relative;left:auto;top:auto;width:100%;max-width:420px;margin:0 auto;height:auto;min-height:unset';
         widgetPage.appendChild(w);
       });
     }
@@ -1081,7 +1126,8 @@ const Desktop = (() => {
     menuBtn.style.cssText = 'display:flex;font-size:1rem;margin-right:4px';
     titlebar.querySelector('.window-controls').after(menuBtn);
 
-    sidebar.addEventListener('click', () => {
+    sidebar.addEventListener('click', e => {
+      if (e.target === sidebar) return; // click on sidebar itself, not a child item
       sidebar.classList.remove('mobile-open');
       body.querySelector('.as-sidebar-overlay')?.remove();
     });
@@ -1106,6 +1152,39 @@ const Desktop = (() => {
 
   init();
   _initMobilePages();
+  _initLongPress();
+
+  function _initLongPress() {
+    if (!('ontouchstart' in window) && navigator.maxTouchPoints === 0) return;
+    let _lpTimer = null;
+    let _lpMoved = false;
+
+    document.addEventListener('touchstart', e => {
+      if (e.touches.length !== 1) return;
+      _lpMoved = false;
+      _lpTimer = setTimeout(() => {
+        if (_lpMoved) return;
+        const touch = e.touches[0];
+        const el = document.elementFromPoint(touch.clientX, touch.clientY);
+        if (!el) return;
+        // find closest element with a contextmenu listener by dispatching the event
+        const target = el.closest('[data-desktop-widget]') || el.closest('.icon') || el.closest('.fm-row') || el.closest('.ctx-item') || el;
+        target.dispatchEvent(new MouseEvent('contextmenu', {
+          bubbles: true, cancelable: true,
+          clientX: touch.clientX, clientY: touch.clientY,
+        }));
+      }, 500);
+    }, { passive: true });
+
+    document.addEventListener('touchmove', () => {
+      _lpMoved = true;
+      clearTimeout(_lpTimer);
+    }, { passive: true });
+
+    document.addEventListener('touchend', () => {
+      clearTimeout(_lpTimer);
+    }, { passive: true });
+  }
 
   return { createWindow, closeWindow, focusWindow, initMobileSidebar: _initMobileSidebar };
 })();

@@ -129,6 +129,10 @@ window._i18n = {
   'display_size_m':               'M',
   'display_size_l':               'L',
   'display_size_xl':              'XL',
+  'display_widget_refresh':       'Widget Refresh',
+  'display_widget_refresh_sec':   'seconds (min 1)',
+  'display_mobile':               '📱 Mobile',
+  'display_single_click':         'Single click to open icons',
 
   // Settings — Regional
   'regional_title':               '🌐 Regional',

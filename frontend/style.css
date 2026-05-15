@@ -1053,6 +1053,11 @@ html, body {
   }
   .window.window-mobile .window-body .as-main {
     overflow-y: auto;
+    height: 100%;
+  }
+  .window.window-mobile .window-body .settings-panels {
+    overflow-y: visible;
+    height: auto;
   }
   .window.window-mobile .window-resize { display: none; }
 
@@ -1063,7 +1068,8 @@ html, body {
 
   /* Mobile widget page */
   #mobile-widget-page [data-desktop-widget] .widget-titlebar { display: none; }
-  #mobile-widget-page [data-desktop-widget] { border-radius: 8px; overflow: hidden; }
+  #mobile-widget-page [data-desktop-widget] { border-radius: 8px; overflow: visible; }
+  #mobile-widget-page [data-desktop-widget] .widget-body { overflow: visible; height: auto !important; }
 
   /* Taskbar — hide min/max labels in taskbar-windows on small screens */
   #taskbar-windows { max-width: 40vw; overflow: hidden; }
