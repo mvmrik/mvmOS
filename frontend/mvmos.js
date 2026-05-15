@@ -36,13 +36,10 @@ var mvmOS = (() => {
       const rect = anchorEl.getBoundingClientRect();
       _flyout = document.createElement('div');
       _flyout.className = 'start-submenu open';
-      _flyout.style.left = rect.right + 4 + 'px';
-      _flyout.style.top  = rect.top + 'px';
+      _flyout.style.left   = rect.right + 4 + 'px';
+      _flyout.style.bottom = window.innerHeight - rect.bottom + 'px';
+      _flyout.style.maxHeight = rect.bottom - 8 + 'px';
       document.body.appendChild(_flyout);
-      const fr = _flyout.getBoundingClientRect();
-      if (fr.bottom > window.innerHeight - 10) {
-        _flyout.style.top = Math.max(8, window.innerHeight - fr.height - 10) + 'px';
-      }
     }
     _renderCategories();
   }
@@ -53,13 +50,26 @@ var mvmOS = (() => {
     if (window.innerWidth < 768) {
       const back = document.createElement('div');
       back.className = 'start-submenu-item start-submenu-back';
-      back.innerHTML = '<span class="emoji">‹</span> Back';
+      back.innerHTML = `<span class="emoji">‹</span> ${t('back')}`;
       back.addEventListener('click', e => { e.stopPropagation(); _closeFlyout(); });
       _flyout.appendChild(back);
       const sep = document.createElement('div');
       sep.style.cssText = 'height:1px;background:var(--border);margin:2px 0';
       _flyout.appendChild(sep);
     }
+    // System category — always first
+    const SYSTEM_APPS = [
+      { id: 'terminal',    name: 'Terminal',     icon: '🖥️', system: true, launch: () => Terminal.openWindow() },
+      { id: 'filemanager', name: 'File Manager', icon: '🗂️', system: true, launch: () => FileManager.openWindow() },
+      { id: 'appstore',    name: 'App Store',    icon: '📦', system: true, launch: () => AppStore.openWindow() },
+      { id: 'settings',   name: 'Settings',     icon: '⚙️', system: true, launch: () => Settings.openWindow() },
+    ];
+    const sysEl = document.createElement('div');
+    sysEl.className = 'start-submenu-item';
+    sysEl.innerHTML = `<span class="emoji">🖥️</span>${t('start_system')}<span class="start-menu-item-arrow">›</span>`;
+    sysEl.addEventListener('click', e => { e.stopPropagation(); _renderApps(SYSTEM_APPS, 'System'); });
+    _flyout.appendChild(sysEl);
+
     const cats = {};
     Object.values(_apps).forEach(app => {
       const cat = app.category || 'Utilities';
@@ -94,7 +104,7 @@ var mvmOS = (() => {
         e.stopPropagation();
         _closeFlyout();
         document.getElementById('start-menu').classList.remove('open');
-        fetch(`/api/plugins/${app.id}/open`, { method: 'POST' }).catch(() => {});
+        if (!app.system) fetch(`/api/plugins/${app.id}/open`, { method: 'POST' }).catch(() => {});
         app.launch();
       });
       el.addEventListener('contextmenu', e => {
@@ -105,6 +115,92 @@ var mvmOS = (() => {
       _flyout.appendChild(el);
     });
   }
+
+  // ── Start menu quick access ───────────────────────────────────────────────
+  let _quickAccessEl = null;
+
+  async function _renderQuickAccess() {
+    const startMenu = document.getElementById('start-menu');
+    if (!startMenu) return;
+    const prefs = Settings.loadStartMenuPrefs?.() || Settings.defaultStartMenuPrefs?.() || { order: ['recent','frequent','custom'], recent: 0, frequent: 0, custom: [] };
+
+    // fetch recent/frequent from API if needed
+    let recentApps = [], frequentApps = [];
+    const needsApi = (prefs.recent > 0 || prefs.frequent > 0);
+    if (needsApi) {
+      try {
+        const res = await fetch('/api/plugins');
+        const data = await res.json();
+        const plugins = (data.plugins || data || []).filter(p => _apps[p.id]);
+        recentApps = [...plugins].filter(p => p.last_opened_at).sort((a, b) => b.last_opened_at - a.last_opened_at).slice(0, prefs.recent);
+        frequentApps = [...plugins].sort((a, b) => (b.open_count || 0) - (a.open_count || 0)).slice(0, prefs.frequent);
+      } catch (_) {}
+    }
+
+    // build items per block
+    function _blockItems(blockId) {
+      if (blockId === 'recent') return recentApps;
+      if (blockId === 'frequent') return frequentApps;
+      return prefs.custom.map(id => _apps[id]).filter(Boolean);
+    }
+
+    // check if anything to show
+    const hasAny = prefs.order.some(b => _blockItems(b).length > 0);
+
+    // remove old
+    _quickAccessEl?.remove();
+    _quickAccessEl = null;
+
+    if (!hasAny) return;
+
+    _quickAccessEl = document.createElement('div');
+    _quickAccessEl.id = 'start-quick-access';
+
+    const BLOCK_LABELS = { recent: t('start_recent'), frequent: t('start_frequent'), custom: t('start_quick_access') };
+    const _seen = new Set();
+
+    prefs.order.forEach(blockId => {
+      let items = _blockItems(blockId);
+      if (prefs[blockId + '_dedup']) items = items.filter(a => !_seen.has(a.id));
+      items.forEach(a => _seen.add(a.id));
+      if (!items.length) return;
+      const block = document.createElement('div');
+      block.style.cssText = 'margin-bottom:2px';
+      const label = document.createElement('div');
+      label.style.cssText = 'font-size:.67rem;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:.07em;padding:6px 14px 2px';
+      label.textContent = BLOCK_LABELS[blockId];
+      block.appendChild(label);
+      items.forEach(app => {
+        const el = document.createElement('div');
+        el.className = 'start-menu-item';
+        el.innerHTML = `<span class="emoji">${app.icon || '📦'}</span>${app.name}`;
+        el.addEventListener('click', () => {
+          startMenu.classList.remove('open');
+          _closeFlyout();
+          const appDef = _apps[app.id];
+          if (appDef) { fetch(`/api/plugins/${app.id}/open`, { method: 'POST' }).catch(() => {}); appDef.launch(); }
+        });
+        block.appendChild(el);
+      });
+      _quickAccessEl.appendChild(block);
+    });
+
+    // insert before Applications button (which sits before anchor)
+    const appsBtn = startMenu.querySelector('#start-apps-btn');
+    const anchor = startMenu.querySelector('#start-menu-apps-anchor');
+    const ref = appsBtn || anchor;
+    ref.parentNode.insertBefore(_quickAccessEl, ref);
+
+    // separator between quick access and Applications
+    if (!startMenu.querySelector('#start-quick-sep')) {
+      const sep = document.createElement('div');
+      sep.className = 'start-menu-sep';
+      sep.id = 'start-quick-sep';
+      ref.parentNode.insertBefore(sep, ref);
+    }
+  }
+
+  window.addEventListener('startmenu-changed', () => _renderQuickAccess());
 
   // ── Start menu "Apps" entry ───────────────────────────────────────────────
   let _appsMenuItem = null;
@@ -117,7 +213,7 @@ var mvmOS = (() => {
     _appsMenuItem = document.createElement('div');
     _appsMenuItem.className = 'start-menu-item';
     _appsMenuItem.id = 'start-apps-btn';
-    _appsMenuItem.innerHTML = '<span class="emoji">⚡</span> Apps <span class="start-menu-item-arrow">›</span>';
+    _appsMenuItem.innerHTML = `<span class="emoji">⚡</span> ${t('start_applications')} <span class="start-menu-item-arrow">›</span>`;
     const anchor = startMenu.querySelector('#start-menu-apps-anchor');
     anchor.parentNode.insertBefore(sep, anchor);
     anchor.parentNode.insertBefore(_appsMenuItem, anchor);
@@ -373,7 +469,7 @@ var mvmOS = (() => {
       } catch (_) {}
       const res = await fetch(`${base}/${entry}?_=${Date.now()}`);
       if (!res.ok) {
-        _pushNotif(`Widget needs reinstall: ${id}`, 'The widget files are missing. Please reinstall from the Widget Store.', null, null);
+        _pushNotif(`Widget needs reinstall: ${id}`, t('wstore_no_installed'), null, null);
         return;
       }
       const code = await res.text();
@@ -442,16 +538,16 @@ var mvmOS = (() => {
     if (!panel) return;
     panel.innerHTML = `
       <div class="notif-header">
-        Notifications
-        <span class="notif-clear" id="notif-clear-all">Clear all</span>
+        ${t('notif_title')}
+        <span class="notif-clear" id="notif-clear-all">${t('notif_clear_all')}</span>
       </div>
       ${_notifs.length === 0
-        ? '<div class="notif-empty">No notifications</div>'
+        ? `<div class="notif-empty">${t('notif_empty')}</div>`
         : _notifs.map((n, i) => `
           <div class="notif-item">
             <div class="notif-item-title">${n.title}</div>
             <div class="notif-item-body">${n.body}</div>
-            ${n.action ? `<span class="notif-item-action" data-notif-action="${i}">${n.actionLabel || 'Open'}</span>` : ''}
+            ${n.action ? `<span class="notif-item-action" data-notif-action="${i}">${n.actionLabel || t('notif_open')}</span>` : ''}
           </div>`).join('')}
     `;
     panel.querySelector('#notif-clear-all')?.addEventListener('click', () => {
@@ -493,9 +589,9 @@ var mvmOS = (() => {
       if (!d.up_to_date) {
         _pushNotif(
           'mvmOS update available',
-          `${d.commits_behind} new commit${d.commits_behind !== 1 ? 's' : ''} ready (${d.local} → ${d.remote})`,
+          t('os_update_body', { behind: d.commits_behind, s: d.commits_behind !== 1 ? 's' : '', local: d.local, remote: d.remote }),
           () => Settings.openWindow('about'),
-          'Open Settings → About'
+          t('os_update_open')
         );
       }
     } catch (_) {}
@@ -509,10 +605,10 @@ var mvmOS = (() => {
       if (!updates.length) return;
       const count = updates.length;
       _pushNotif(
-        `${count} update${count !== 1 ? 's' : ''} available`,
-        'Open Update Manager to see what\'s new.',
+        t('updates_available', { n: count, s: count !== 1 ? 's' : '' }),
+        t('updates_body'),
         () => UpdateManager.openWindow(),
-        'Open Update Manager'
+        t('updates_open')
       );
     } catch (_) {}
   }
@@ -536,6 +632,7 @@ var mvmOS = (() => {
     setTimeout(() => { _checkOsUpdate(); setInterval(_checkOsUpdate, 30 * 60 * 1000); }, 15000);
     _loadAllWidgets();
     _startResourcePoller();
+    document.addEventListener('mvmos-plugins-loaded', () => _renderQuickAccess());
   });
 
   // ── Context menu ──────────────────────────────────────────────────────────

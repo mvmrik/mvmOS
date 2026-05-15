@@ -146,12 +146,13 @@ const Settings = (() => {
       <div class="settings-wrap as-wrap">
 
         <nav class="settings-tabs as-sidebar">
-          <div class="settings-tab ${activeTab==='display'?'active':''}" data-tab="display">🖥️ Display</div>
-          <div class="settings-tab ${activeTab==='regional'?'active':''}" data-tab="regional">🌐 Regional</div>
-          <div class="settings-tab ${activeTab==='filemanager'?'active':''}" data-tab="filemanager">📁 File Manager</div>
-          <div class="settings-tab ${activeTab==='users'?'active':''}" data-tab="users">👥 Users</div>
-          <div class="settings-tab ${activeTab==='updates'?'active':''}" data-tab="updates">🔄 Updates</div>
-          <div class="settings-tab ${activeTab==='about'?'active':''}" data-tab="about" style="margin-top:auto">ℹ️ About</div>
+          <div class="settings-tab ${activeTab==='display'?'active':''}" data-tab="display">${t('settings_display')}</div>
+          <div class="settings-tab ${activeTab==='regional'?'active':''}" data-tab="regional">${t('settings_regional')}</div>
+          <div class="settings-tab ${activeTab==='filemanager'?'active':''}" data-tab="filemanager">${t('settings_filemanager')}</div>
+          <div class="settings-tab ${activeTab==='users'?'active':''}" data-tab="users">${t('settings_users')}</div>
+          <div class="settings-tab ${activeTab==='updates'?'active':''}" data-tab="updates">${t('settings_updates')}</div>
+          <div class="settings-tab ${activeTab==='startmenu'?'active':''}" data-tab="startmenu">${t('settings_startmenu')}</div>
+          <div class="settings-tab ${activeTab==='about'?'active':''}" data-tab="about" style="margin-top:auto">${t('settings_about')}</div>
         </nav>
 
         <div class="settings-panels as-main">
@@ -159,22 +160,22 @@ const Settings = (() => {
           <!-- Display panel -->
           <div class="settings-panel ${activeTab==='display'?'active':''}" id="sp-display">
             <div class="settings-section">
-              <div class="settings-section-title">🖥️ Display <span style="font-size:.7rem;color:#666;font-weight:400;text-transform:none;letter-spacing:0">(saved per device)</span></div>
+              <div class="settings-section-title">${t('display_title')} <span style="font-size:.7rem;color:#666;font-weight:400;text-transform:none;letter-spacing:0">${t('display_per_device')}</span></div>
 
               <div class="settings-row settings-row-slider">
-                <label>Icon Size</label>
+                <label>${t('display_icon_size')}</label>
                 <div class="slider-wrap">
                   <input type="range" id="s-icon-size" min="1" max="5" step="1" value="${parseInt(d.icon_size) || 3}">
-                  <div class="slider-labels"><span>XS</span><span>S</span><span>M</span><span>L</span><span>XL</span></div>
+                  <div class="slider-labels"><span>${t('display_size_xs')}</span><span>${t('display_size_s')}</span><span>${t('display_size_m')}</span><span>${t('display_size_l')}</span><span>${t('display_size_xl')}</span></div>
                 </div>
                 <span class="slider-preview-icon" id="prev-icon">🖥️</span>
               </div>
 
               <div class="settings-row settings-row-slider">
-                <label>Text Size</label>
+                <label>${t('display_text_size')}</label>
                 <div class="slider-wrap">
                   <input type="range" id="s-text-size" min="1" max="5" step="1" value="${parseInt(d.text_size) || 3}">
-                  <div class="slider-labels"><span>XS</span><span>S</span><span>M</span><span>L</span><span>XL</span></div>
+                  <div class="slider-labels"><span>${t('display_size_xs')}</span><span>${t('display_size_s')}</span><span>${t('display_size_m')}</span><span>${t('display_size_l')}</span><span>${t('display_size_xl')}</span></div>
                 </div>
                 <span class="slider-preview-text" id="prev-text">Aa</span>
               </div>
@@ -186,7 +187,7 @@ const Settings = (() => {
                 <div style="color:var(--text-dim);font-size:.83rem">Loading themes…</div>
               </div>
               <div style="margin-top:10px">
-                <button class="s-btn-sm" id="s-open-theme-store">Browse Themes in App Store</button>
+                <button class="s-btn-sm" id="s-open-theme-store">${t('tstore_browse')}</button>
               </div>
             </div>
 
@@ -198,7 +199,7 @@ const Settings = (() => {
               <div class="settings-section-title">🕐 Date &amp; Time</div>
 
               <div class="settings-row">
-                <label>Time Zone</label>
+                <label>${t('regional_timezone')}</label>
                 <select id="s-timezone">
                   ${TIMEZONES.map(tz =>
                     `<option value="${tz}" ${s.timezone === tz ? 'selected' : ''}>${tz.replace('_', ' ')}</option>`
@@ -207,7 +208,7 @@ const Settings = (() => {
               </div>
 
               <div class="settings-row">
-                <label>Time Format</label>
+                <label>${t('regional_time_format')}</label>
                 <div class="settings-radio-group">
                   <label class="radio-opt">
                     <input type="radio" name="time_format" value="24" ${s.time_format !== '12' ? 'checked' : ''}>
@@ -221,12 +222,12 @@ const Settings = (() => {
               </div>
 
               <div class="settings-row">
-                <label>Show date in taskbar</label>
+                <label>${t('regional_show_date')}</label>
                 <input type="checkbox" id="s-show-date" ${s.show_date ? 'checked' : ''} style="accent-color:var(--accent);width:15px;height:15px;cursor:pointer;">
               </div>
 
               <div class="settings-row">
-                <label>Date Format</label>
+                <label>${t('regional_date_format')}</label>
                 <select id="s-date-format">
                   <option value="DD/MM/YYYY" ${s.date_format === 'DD/MM/YYYY' ? 'selected' : ''}>DD/MM/YYYY</option>
                   <option value="MM/DD/YYYY" ${s.date_format === 'MM/DD/YYYY' ? 'selected' : ''}>MM/DD/YYYY</option>
@@ -239,15 +240,15 @@ const Settings = (() => {
               <div class="settings-section-title">📅 Calendar</div>
 
               <div class="settings-row">
-                <label>Week Starts On</label>
+                <label>${t('regional_week_starts')}</label>
                 <div class="settings-radio-group">
                   <label class="radio-opt">
                     <input type="radio" name="week_starts" value="monday" ${s.week_starts !== 'sunday' ? 'checked' : ''}>
-                    <span>Monday</span>
+                    <span>${t('regional_monday')}</span>
                   </label>
                   <label class="radio-opt">
                     <input type="radio" name="week_starts" value="sunday" ${s.week_starts === 'sunday' ? 'checked' : ''}>
-                    <span>Sunday</span>
+                    <span>${t('regional_sunday')}</span>
                   </label>
                 </div>
               </div>
@@ -257,7 +258,7 @@ const Settings = (() => {
               <div class="settings-section-title">🌐 Language &amp; Region</div>
 
               <div class="settings-row">
-                <label>Language</label>
+                <label>${t('regional_language')}</label>
                 <select id="s-language">
                   ${LANGUAGES.map(l =>
                     `<option value="${l.value}" ${s.language === l.value ? 'selected' : ''}>${l.label}</option>`
@@ -270,24 +271,24 @@ const Settings = (() => {
 
           <!-- Users panel -->
           <div class="settings-panel ${activeTab==='users'?'active':''}" id="sp-users">
-            <div id="users-content"><div class="settings-section-title" style="padding:16px 0 0 2px">Loading…</div></div>
+            <div id="users-content"><div class="settings-section-title" style="padding:16px 0 0 2px">${t('loading')}</div></div>
           </div>
 
           <!-- File Manager panel -->
           <div class="settings-panel ${activeTab==='filemanager'?'active':''}" id="sp-filemanager">
             <div class="settings-section">
-              <div class="settings-section-title">📁 File Manager</div>
+              <div class="settings-section-title">${t('fm_title')}</div>
 
               <div class="settings-row">
-                <label>Show hidden files</label>
+                <label>${t('fm_show_hidden')}</label>
                 <input type="checkbox" id="s-fm-hidden" ${fm.showHidden ? 'checked' : ''} style="accent-color:var(--accent);width:15px;height:15px;cursor:pointer;">
               </div>
               <div class="settings-row">
-                <label>Show permissions</label>
+                <label>${t('fm_show_permissions')}</label>
                 <input type="checkbox" id="s-fm-perms" ${fm.showPerms ? 'checked' : ''} style="accent-color:var(--accent);width:15px;height:15px;cursor:pointer;">
               </div>
               <div class="settings-row">
-                <label>Show owner</label>
+                <label>${t('fm_show_owner')}</label>
                 <input type="checkbox" id="s-fm-owner" ${fm.showOwner ? 'checked' : ''} style="accent-color:var(--accent);width:15px;height:15px;cursor:pointer;">
               </div>
             </div>
@@ -295,6 +296,9 @@ const Settings = (() => {
 
           <!-- Updates panel -->
           <div class="settings-panel ${activeTab==='updates'?'active':''}" id="sp-updates" style="padding:0;overflow:hidden"></div>
+
+          <!-- Start Menu panel -->
+          <div class="settings-panel ${activeTab==='startmenu'?'active':''}" id="sp-startmenu"></div>
 
           <!-- About panel -->
           <div class="settings-panel ${activeTab==='about'?'active':''}" id="sp-about">
@@ -319,6 +323,7 @@ const Settings = (() => {
         if (tab.dataset.tab === 'updates') renderUpdates(body);
         if (tab.dataset.tab === 'about') renderAbout(body);
         if (tab.dataset.tab === 'display') renderThemePicker(body);
+        if (tab.dataset.tab === 'startmenu') renderStartMenu(body);
       });
     });
 
@@ -326,6 +331,7 @@ const Settings = (() => {
     if (activeTab === 'updates') renderUpdates(body);
     if (activeTab === 'about') renderAbout(body);
     if (activeTab === 'display' || !activeTab) renderThemePicker(body);
+    if (activeTab === 'startmenu') renderStartMenu(body);
 
     // Display — auto-save on slider change
     const iconSlider = body.querySelector('#s-icon-size');
@@ -386,14 +392,14 @@ const Settings = (() => {
 
   async function renderUsers(body) {
     const container = body.querySelector('#users-content');
-    container.innerHTML = '<div style="padding:12px 0;color:var(--text-dim);font-size:.85rem">Loading…</div>';
+    container.innerHTML = `<div style="padding:12px 0;color:var(--text-dim);font-size:.85rem">${t('loading')}</div>`;
 
     let data;
     try {
       const res = await fetch('/api/users');
       data = await res.json();
     } catch (_) {
-      container.innerHTML = '<div style="color:#e05555;padding:12px 0">Failed to load users.</div>';
+      container.innerHTML = `<div style="color:#e05555;padding:12px 0">${t('users_failed')}</div>`;
       return;
     }
 
@@ -401,24 +407,24 @@ const Settings = (() => {
 
     container.innerHTML = `
       <div class="settings-section">
-        <div class="settings-section-title">System Users</div>
+        <div class="settings-section-title">${t('users_title')}</div>
         <div class="users-list" id="users-list"></div>
       </div>
       <div class="settings-section">
-        <div class="settings-section-title">Add New User</div>
-        <div class="settings-row"><label>Username</label><input class="s-input" id="nu-name" placeholder="username"></div>
-        <div class="settings-row"><label>Password</label><input class="s-input" id="nu-pass" type="password" placeholder="password"></div>
-        <div class="settings-row"><label>Shell</label>
+        <div class="settings-section-title">${t('users_add_title')}</div>
+        <div class="settings-row"><label>${t('users_username')}</label><input class="s-input" id="nu-name" placeholder="${t('users_username_ph')}"></div>
+        <div class="settings-row"><label>${t('users_password')}</label><input class="s-input" id="nu-pass" type="password" placeholder="${t('users_password2_ph')}"></div>
+        <div class="settings-row"><label>${t('users_shell')}</label>
           <select class="s-input" id="nu-shell">
             <option value="/bin/bash">/bin/bash</option>
             <option value="/bin/sh">/bin/sh</option>
             <option value="/usr/sbin/nologin">nologin</option>
           </select>
         </div>
-        <div class="settings-row"><label>Groups</label><input class="s-input" id="nu-groups" placeholder="sudo,www-data (comma separated)"></div>
+        <div class="settings-row"><label>${t('users_groups')}</label><input class="s-input" id="nu-groups" placeholder="${t('users_groups_ph')}"></div>
         <div class="settings-row">
           <label></label>
-          <button class="s-btn" id="nu-add">Create User</button>
+          <button class="s-btn" id="nu-add">${t('users_create')}</button>
           <span id="nu-msg" style="font-size:.8rem;margin-left:8px"></span>
         </div>
       </div>
@@ -433,12 +439,12 @@ const Settings = (() => {
           <span class="user-name">${u.username}</span>
           <span class="user-uid">uid:${u.uid}</span>
           <span class="user-shell">${u.shell}</span>
-          <button class="s-btn-sm user-edit-btn">Edit</button>
-          ${u.username !== 'root' ? `<button class="s-btn-sm s-btn-danger user-del-btn">Delete</button>` : ''}
+          <button class="s-btn-sm user-edit-btn">${t('users_edit')}</button>
+          ${u.username !== 'root' ? `<button class="s-btn-sm s-btn-danger user-del-btn">${t('users_delete')}</button>` : ''}
         </div>
         <div class="user-edit-panel" style="display:none">
           <div class="settings-row" style="margin-top:8px">
-            <label>Groups</label>
+            <label>${t('users_groups')}</label>
             <div class="user-groups-wrap">
               ${groups.map(g => `
                 <label class="user-group-opt">
@@ -447,19 +453,19 @@ const Settings = (() => {
             </div>
           </div>
           <div class="settings-row">
-            <label>Shell</label>
+            <label>${t('users_shell')}</label>
             <select class="s-input user-shell-sel">
               ${['/bin/bash','/bin/sh','/usr/sbin/nologin'].map(sh =>
                 `<option ${u.shell===sh?'selected':''}>${sh}</option>`).join('')}
             </select>
           </div>
           <div class="settings-row">
-            <label>New Password</label>
-            <input class="s-input user-pass-inp" type="password" placeholder="leave blank to keep">
+            <label>${t('users_new_password')}</label>
+            <input class="s-input user-pass-inp" type="password" placeholder="${t('users_password_ph')}">
           </div>
           <div class="settings-row">
             <label></label>
-            <button class="s-btn user-save-btn">Save</button>
+            <button class="s-btn user-save-btn">${t('users_save')}</button>
             <span class="user-save-msg" style="font-size:.8rem;margin-left:8px"></span>
           </div>
         </div>
@@ -559,7 +565,7 @@ const Settings = (() => {
   async function renderAbout(body) {
     const wrap = body.querySelector('#about-content');
     if (!wrap) return;
-    wrap.innerHTML = '<div style="color:var(--text-dim);font-size:.85rem">Loading…</div>';
+    wrap.innerHTML = `<div style="color:var(--text-dim);font-size:.85rem">${t('loading')}</div>`;
 
     const res  = await fetch('/api/system/info');
     const info = await res.json();
@@ -575,18 +581,18 @@ const Settings = (() => {
         </div>
 
         <div class="about-grid">
-          <span class="about-label">Hostname</span><span class="about-val">${info.hostname}</span>
-          <span class="about-label">Kernel</span><span class="about-val">${info.kernel}</span>
-          <span class="about-label">Uptime</span><span class="about-val">${info.uptime}</span>
-          <span class="about-label">Memory</span><span class="about-val">${info.mem_used} / ${info.mem_total}</span>
-          <span class="about-label">Disk (/)</span><span class="about-val">${info.disk_used} / ${info.disk_total} (${info.disk_pct})</span>
+          <span class="about-label">${t('about_hostname')}</span><span class="about-val">${info.hostname}</span>
+          <span class="about-label">${t('about_kernel')}</span><span class="about-val">${info.kernel}</span>
+          <span class="about-label">${t('about_uptime')}</span><span class="about-val">${info.uptime}</span>
+          <span class="about-label">${t('about_memory')}</span><span class="about-val">${info.mem_used} / ${info.mem_total}</span>
+          <span class="about-label">${t('about_disk')}</span><span class="about-val">${info.disk_used} / ${info.disk_total} (${info.disk_pct})</span>
         </div>
       </div>
 
       <div class="settings-section" style="margin-top:16px">
         <div class="settings-section-title">⬆️ System Update</div>
         <div style="margin-bottom:10px">
-          <button class="s-btn" id="about-check-btn">Check for updates</button>
+          <button class="s-btn" id="about-check-btn">${t('um_check')}</button>
           <span id="about-update-status" style="margin-left:10px;font-size:.82rem;color:var(--text-dim)"></span>
         </div>
         <div id="about-update-output" style="display:none;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:10px;font-size:.78rem;font-family:monospace;max-height:180px;overflow-y:auto;white-space:pre-wrap"></div>
@@ -619,7 +625,7 @@ const Settings = (() => {
 
     async function doCheck(silent) {
       checkBtn.disabled = true;
-      if (!silent) statusEl.textContent = 'Checking…';
+      if (!silent) statusEl.textContent = t('users_checking');
       try {
         const r = await fetch('/api/system/check-update');
         const d = await r.json();
@@ -730,5 +736,126 @@ const Settings = (() => {
     }
   }
 
-  return { openWindow, get, initDisplay, loadFMPrefs };
+  // ── Start Menu settings ───────────────────────────────────────────────────
+  const SM_KEY = 'mvmos_start_menu';
+
+  function loadStartMenuPrefs() {
+    try { return JSON.parse(localStorage.getItem(SM_KEY)); } catch (_) { return null; }
+  }
+
+  function saveStartMenuPrefs(prefs) {
+    localStorage.setItem(SM_KEY, JSON.stringify(prefs));
+    window.dispatchEvent(new CustomEvent('startmenu-changed', { detail: prefs }));
+  }
+
+  function defaultStartMenuPrefs() {
+    return {
+      order: ['recent', 'frequent', 'custom'],
+      recent: 0,
+      frequent: 0,
+      custom: [],
+    };
+  }
+
+  function renderStartMenu(body) {
+    const panel = body.querySelector('#sp-startmenu');
+    if (!panel) return;
+    const prefs = loadStartMenuPrefs() || defaultStartMenuPrefs();
+    const allApps = Object.values(window.mvmOS?._apps || {}).sort((a, b) => a.name.localeCompare(b.name));
+
+    function _saveAndRedraw() { saveStartMenuPrefs(prefs); _draw(); }
+
+    function _blockLabel(id) {
+      return id === 'recent' ? t('sm_recent') : id === 'frequent' ? t('sm_frequent') : t('sm_custom');
+    }
+
+    function _draw() {
+      panel.innerHTML = `<div style="padding:4px 0">` + prefs.order.map((blockId, idx) => {
+        const isFirst = idx === 0, isLast = idx === prefs.order.length - 1;
+        let inner = '';
+
+        if (blockId === 'recent' || blockId === 'frequent') {
+          const val = prefs[blockId];
+          const dedup = prefs[blockId + '_dedup'] || false;
+          inner = `<div style="display:flex;align-items:center;gap:10px;margin-top:8px">
+            <label style="color:var(--text-dim);font-size:.82rem">${t('sm_show_last')}</label>
+            <select data-count="${blockId}" style="background:var(--surface);border:1px solid var(--border);border-radius:4px;color:var(--text);padding:4px 8px;font-size:.82rem">
+              ${[0,1,2,3,4,5,6,7,8,10].map(n => `<option value="${n}"${val===n?' selected':''}>${n === 0 ? t('sm_hidden') : n}</option>`).join('')}
+            </select>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;margin-top:6px">
+            <input type="checkbox" id="dedup-${blockId}" data-dedup="${blockId}" ${dedup?'checked':''} style="cursor:pointer">
+            <label for="dedup-${blockId}" style="color:var(--text-dim);font-size:.82rem;cursor:pointer">${t('sm_dedup')}</label>
+          </div>`;
+        } else {
+          // custom block
+          inner = `<div style="margin-top:8px;display:flex;flex-direction:column;gap:4px">
+            ${prefs.custom.map((appId, i) => {
+              const app = window.mvmOS?._apps?.[appId];
+              if (!app) return '';
+              return `<div style="display:flex;align-items:center;gap:8px;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:5px 8px">
+                <span>${app.icon}</span>
+                <span style="flex:1;font-size:.82rem">${app.name}</span>
+                <button data-remove="${appId}" style="background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:.85rem;padding:0 4px">✕</button>
+              </div>`;
+            }).join('')}
+            <select data-add-custom style="margin-top:4px;background:var(--surface);border:1px solid var(--border);border-radius:4px;color:var(--text);padding:4px 8px;font-size:.82rem">
+              <option value="">${t('sm_add_app')}</option>
+              ${allApps.filter(a => !prefs.custom.includes(a.id)).map(a => `<option value="${a.id}">${a.icon} ${a.name}</option>`).join('')}
+            </select>
+          </div>`;
+        }
+
+        return `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:10px 14px;margin-bottom:10px">
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="font-weight:600;font-size:.84rem;flex:1">${_blockLabel(blockId)}</span>
+            <button data-up="${idx}" ${isFirst?'disabled':''} style="background:none;border:1px solid var(--border);border-radius:4px;color:var(--text-dim);cursor:pointer;padding:2px 7px;font-size:.8rem${isFirst?';opacity:.3':''}">↑</button>
+            <button data-down="${idx}" ${isLast?'disabled':''} style="background:none;border:1px solid var(--border);border-radius:4px;color:var(--text-dim);cursor:pointer;padding:2px 7px;font-size:.8rem${isLast?';opacity:.3':''}">↓</button>
+          </div>
+          ${inner}
+        </div>`;
+      }).join('') + `</div>`;
+
+      // events
+      panel.querySelectorAll('[data-count]').forEach(sel => {
+        sel.addEventListener('change', () => {
+          prefs[sel.dataset.count] = parseInt(sel.value);
+          _saveAndRedraw();
+        });
+      });
+      panel.querySelectorAll('[data-dedup]').forEach(chk => {
+        chk.addEventListener('change', () => {
+          prefs[chk.dataset.dedup + '_dedup'] = chk.checked;
+          _saveAndRedraw();
+        });
+      });
+      panel.querySelectorAll('[data-up]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const i = parseInt(btn.dataset.up);
+          if (i > 0) { [prefs.order[i-1], prefs.order[i]] = [prefs.order[i], prefs.order[i-1]]; _saveAndRedraw(); }
+        });
+      });
+      panel.querySelectorAll('[data-down]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const i = parseInt(btn.dataset.down);
+          if (i < prefs.order.length - 1) { [prefs.order[i], prefs.order[i+1]] = [prefs.order[i+1], prefs.order[i]]; _saveAndRedraw(); }
+        });
+      });
+      panel.querySelectorAll('[data-remove]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          prefs.custom = prefs.custom.filter(id => id !== btn.dataset.remove);
+          _saveAndRedraw();
+        });
+      });
+      panel.querySelectorAll('[data-add-custom]').forEach(sel => {
+        sel.addEventListener('change', () => {
+          if (sel.value) { prefs.custom.push(sel.value); _saveAndRedraw(); }
+        });
+      });
+    }
+
+    _draw();
+  }
+
+  return { openWindow, get, initDisplay, loadFMPrefs, loadStartMenuPrefs, defaultStartMenuPrefs };
 })();

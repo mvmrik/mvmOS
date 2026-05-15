@@ -80,7 +80,7 @@ const AppStore = (() => {
 
           <!-- Browse -->
           <div class="as-panel" id="asp-browse">
-            <div class="as-list as-cat-grid" id="as-cat-grid"><div class="as-loading">Loading categories…</div></div>
+            <div class="as-list as-cat-grid" id="as-cat-grid"><div class="as-loading"\>${t('appstore_loading_categories')}</div></div>
             <div class="as-browse-pkg" id="as-browse-pkg" style="display:none">
               <div class="as-toolbar">
                 <button class="s-btn-sm" id="as-back">← Back</button>
@@ -98,7 +98,7 @@ const AppStore = (() => {
               <input class="as-filter" id="as-installed-filter" placeholder="Filter installed…">
               <button class="s-btn" id="as-refresh">↺</button>
             </div>
-            <div class="as-list" id="as-installed-list"><div class="as-loading">Loading…</div></div>
+            <div class="as-list" id="as-installed-list"><div class="as-loading"\>${t('loading')}</div></div>
           </div>
 
           <!-- Search (Linux) -->
@@ -117,7 +117,7 @@ const AppStore = (() => {
               <span style="font-size:.8rem;color:var(--text-dim);flex:1">Installed mvmOS apps</span>
               <button class="s-btn" id="as-app-installed-refresh">↺</button>
             </div>
-            <div class="as-list" id="as-app-installed-list"><div class="as-loading">Loading…</div></div>
+            <div class="as-list" id="as-app-installed-list"><div class="as-loading"\>${t('loading')}</div></div>
           </div>
 
           <!-- My Apps (custom stores) -->
@@ -126,7 +126,7 @@ const AppStore = (() => {
               <span style="font-size:.8rem;color:var(--text-dim);flex:1">Apps from custom stores</span>
               <button class="s-btn" id="as-myapps-refresh">↺</button>
             </div>
-            <div class="as-list" id="as-myapps-list"><div class="as-loading">Loading…</div></div>
+            <div class="as-list" id="as-myapps-list"><div class="as-loading"\>${t('loading')}</div></div>
           </div>
 
           <!-- App Stores management -->
@@ -144,7 +144,7 @@ const AppStore = (() => {
                 <span id="as-store-err" style="font-size:.78rem;color:#f38ba8;align-self:center"></span>
               </div>
             </div>
-            <div class="as-list" id="as-stores-list"><div class="as-loading">Loading…</div></div>
+            <div class="as-list" id="as-stores-list"><div class="as-loading"\>${t('loading')}</div></div>
           </div>
 
           <!-- My Widgets -->
@@ -153,7 +153,7 @@ const AppStore = (() => {
               <span style="font-size:.8rem;color:var(--text-dim);flex:1">Widgets from custom stores</span>
               <button class="s-btn" id="as-my-widgets-refresh">↺</button>
             </div>
-            <div class="as-list" id="as-my-widgets-list"><div class="as-loading">Loading…</div></div>
+            <div class="as-list" id="as-my-widgets-list"><div class="as-loading"\>${t('loading')}</div></div>
           </div>
 
           <!-- Widget Installed -->
@@ -162,7 +162,7 @@ const AppStore = (() => {
               <span style="font-size:.8rem;color:var(--text-dim);flex:1">Installed widgets</span>
               <button class="s-btn" id="as-widget-installed-refresh">↺</button>
             </div>
-            <div class="as-list" id="as-widget-installed-list"><div class="as-loading">Loading…</div></div>
+            <div class="as-list" id="as-widget-installed-list"><div class="as-loading"\>${t('loading')}</div></div>
           </div>
 
           <!-- Widget Stores management -->
@@ -180,7 +180,7 @@ const AppStore = (() => {
                 <span id="as-wstore-err" style="font-size:.78rem;color:#f38ba8;align-self:center"></span>
               </div>
             </div>
-            <div class="as-list" id="as-wstores-list"><div class="as-loading">Loading…</div></div>
+            <div class="as-list" id="as-wstores-list"><div class="as-loading"\>${t('loading')}</div></div>
           </div>
 
           <!-- Theme Installed -->
@@ -189,7 +189,7 @@ const AppStore = (() => {
               <span style="font-size:.8rem;color:var(--text-dim);flex:1">Installed themes</span>
               <button class="s-btn" id="as-theme-installed-refresh">↺</button>
             </div>
-            <div class="as-list" id="as-theme-installed-list"><div class="as-loading">Loading…</div></div>
+            <div class="as-list" id="as-theme-installed-list"><div class="as-loading"\>${t('loading')}</div></div>
           </div>
 
           <!-- My Themes (custom stores only) -->
@@ -198,7 +198,7 @@ const AppStore = (() => {
               <span style="font-size:.8rem;color:var(--text-dim);flex:1">Themes from custom stores</span>
               <button class="s-btn" id="as-my-themes-refresh">↺</button>
             </div>
-            <div class="as-list" id="as-my-themes-list"><div class="as-loading">Loading…</div></div>
+            <div class="as-list" id="as-my-themes-list"><div class="as-loading"\>${t('loading')}</div></div>
           </div>
 
           <!-- Theme Stores management -->
@@ -216,7 +216,7 @@ const AppStore = (() => {
                 <span id="as-tstore-err" style="font-size:.78rem;color:#f38ba8;align-self:center"></span>
               </div>
             </div>
-            <div class="as-list" id="as-tstores-list"><div class="as-loading">Loading…</div></div>
+            <div class="as-list" id="as-tstores-list"><div class="as-loading"\>${t('loading')}</div></div>
           </div>
 
           <!-- Dynamic store panels (added at runtime) -->
@@ -224,7 +224,7 @@ const AppStore = (() => {
           <!-- apt output overlay -->
           <div class="as-output-wrap" id="as-output-wrap" style="display:none">
             <div class="as-output-header">
-              <span id="as-output-title">Working…</span>
+              <span id="as-output-title"\>${t('appstore_working')}</span>
               <button class="s-btn-sm" id="as-output-close">✕</button>
             </div>
             <div class="as-output" id="as-output"></div>
@@ -370,7 +370,7 @@ const AppStore = (() => {
         const panel = document.createElement('div');
         panel.className = 'as-panel';
         panel.id = panelId;
-        panel.innerHTML = `<div class="as-list" id="as-store-list-${store.id}"><div class="as-loading">Loading…</div></div>`;
+        panel.innerHTML = `<div class="as-list" id="as-store-list-${store.id}"><div class="as-loading"\>${t('loading')}</div></div>`;
         body.querySelector('.as-main').insertBefore(panel, body.querySelector('#as-output-wrap'));
       }
 
@@ -394,7 +394,7 @@ const AppStore = (() => {
   async function loadStoreCategories(body, store) {
     const list = body.querySelector(`#as-store-list-${store.id}`);
     if (!list) return;
-    list.innerHTML = '<div class="as-loading">Loading…</div>';
+    list.innerHTML = `<div class="as-loading">${t('loading')}</div>`;
     const res = await fetch(`/api/plugins/categories?store_id=${store.id}`);
     const data = await res.json();
     if (data.error) { list.innerHTML = `<div class="as-loading">Error: ${data.error}</div>`; return; }
@@ -406,7 +406,7 @@ const AppStore = (() => {
     }
 
     const cats = data.categories || [];
-    if (!cats.length) { list.innerHTML = '<div class="as-loading">No categories.</div>'; return; }
+    if (!cats.length) { list.innerHTML = `<div class="as-loading">${t('wstore_no_categories')}</div>`; return; }
 
     list.innerHTML = '';
     const grid = document.createElement('div');
@@ -429,7 +429,7 @@ const AppStore = (() => {
 
   // ── Category apps ─────────────────────────────────────────────────────────
   async function loadCategoryApps(body, store, cat, list) {
-    list.innerHTML = '<div class="as-loading">Loading…</div>';
+    list.innerHTML = `<div class="as-loading">${t('loading')}</div>`;
 
     const params = cat.manifest_url
       ? `category_url=${encodeURIComponent(cat.manifest_url)}`
@@ -455,11 +455,11 @@ const AppStore = (() => {
   // ── App Installed (all installed mvmOS apps) ──────────────────────────────
   async function loadAppInstalled(body) {
     const list = body.querySelector('#as-app-installed-list');
-    list.innerHTML = '<div class="as-loading">Loading…</div>';
+    list.innerHTML = `<div class="as-loading">${t('loading')}</div>`;
     const res = await fetch('/api/plugins');
     const plugins = await res.json();
     if (!plugins.length) {
-      list.innerHTML = '<div class="as-loading">No mvmOS apps installed.</div>';
+      list.innerHTML = `<div class="as-loading">${t('appstore_no_installed')}</div>`;
       return;
     }
     renderMvmosApps(list, plugins.map(p => ({ ...p, installed: true })), body);
@@ -468,12 +468,12 @@ const AppStore = (() => {
   // ── My Apps (custom stores only) ──────────────────────────────────────────
   async function loadMyApps(body) {
     const list = body.querySelector('#as-myapps-list');
-    list.innerHTML = '<div class="as-loading">Loading…</div>';
+    list.innerHTML = `<div class="as-loading">${t('loading')}</div>`;
     const res = await fetch('/api/plugins');
     const plugins = await res.json();
     const myApps = plugins.filter(p => !p.official);
     if (!myApps.length) {
-      list.innerHTML = '<div class="as-loading">No apps from custom stores. Add a store from the Stores tab.</div>';
+      list.innerHTML = `<div class="as-loading">${t('appstore_no_custom')}</div>`;
       return;
     }
     renderMvmosApps(list, myApps.map(p => ({ ...p, installed: true })), body);
@@ -482,7 +482,7 @@ const AppStore = (() => {
   // ── Stores management ─────────────────────────────────────────────────────
   async function loadStores(body) {
     const list = body.querySelector('#as-stores-list');
-    list.innerHTML = '<div class="as-loading">Loading…</div>';
+    list.innerHTML = `<div class="as-loading">${t('loading')}</div>`;
     const res = await fetch('/api/plugins/stores');
     const stores = await res.json();
     list.innerHTML = '';
@@ -515,7 +515,7 @@ const AppStore = (() => {
     const url  = body.querySelector('#as-store-url-input').value.trim();
     const err  = body.querySelector('#as-store-err');
     if (!name || !url) { err.textContent = 'Name and URL are required.'; return; }
-    err.textContent = 'Checking…';
+    err.textContent = t('appstore_checking');
     const res = await fetch('/api/plugins/stores', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -542,7 +542,7 @@ const AppStore = (() => {
           <div class="as-pkg-top">
             <span class="as-pkg-name">${app.icon} ${app.name}</span>
             <span class="as-cat-badge as-cat-sm">${app.category}</span>
-            ${app.installed ? '<span class="as-installed-badge">Installed</span>' : ''}
+            ${app.installed ? `<span class="as-installed-badge">${t('appstore_installed_badge')}</span>` : ''}
             ${app.update_available ? '<span class="as-update-badge">Update available</span>' : ''}
           </div>
           <span class="as-pkg-desc">${app.description || ''}</span>
@@ -578,7 +578,7 @@ const AppStore = (() => {
           mvmOS._loadPlugin(appData.id);
           body._as?.refreshCurrent?.();
         } else {
-          btn.disabled = false; btn.textContent = btn.dataset.orig || 'Install';
+          btn.disabled = false; btn.textContent = btn.dataset.orig || t('appstore_install');
           alert('Failed: ' + (result.error || 'unknown'));
         }
       }
@@ -590,7 +590,7 @@ const AppStore = (() => {
       });
 
       row.querySelector('.as-mvmos-install')?.addEventListener('click', async e => {
-        e.target.dataset.orig = 'Install';
+        e.target.dataset.orig = t('appstore_install');
         await doInstall(JSON.parse(e.target.dataset.app), e.target, 'Installing…');
       });
       row.querySelector('.as-mvmos-update')?.addEventListener('click', async e => {
@@ -612,7 +612,7 @@ const AppStore = (() => {
   // ── Linux packages ────────────────────────────────────────────────────────
   async function loadCategories(body) {
     const grid = body.querySelector('#as-cat-grid');
-    grid.innerHTML = '<div class="as-loading">Loading categories…</div>';
+    grid.innerHTML = `<div class="as-loading">${t('appstore_loading_categories')}</div>`;
     const res = await fetch('/api/packages/categories');
     const cats = await res.json();
     grid.innerHTML = '';
@@ -639,7 +639,7 @@ const AppStore = (() => {
   async function loadBrowsePkgs(body, state, q = '') {
     const list = body.querySelector('#as-browse-list');
     const pager = body.querySelector('#as-pagination');
-    list.innerHTML = '<div class="as-loading">Loading…</div>';
+    list.innerHTML = `<div class="as-loading">${t('loading')}</div>`;
     pager.innerHTML = '';
     const url = `/api/packages/by-category?section=${encodeURIComponent(state.section)}&page=${state.page}&limit=40&q=${encodeURIComponent(q)}`;
     const res = await fetch(url);
@@ -661,7 +661,7 @@ const AppStore = (() => {
 
   async function loadInstalled(body) {
     const list = body.querySelector('#as-installed-list');
-    list.innerHTML = '<div class="as-loading">Loading…</div>';
+    list.innerHTML = `<div class="as-loading">${t('loading')}</div>`;
     const res = await fetch('/api/packages/installed');
     const pkgs = await res.json();
     renderPkgList(list, pkgs.map(p => ({ ...p, installed: true })), body);
@@ -673,7 +673,7 @@ const AppStore = (() => {
     list.innerHTML = '<div class="as-loading">Searching…</div>';
     const res = await fetch(`/api/packages/search?q=${encodeURIComponent(q)}`);
     const pkgs = await res.json();
-    if (!pkgs.length) { list.innerHTML = '<div class="as-loading">No results.</div>'; return; }
+    if (!pkgs.length) { list.innerHTML = `<div class="as-loading">${t('appstore_no_results')}</div>`; return; }
     renderPkgList(list, pkgs, body);
   }
 
@@ -708,7 +708,7 @@ const AppStore = (() => {
     const detail = body.querySelector('#as-detail');
     const detailBody = body.querySelector('#as-detail-body');
     detail.style.display = 'flex';
-    detailBody.innerHTML = '<div class="as-loading">Loading…</div>';
+    detailBody.innerHTML = `<div class="as-loading">${t('loading')}</div>`;
     const res = await fetch(`/api/packages/info?name=${encodeURIComponent(pkg.name)}`);
     const info = await res.json();
     const isInstalled = pkg.installed;
@@ -741,7 +741,7 @@ const AppStore = (() => {
         if (!top.querySelector('.as-installed-badge')) {
           const badge = document.createElement('span');
           badge.className = 'as-installed-badge';
-          badge.textContent = 'Installed';
+          badge.textContent = t('appstore_installed_badge');
           top.appendChild(badge);
         }
       }
@@ -833,7 +833,7 @@ const AppStore = (() => {
               >${v === '' ? 'All' : v.charAt(0).toUpperCase() + v.slice(1)}</button>
             `).join('')}
           </div>
-          <div class="as-list" id="as-wstore-list-${store.id}"><div class="as-loading">Loading…</div></div>
+          <div class="as-list" id="as-wstore-list-${store.id}"><div class="as-loading"\>${t('loading')}</div></div>
         `;
         body.querySelector('.as-main').insertBefore(panel, body.querySelector('#as-output-wrap'));
 
@@ -907,14 +907,14 @@ const AppStore = (() => {
   async function loadWidgetStoreCategories(body, store, widgetType) {
     const list = body.querySelector(`#as-wstore-list-${store.id}`);
     if (!list) return;
-    list.innerHTML = '<div class="as-loading">Loading…</div>';
+    list.innerHTML = `<div class="as-loading">${t('loading')}</div>`;
     const params = `store_id=${store.id}${widgetType ? `&widget_type=${widgetType}` : ''}`;
     const res = await fetch(`/api/widgets/categories?${params}`);
     const data = await res.json();
     if (data.error) { list.innerHTML = `<div class="as-loading">Error: ${data.error}</div>`; return; }
 
     const cats = data.categories || [];
-    if (!cats.length) { list.innerHTML = '<div class="as-loading">No widgets found.</div>'; return; }
+    if (!cats.length) { list.innerHTML = `<div class="as-loading">${t('wstore_no_widgets')}</div>`; return; }
 
     list.innerHTML = '';
     const grid = document.createElement('div');
@@ -936,7 +936,7 @@ const AppStore = (() => {
   }
 
   async function loadWidgetCategoryItems(body, store, cat, list, widgetType) {
-    list.innerHTML = '<div class="as-loading">Loading…</div>';
+    list.innerHTML = `<div class="as-loading">${t('loading')}</div>`;
     let params = cat.manifest_url
       ? `category_url=${encodeURIComponent(cat.manifest_url)}`
       : `store_id=${store.id}&category_id=${encodeURIComponent(cat.id)}`;
@@ -960,26 +960,26 @@ const AppStore = (() => {
 
   async function loadMyWidgets(body) {
     const list = body.querySelector('#as-my-widgets-list');
-    list.innerHTML = '<div class="as-loading">Loading…</div>';
+    list.innerHTML = `<div class="as-loading">${t('loading')}</div>`;
     const res = await fetch('/api/widgets');
     const widgets = await res.json();
     const mine = widgets.filter(w => !w.official || w.official === 0);
-    if (!mine.length) { list.innerHTML = '<div class="as-loading">No custom widgets installed. Add a store from Widget Stores.</div>'; return; }
+    if (!mine.length) { list.innerHTML = `<div class="as-loading">${t('wstore_no_custom')}</div>`; return; }
     renderWidgetRows(list, mine.map(w => ({ ...w, installed: true })), body);
   }
 
   async function loadWidgetInstalled(body) {
     const list = body.querySelector('#as-widget-installed-list');
-    list.innerHTML = '<div class="as-loading">Loading…</div>';
+    list.innerHTML = `<div class="as-loading">${t('loading')}</div>`;
     const res = await fetch('/api/widgets');
     const widgets = await res.json();
-    if (!widgets.length) { list.innerHTML = '<div class="as-loading">No widgets installed.</div>'; return; }
+    if (!widgets.length) { list.innerHTML = `<div class="as-loading">${t('wstore_no_installed')}</div>`; return; }
     renderWidgetRows(list, widgets.map(w => ({ ...w, installed: true })), body);
   }
 
   async function loadWidgetStores(body) {
     const list = body.querySelector('#as-wstores-list');
-    list.innerHTML = '<div class="as-loading">Loading…</div>';
+    list.innerHTML = `<div class="as-loading">${t('loading')}</div>`;
     const res = await fetch('/api/widgets/stores');
     const stores = await res.json();
     list.innerHTML = '';
@@ -1011,7 +1011,7 @@ const AppStore = (() => {
     const url  = body.querySelector('#as-wstore-url-input').value.trim();
     const err  = body.querySelector('#as-wstore-err');
     if (!name || !url) { err.textContent = 'Name and URL required.'; return; }
-    err.textContent = 'Checking…';
+    err.textContent = t('appstore_checking');
     const res = await fetch('/api/widgets/stores', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -1038,7 +1038,7 @@ const AppStore = (() => {
             <span class="as-pkg-name">${w.icon} ${w.name}</span>
             <span class="as-cat-badge as-cat-sm">${w.category}</span>
             ${w.widget_type ? `<span class="as-cat-badge as-cat-sm" style="background:#89b4fa20;color:#89b4fa">${w.widget_type}</span>` : ''}
-            ${w.installed ? '<span class="as-installed-badge">Installed</span>' : ''}
+            ${w.installed ? `<span class="as-installed-badge">${t('appstore_installed_badge')}</span>` : ''}
             ${w.update_available ? '<span class="as-update-badge">Update</span>' : ''}
           </div>
           <span class="as-pkg-desc">${w.description || ''}</span>
@@ -1066,7 +1066,7 @@ const AppStore = (() => {
           await mvmOS._loadWidget(data.id);
           body._as.refreshCurrent?.();
         } else {
-          btn.disabled = false; btn.textContent = label === 'Installing…' ? 'Install' : '↑ Update';
+          btn.disabled = false; btn.textContent = label.startsWith('Install') ? t('appstore_install') : '↑ ' + t('appstore_update');
           alert('Failed: ' + (result.error || 'unknown'));
         }
       }
@@ -1119,7 +1119,7 @@ const AppStore = (() => {
     if (!panel) {
       panel = document.createElement('div');
       panel.className = 'as-panel';
-      panel.innerHTML = `<div class="as-list as-cat-grid" id="as-tcat-grid-${Date.now()}"><div class="as-loading">Loading…</div></div>`;
+      panel.innerHTML = `<div class="as-list as-cat-grid" id="as-tcat-grid-${Date.now()}"><div class="as-loading"\>${t('loading')}</div></div>`;
       main.appendChild(panel);
       if (tab) tab._panel = panel;
     }
@@ -1127,12 +1127,12 @@ const AppStore = (() => {
     panel.classList.add('active');
 
     const gridEl = panel.querySelector('[id^="as-tcat-grid"]');
-    gridEl.innerHTML = '<div class="as-loading">Loading…</div>';
+    gridEl.innerHTML = `<div class="as-loading">${t('loading')}</div>`;
 
     const res = await fetch('/api/themes/categories');
     const cats = await res.json();
 
-    if (!cats.length) { gridEl.innerHTML = '<div class="as-loading">No categories found.</div>'; return; }
+    if (!cats.length) { gridEl.innerHTML = `<div class="as-loading">${t('appstore_no_categories')}</div>`; return; }
 
     gridEl.innerHTML = cats.map(c => `
       <div class="as-cat-card" data-manifest="${c.manifest_url}">
@@ -1148,7 +1148,7 @@ const AppStore = (() => {
 
   async function loadThemeCategoryItems(body, manifestUrl, panel, storeId) {
     const gridEl = panel.querySelector('[id^="as-tcat-grid"]');
-    gridEl.innerHTML = '<div class="as-loading">Loading…</div>';
+    gridEl.innerHTML = `<div class="as-loading">${t('loading')}</div>`;
 
     const [catRes, installedRes] = await Promise.all([
       fetch(`/api/themes/category-themes?manifest_url=${encodeURIComponent(manifestUrl)}`),
@@ -1177,7 +1177,7 @@ const AppStore = (() => {
     });
     gridEl.appendChild(backBtn);
 
-    if (!items.length) { gridEl.innerHTML += '<div class="as-loading">No themes found.</div>'; return; }
+    if (!items.length) { gridEl.innerHTML += `<div class="as-loading">${t('tstore_no_themes')}</div>`; return; }
 
     const list = document.createElement('div');
     list.style.cssText = 'overflow-y:auto;flex:1;';
@@ -1204,7 +1204,7 @@ const AppStore = (() => {
 
       row.querySelector('.ts-install')?.addEventListener('click', async e => {
         const btn = e.target;
-        btn.disabled = true; btn.textContent = 'Installing…';
+        btn.disabled = true; btn.textContent = t('loading');
         const data = JSON.parse(btn.dataset.theme);
         const res = await fetch('/api/themes/install', {
           method: 'POST',
@@ -1214,7 +1214,7 @@ const AppStore = (() => {
         if ((await res.json()).ok) {
           body._as.refreshCurrent?.();
           loadThemeCategoryItems(body, manifestUrl, panel, storeId);
-        } else { btn.disabled = false; btn.textContent = 'Install'; }
+        } else { btn.disabled = false; btn.textContent = t('appstore_install'); }
       });
 
       row.querySelector('.ts-activate')?.addEventListener('click', async e => {
@@ -1271,28 +1271,28 @@ const AppStore = (() => {
 
   async function loadThemeInstalled(body) {
     const list = body.querySelector('#as-theme-installed-list');
-    list.innerHTML = '<div class="as-loading">Loading…</div>';
+    list.innerHTML = `<div class="as-loading">${t('loading')}</div>`;
     const res = await fetch('/api/themes');
     const themes = await res.json();
-    if (!themes.length) { list.innerHTML = '<div class="as-loading">No themes installed.</div>'; return; }
+    if (!themes.length) { list.innerHTML = `<div class="as-loading">${t('tstore_no_installed')}</div>`; return; }
     _renderThemeRows(list, themes, () => loadThemeInstalled(body));
   }
 
   async function loadMyThemes(body) {
     const list = body.querySelector('#as-my-themes-list');
-    list.innerHTML = '<div class="as-loading">Loading…</div>';
+    list.innerHTML = `<div class="as-loading">${t('loading')}</div>`;
     const [themesRes, storesRes] = await Promise.all([fetch('/api/themes'), fetch('/api/themes/stores')]);
     const themes = await themesRes.json();
     const stores = await storesRes.json();
     const officialIds = new Set(stores.filter(s => s.official).map(s => s.id));
     const custom = themes.filter(t => t.store_id && !officialIds.has(t.store_id));
-    if (!custom.length) { list.innerHTML = '<div class="as-loading">No themes from custom stores.</div>'; return; }
+    if (!custom.length) { list.innerHTML = `<div class="as-loading">${t('tstore_no_custom')}</div>`; return; }
     _renderThemeRows(list, custom, () => loadMyThemes(body));
   }
 
   async function loadThemeStores(body) {
     const list = body.querySelector('#as-tstores-list');
-    list.innerHTML = '<div class="as-loading">Loading…</div>';
+    list.innerHTML = `<div class="as-loading">${t('loading')}</div>`;
     const res = await fetch('/api/themes/stores');
     const stores = await res.json();
     list.innerHTML = '';
@@ -1429,7 +1429,7 @@ const UpdateManager = (() => {
     const mvmosAllBtn = body.querySelector('#um-mvmos-all');
 
     async function loadMvmOS() {
-      mvmosList.innerHTML = '<div class="as-loading">Loading…</div>';
+      mvmosList.innerHTML = `<div class="as-loading">${t('loading')}</div>`;
       const res = await fetch('/api/updates');
       mvmosUpdates = await res.json();
       renderMvmOS();
@@ -1536,7 +1536,7 @@ const UpdateManager = (() => {
     }
 
     sysRefresh.addEventListener('click', async () => {
-      sysRefresh.disabled = true; sysRefresh.textContent = '↺ Checking…';
+      sysRefresh.disabled = true; sysRefresh.textContent = '↺ ' + t('appstore_checking');
       sysList.innerHTML = '<div class="as-loading">Running apt update…</div>';
       const res = await fetch('/api/packages/upgradable');
       sysPkgs = await res.json();

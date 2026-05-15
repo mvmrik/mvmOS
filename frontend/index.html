@@ -32,32 +32,19 @@
     <span id="current-user-label">…</span>
   </div>
   <div class="start-menu-search-wrap">
-    <input id="start-menu-search" class="start-menu-search" type="text" placeholder="Search…" autocomplete="off">
+    <input id="start-menu-search" class="start-menu-search" type="text" autocomplete="off" data-i18n-ph="search_placeholder" placeholder="Search…">
   </div>
   <div id="start-menu-results" style="display:none"></div>
   <div id="start-menu-main">
-  <div class="start-menu-item" data-app="terminal">
-    <span class="emoji">🖥️</span> Terminal
-  </div>
-  <div class="start-menu-item" data-app="filemanager">
-    <span class="emoji">🗂️</span> File Manager
-  </div>
   <div id="start-menu-apps-anchor"></div>
-  <div class="start-menu-sep"></div>
-  <div class="start-menu-item" data-app="settings">
-    <span class="emoji">⚙️</span> Settings
-  </div>
-  <div class="start-menu-item" data-app="appstore">
-    <span class="emoji">📦</span> App Store
-  </div>
   <div class="start-menu-sep"></div>
   </div>
   <div class="start-menu-item" id="switch-user-btn">
-    <span class="emoji">🔄</span> Switch User
+    <span class="emoji">🔄</span> <span data-i18n="start_switch_user">Switch User</span>
   </div>
   <form method="POST" action="/logout" style="margin:0">
     <button type="submit" class="start-menu-item start-menu-logout" style="width:100%;background:none;border:none;cursor:pointer;text-align:left">
-      <span class="emoji">🚪</span> Log out
+      <span class="emoji">🚪</span> <span data-i18n="start_logout">Log out</span>
     </button>
   </form>
 </div>
@@ -71,15 +58,15 @@
 
 <!-- Right-click context menu -->
 <div id="context-menu">
-  <div class="ctx-item" id="ctx-paste" style="display:none">📋 Paste</div>
+  <div class="ctx-item" id="ctx-paste" style="display:none">📋 <span data-i18n="ctx_paste">Paste</span></div>
   <div class="ctx-sep" id="ctx-paste-sep" style="display:none"></div>
-  <div class="ctx-item" id="ctx-new-link">🔗 New Link</div>
-  <div class="ctx-item" id="ctx-new-folder">📁 New Folder</div>
-  <div class="ctx-item" id="ctx-files">📁 Open Files</div>
+  <div class="ctx-item" id="ctx-new-link">🔗 <span data-i18n="ctx_new_link">New Link</span></div>
+  <div class="ctx-item" id="ctx-new-folder">📁 <span data-i18n="ctx_new_folder">New Folder</span></div>
+  <div class="ctx-item" id="ctx-files">📁 <span data-i18n="ctx_open_files">Open Files</span></div>
   <div class="ctx-sep"></div>
-  <div class="ctx-item" id="ctx-widgets">🔲 Widgets</div>
+  <div class="ctx-item" id="ctx-widgets">🔲 <span data-i18n="ctx_widgets">Widgets</span></div>
   <div class="ctx-sep"></div>
-  <div class="ctx-item ctx-danger" id="ctx-refresh">↺ Refresh Desktop</div>
+  <div class="ctx-item ctx-danger" id="ctx-refresh">↺ <span data-i18n="ctx_refresh_desktop">Refresh Desktop</span></div>
 </div>
 
 <!-- New Link dialog -->
@@ -95,6 +82,7 @@
   </div>
 </div>
 
+<script src="/i18n/i18n.js"></script>
 <script src="/lib/xterm.js"></script>
 <script src="/lib/xterm-addon-fit.js"></script>
 <script src="/mvmos.js"></script>

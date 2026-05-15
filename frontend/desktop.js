@@ -238,14 +238,6 @@ const Desktop = (() => {
       toRender.push({ ...def, order: positions[def.id]?.order ?? i });
     });
 
-    // mvmOS plugin apps
-    if (window.mvmOS) {
-      Object.values(mvmOS._apps).forEach(a => {
-        if (desktopState.hidden?.['app-' + a.id]) return;
-        toRender.push({ id: 'app-' + a.id, label: a.name, emoji: a.icon || '📦', app: a.id, order: positions['app-' + a.id]?.order ?? 9999 });
-      });
-    }
-
     // filesystem desktop entries
     _desktopEntries.forEach((entry, i) => {
       const icon = _fileIcon(entry);
@@ -454,9 +446,9 @@ const Desktop = (() => {
         items.push('sep');
       }
       if (fsEntry) {
-        items.push({ label: `🗑️ Delete${multi ? ' ('+_desktopSelected.size+')' : ''}`, action: 'remove', danger: true });
+        items.push({ label: `🗑️ ${t('ctx_delete')}${multi ? ' ('+_desktopSelected.size+')' : ''}`, action: 'remove', danger: true });
       } else {
-        items.push({ label: '🗑️ Remove from Desktop', action: 'remove', danger: true });
+        items.push({ label: `🗑️ ${t('ctx_remove_from_desktop')}`, action: 'remove', danger: true });
       }
       const ctx = showIconCtx(e.clientX, e.clientY, items);
       ctx.querySelector('[data-action="remove"]')?.addEventListener('click', async () => {
@@ -562,12 +554,12 @@ const Desktop = (() => {
     el.innerHTML = `
       <div class="window-titlebar">
         <div class="window-controls">
-          <button class="wbtn wbtn-close"  title="Close"></button>
-          ${!mobile ? '<button class="wbtn wbtn-min" title="Minimize"></button>' : ''}
-          ${!mobile ? '<button class="wbtn wbtn-max" title="Maximize"></button>' : ''}
+          <button class="wbtn wbtn-close"  title="${t('win_close')}"></button>
+          ${!mobile ? `<button class="wbtn wbtn-min" title="${t('win_minimize')}"></button>` : ''}
+          ${!mobile ? `<button class="wbtn wbtn-max" title="${t('win_maximize')}"></button>` : ''}
         </div>
         <div class="window-title">${title}</div>
-        ${appSettings ? '<button class="wbtn-appsettings" title="App settings">⚙</button>' : ''}
+        ${appSettings ? `<button class="wbtn-appsettings" title="${t('settings_title')}">⚙</button>` : ''}
       </div>
       <div class="window-body"></div>
       ${!mobile ? '<div class="window-resize"></div>' : ''}
@@ -734,7 +726,7 @@ const Desktop = (() => {
     startResults.innerHTML = '';
     const matches = _startMenuAllApps().filter(a => a.label.toLowerCase().includes(q));
     if (!matches.length) {
-      startResults.innerHTML = '<div style="padding:8px 14px;font-size:.8rem;color:var(--text-dim)">No results</div>';
+      startResults.innerHTML = `<div style="padding:8px 14px;font-size:.8rem;color:var(--text-dim)">${t('no_results')}</div>`;
       return;
     }
     matches.forEach(a => {
@@ -779,8 +771,8 @@ const Desktop = (() => {
       : window._desktopIsOn?.(appId);
     const ctx = showIconCtx(e.clientX, e.clientY, [
       alreadyOn
-        ? { label: '🗑️ Remove from Desktop', action: 'remove', danger: true }
-        : { label: '➕ Add to Desktop', action: 'add' },
+        ? { label: `🗑️ ${t('ctx_remove_from_desktop')}`, action: 'remove', danger: true }
+        : { label: `➕ ${t('ctx_add_to_desktop')}`, action: 'add' },
     ]);
     ctx.querySelector('[data-action]').addEventListener('click', () => {
       hideIconCtx();
@@ -947,17 +939,17 @@ const Desktop = (() => {
     startMenu.classList.remove('open');
     Desktop.createWindow({
       id: 'switch-user',
-      title: '🔄 Switch User',
+      title: `🔄 ${t('start_switch_user')}`,
       width: 340,
       height: 220,
       onMount(body) {
         body.style.padding = '20px';
         body.innerHTML = `<div style="display:flex;flex-direction:column;gap:12px">
-          <div style="font-size:.85rem;color:var(--text-dim)">Current user: <strong id="su-current" style="color:var(--text)"></strong></div>
-          <div class="settings-row"><label style="width:90px">Switch to</label><select class="s-input" id="su-user"><option value="">Loading…</option></select></div>
-          <div class="settings-row"><label style="width:90px">Password</label><input class="s-input" id="su-pass" type="password" placeholder="password"></div>
+          <div style="font-size:.85rem;color:var(--text-dim)">${t('switch_user_current')} <strong id="su-current" style="color:var(--text)"></strong></div>
+          <div class="settings-row"><label style="width:90px">${t('switch_user_to')}</label><select class="s-input" id="su-user"><option value="">${t('loading')}</option></select></div>
+          <div class="settings-row"><label style="width:90px">${t('switch_user_password')}</label><input class="s-input" id="su-pass" type="password" placeholder="${t('switch_user_password_ph')}"></div>
           <div style="display:flex;align-items:center;gap:10px">
-            <button class="s-btn" id="su-btn">Switch</button>
+            <button class="s-btn" id="su-btn">${t('switch_user_btn')}</button>
             <span id="su-msg" style="font-size:.82rem"></span>
           </div>
         </div>`;
