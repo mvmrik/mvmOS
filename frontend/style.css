@@ -400,6 +400,8 @@ html, body {
   white-space: nowrap;
 }
 .window-controls { display: flex; gap: 6px; }
+.fm-root-badge { font-size:.72rem; background:#7c2d12; color:#fca5a5; border-radius:4px; padding:1px 7px; cursor:pointer; white-space:nowrap; flex-shrink:0; margin-left:6px; }
+.fm-root-badge:hover { background:#991b1b; }
 .wbtn {
   width: 13px; height: 13px;
   border-radius: 50%;

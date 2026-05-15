@@ -219,6 +219,8 @@ window._i18n = {
   'fm_type_folder':               'Папка',
   'fm_folder_count':              '{n} папк{s}',
   'fm_file_count':                '{n} файл{s}',
+  'fm_open_as_root':              '🔓 Отвори като root',
+  'fm_exit_root':                 'Изход от root режим',
 
   // App Store — apt actions
   'as_pkg_installing':            'Инсталиране на {pkg}…',

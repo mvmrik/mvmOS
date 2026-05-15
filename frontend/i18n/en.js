@@ -219,6 +219,8 @@ window._i18n = {
   'fm_type_folder':               'Folder',
   'fm_folder_count':              '{n} folder{s}',
   'fm_file_count':                '{n} file{s}',
+  'fm_open_as_root':              '🔓 Open as root',
+  'fm_exit_root':                 'Exit root mode',
 
   // App Store — apt actions
   'as_pkg_installing':            'Installing {pkg}…',

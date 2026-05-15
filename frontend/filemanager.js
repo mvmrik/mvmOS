@@ -371,14 +371,52 @@ const FileManager = (() => {
       this.updateActivePlacea(path);
 
       try {
-        const res = await fetch(`/api/files?path=${encodeURIComponent(path)}`);
+        const url = `/api/files?path=${encodeURIComponent(path)}` + (this._asRoot ? '&as_root=true' : '');
+        const res = await fetch(url);
         if (!res.ok) { this.showError(t('fm_cannot_read')); return; }
         const data = await res.json();
+        this._updateRootBadge(!!data.as_root);
         this.render(data.entries);
       } catch (e) {
         this.showError(t('fm_network_error'));
       } finally {
         this._navigating = false;
+      }
+    }
+
+    async navigateAsRoot(path) {
+      this._asRoot = true;
+      await this.navigate(path);
+      // keep _asRoot=true so sub-navigation stays as root
+    }
+
+    navigateNormal(path) {
+      this._asRoot = false;
+      this._updateRootBadge(false);
+      return this.navigate(path);
+    }
+
+    _updateRootBadge(isRoot) {
+      const win = this.body.closest('.window');
+      if (!win) return;
+      const titleEl = win.querySelector('.window-title');
+      if (!titleEl) return;
+      const base = `📁 ${t('app_filemanager')}`;
+      titleEl.textContent = isRoot ? `${base} (root)` : base;
+      let badge = win.querySelector('.fm-root-badge');
+      if (isRoot && !badge) {
+        badge = document.createElement('span');
+        badge.className = 'fm-root-badge';
+        badge.title = t('fm_exit_root');
+        badge.innerHTML = '🔓 root ✕';
+        badge.addEventListener('click', () => {
+          this._asRoot = false;
+          this._updateRootBadge(false);
+          this.navigate(this.currentPath);
+        });
+        titleEl.after(badge);
+      } else if (!isRoot && badge) {
+        badge.remove();
       }
     }
 
@@ -565,6 +603,8 @@ const FileManager = (() => {
         items.push({ label: `✂️ Cut${names.length > 1 ? ' ('+names.length+')' : ''}`,  action: () => { window._fmClipboard = { paths: names.map(n => this.joinPath(this.currentPath, n)), cut: true  }; } });
         items.push({ label: `🗑️ Delete${names.length > 1 ? ' ('+names.length+')' : ''}`, action: () => this.deleteEntries(names), danger: true });
         if (names.length === 1) items.push({ label: 'ℹ️ Info', action: () => this.showInfo(this._lastEntries.find(e => e.name === name)) });
+        if (names.length === 1 && this._lastEntries.find(e => e.name === name)?.type === 'dir')
+          items.push({ label: t('fm_open_as_root'), action: () => this.navigateAsRoot(this.joinPath(this.currentPath, name)) });
       } else {
         if (window._fmClipboard) {
           items.push({ label: '📋 Paste', action: () => this.paste() });

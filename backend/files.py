@@ -133,16 +133,16 @@ async def get_places(session=Depends(get_current_session)):
 
 
 @router.get("")
-async def list_dir(path: str = "/", session=Depends(get_current_session)):
+async def list_dir(path: str = "/", as_root: bool = False, session=Depends(get_current_session)):
     eu = session["effective_user"]
     real = safe_path(path, home_for(eu))
     if not os.path.isdir(real):
         raise HTTPException(status_code=404, detail="Not a directory")
     try:
-        entries = readdir_as_user(real, eu)
+        entries = readdir_as_user(real, "root" if as_root else eu)
     except PermissionError:
         raise HTTPException(status_code=403, detail="Permission denied")
-    return JSONResponse({"path": path, "entries": entries})
+    return JSONResponse({"path": path, "entries": entries, "as_root": as_root})
 
 
 @router.post("/upload")
