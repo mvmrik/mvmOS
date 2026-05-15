@@ -91,10 +91,29 @@ sudo tee "$SCRIPT_DIR/config.ini" > /dev/null <<EOF
 [server]
 port = $PORT
 EOF
-sudo chmod 600 "$SCRIPT_DIR/config.ini"
+
+# ── mvmos system user & group ─────────────────────────────────────────────────
+echo "  [3/4] Setting up mvmos user..."
+sudo groupadd -f mvmos
+sudo useradd -r -s /sbin/nologin -g mvmos -M mvmos 2>/dev/null || true
+# Add installing user to mvmos group
+sudo usermod -aG mvmos "$(whoami)"
+# Set ownership of install dir to mvmos
+sudo chown -R mvmos:mvmos "$SCRIPT_DIR"
+sudo chmod 755 "$SCRIPT_DIR"
+# Auth helper — owned by root, readable by mvmos group via sudo
+sudo chown root:root "$SCRIPT_DIR/bin/mvmos-auth"
+sudo chmod 755 "$SCRIPT_DIR/bin/mvmos-auth"
+
+# ── sudoers ───────────────────────────────────────────────────────────────────
+sudo tee /etc/sudoers.d/mvmos > /dev/null <<EOF
+mvmos ALL=(root) NOPASSWD: $SCRIPT_DIR/bin/mvmos-auth
+mvmos ALL=(ALL)  NOPASSWD: /usr/sbin/runuser
+EOF
+sudo chmod 440 /etc/sudoers.d/mvmos
 
 # ── systemd service ───────────────────────────────────────────────────────────
-echo "  [3/3] Installing systemd service..."
+echo "  [4/4] Installing systemd service..."
 SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
 
 sudo tee "$SERVICE_FILE" > /dev/null <<EOF
@@ -104,7 +123,8 @@ After=network.target
 
 [Service]
 Type=simple
-User=root
+User=mvmos
+Group=mvmos
 WorkingDirectory=$SCRIPT_DIR
 ExecStart=$VENV_DIR/bin/uvicorn backend.main:app --host 0.0.0.0 --port $PORT
 Restart=always

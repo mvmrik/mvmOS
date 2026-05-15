@@ -16,11 +16,31 @@ BASE_DIR = "/"
 
 
 def run_as(user: str, cmd: list, input_data: str = None):
-    """Run a command as the given user (uses runuser if not root)."""
+    """Run a command as the given user."""
     if user and user != "root":
-        cmd = ["runuser", "-u", user, "--"] + cmd
+        prefix = [] if os.geteuid() == 0 else ["sudo"]
+        cmd = prefix + ["runuser", "-u", user, "--"] + cmd
     r = subprocess.run(cmd, capture_output=True, text=True, input=input_data)
     return r
+
+
+def mkdir_as(path: str, user: str):
+    run_as(user, ["mkdir", "-p", path])
+
+def read_file_as(path: str, user: str) -> str:
+    r = run_as(user, ["cat", path])
+    if r.returncode != 0:
+        raise PermissionError(r.stderr)
+    return r.stdout
+
+def write_file_as(path: str, content: str, user: str):
+    r = run_as(user, ["tee", path], input_data=content)
+    if r.returncode != 0:
+        raise PermissionError(r.stderr)
+
+def stat_mtime_as(path: str, user: str) -> float:
+    r = run_as(user, ["stat", "-c", "%Y", path])
+    return float(r.stdout.strip()) if r.returncode == 0 else 0.0
 
 
 
@@ -52,16 +72,14 @@ for name in sorted(os.listdir(path)):
 print(json.dumps(entries))
 """.format(path=path)
     try:
-        pw = pwd.getpwnam(username)
+        prefix = [] if os.geteuid() == 0 else ["sudo"]
         r = subprocess.run(
-            ["python3", "-c", script],
+            prefix + ["runuser", "-u", username, "--", "python3", "-c", script],
             capture_output=True, text=True, timeout=10,
-            preexec_fn=lambda: (os.setgid(pw.pw_gid), os.setuid(pw.pw_uid)),
         )
         if r.returncode == 0:
             return _json.loads(r.stdout)
-        if r.returncode != 0:
-            raise PermissionError(r.stderr.strip())
+        raise PermissionError(r.stderr.strip())
     except PermissionError:
         raise
     except Exception:
@@ -149,13 +167,23 @@ async def list_dir(path: str = "/", as_root: bool = False, session=Depends(get_c
 async def upload_file(
     path: str = Form("/"),
     file: UploadFile = File(...),
-    _session=Depends(get_current_session),
+    session=Depends(get_current_session),
 ):
     if not file.filename:
         raise HTTPException(status_code=400, detail="Empty filename")
+    eu = session["effective_user"]
     dest = safe_path(os.path.join(path, os.path.basename(file.filename)))
-    with open(dest, "wb") as f:
-        f.write(await file.read())
+    import tempfile
+    data = await file.read()
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".mvmostmp") as tmp:
+        tmp.write(data)
+        tmp_path = tmp.name
+    try:
+        r = run_as(eu, ["cp", tmp_path, dest])
+    finally:
+        os.unlink(tmp_path)
+    if r.returncode != 0:
+        raise HTTPException(status_code=403, detail="Permission denied")
     return {"ok": True, "name": file.filename}
 
 
@@ -170,30 +198,25 @@ class CopyRequest(BaseModel):
     move: bool = False
 
 @router.post("/copy")
-async def copy_file(body: CopyRequest, _session=Depends(get_current_session)):
+async def copy_file(body: CopyRequest, session=Depends(get_current_session)):
+    eu = session["effective_user"]
     src = safe_path(body.src)
     dst_dir = safe_path(body.dst_dir)
-    if not os.path.exists(src):
-        raise HTTPException(status_code=404, detail="Source not found")
-    if not os.path.isdir(dst_dir):
-        raise HTTPException(status_code=400, detail="Destination is not a directory")
     dst = os.path.join(dst_dir, os.path.basename(src))
-    if body.move:
-        shutil.move(src, dst)
-    else:
-        if os.path.isdir(src):
-            shutil.copytree(src, dst)
-        else:
-            shutil.copy2(src, dst)
+    cmd = ["mv" if body.move else "cp", "-r", src, dst]
+    r = run_as(eu, cmd)
+    if r.returncode != 0:
+        raise HTTPException(status_code=403, detail="Permission denied")
     return {"ok": True}
 
 @router.post("/rename")
-async def rename(body: RenameRequest, _session=Depends(get_current_session)):
+async def rename(body: RenameRequest, session=Depends(get_current_session)):
+    eu = session["effective_user"]
     src = safe_path(body.path)
     dst = safe_path(os.path.join(os.path.dirname(body.path), body.new_name))
-    if not os.path.exists(src):
-        raise HTTPException(status_code=404, detail="Not found")
-    os.rename(src, dst)
+    r = run_as(eu, ["mv", src, dst])
+    if r.returncode != 0:
+        raise HTTPException(status_code=403, detail="Permission denied")
     return {"ok": True}
 
 
@@ -202,14 +225,12 @@ class DeleteRequest(BaseModel):
 
 
 @router.delete("/delete")
-async def delete(body: DeleteRequest, _session=Depends(get_current_session)):
+async def delete(body: DeleteRequest, session=Depends(get_current_session)):
+    eu = session["effective_user"]
     real = safe_path(body.path)
-    if not os.path.exists(real):
-        raise HTTPException(status_code=404, detail="Not found")
-    if os.path.isdir(real):
-        shutil.rmtree(real)
-    else:
-        os.remove(real)
+    r = run_as(eu, ["rm", "-rf", real])
+    if r.returncode != 0:
+        raise HTTPException(status_code=403, detail="Permission denied")
     return {"ok": True}
 
 
@@ -218,26 +239,27 @@ class MkdirRequest(BaseModel):
 
 
 @router.post("/mkdir")
-async def mkdir(body: MkdirRequest, _session=Depends(get_current_session)):
+async def mkdir(body: MkdirRequest, session=Depends(get_current_session)):
+    eu = session["effective_user"]
     real = safe_path(body.path)
-    os.makedirs(real, exist_ok=True)
+    r = run_as(eu, ["mkdir", "-p", real])
+    if r.returncode != 0:
+        raise HTTPException(status_code=403, detail="Permission denied")
     return {"ok": True}
 
 
 class ChmodRequest(BaseModel):
     path: str
-    mode: str  # octal string e.g. "755"
+    mode: str
 
 
 @router.post("/chmod")
-async def chmod(body: ChmodRequest, _session=Depends(get_current_session)):
+async def chmod(body: ChmodRequest, session=Depends(get_current_session)):
+    eu = session["effective_user"]
     real = safe_path(body.path)
-    if not os.path.exists(real):
-        raise HTTPException(status_code=404, detail="Not found")
-    try:
-        os.chmod(real, int(body.mode, 8))
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid mode")
+    r = run_as(eu, ["chmod", body.mode, real])
+    if r.returncode != 0:
+        raise HTTPException(status_code=403, detail="Permission denied")
     return {"ok": True}
 
 
@@ -252,12 +274,14 @@ class WriteRequest(BaseModel):
     content: str
 
 @router.post("/write")
-async def write_file(body: WriteRequest, _session=Depends(get_current_session)):
+async def write_file(body: WriteRequest, session=Depends(get_current_session)):
+    eu = session["effective_user"]
     real = safe_path(body.path)
-    if os.path.isdir(real):
+    if run_as(eu, ["test", "-d", real]).returncode == 0:
         raise HTTPException(status_code=400, detail="Path is a directory")
-    with open(real, 'w', encoding='utf-8') as f:
-        f.write(body.content)
+    r = run_as(eu, ["tee", real], input_data=body.content)
+    if r.returncode != 0:
+        raise HTTPException(status_code=403, detail="Permission denied")
     return {"ok": True}
 
 @router.get("/search")
@@ -312,14 +336,12 @@ async def desktop_watch(session=Depends(get_current_session)):
     import asyncio
     username = session["effective_user"]
     desktop_dir = os.path.join(home_for(username), "Desktop")
-    os.makedirs(desktop_dir, exist_ok=True)
+    mkdir_as(desktop_dir, username)
 
     def _snapshot():
-        try:
-            return {f: os.stat(os.path.join(desktop_dir, f)).st_mtime
-                    for f in os.listdir(desktop_dir) if not f.startswith('.')}
-        except Exception:
-            return {}
+        r = run_as(username, ["ls", "-1", desktop_dir])
+        files = [f for f in r.stdout.splitlines() if f and not f.startswith('.')]
+        return {f: stat_mtime_as(os.path.join(desktop_dir, f), username) for f in files}
 
     async def generate():
         last = _snapshot()
@@ -338,19 +360,21 @@ async def desktop_watch(session=Depends(get_current_session)):
 async def desktop_files(session=Depends(get_current_session)):
     username = session["effective_user"]
     desktop_dir = os.path.join(home_for(username), "Desktop")
-    os.makedirs(desktop_dir, exist_ok=True)
+    mkdir_as(desktop_dir, username)
+    r = run_as(username, ["ls", "-1", desktop_dir])
     entries = []
-    for name in sorted(os.listdir(desktop_dir)):
-        full = os.path.join(desktop_dir, name)
-        if name.startswith('.'):
+    for name in sorted(r.stdout.splitlines()):
+        if not name or name.startswith('.'):
             continue
+        full = os.path.join(desktop_dir, name)
         entry = {"name": name, "path": full}
-        if os.path.isdir(full):
+        is_dir = run_as(username, ["test", "-d", full]).returncode == 0
+        if is_dir:
             entry["type"] = "dir"
         elif name.endswith(".url"):
             entry["type"] = "url"
             try:
-                content = open(full).read()
+                content = read_file_as(full, username)
                 for line in content.splitlines():
                     if line.startswith("URL="):
                         entry["url"] = line[4:].strip()
@@ -359,14 +383,12 @@ async def desktop_files(session=Depends(get_current_session)):
         elif name.endswith(".mvmos"):
             entry["type"] = "app"
             try:
-                content = open(full).read().strip()
-                entry["app_id"] = content
+                entry["app_id"] = read_file_as(full, username).strip()
             except Exception:
                 pass
         else:
             entry["type"] = "file"
-            ext = name.rsplit('.', 1)[-1].lower() if '.' in name else ''
-            entry["ext"] = ext
+            entry["ext"] = name.rsplit('.', 1)[-1].lower() if '.' in name else ''
         entries.append(entry)
     return JSONResponse({"entries": entries, "desktop_dir": desktop_dir})
 
@@ -378,12 +400,10 @@ class NewAppRequest(BaseModel):
 async def desktop_new_app(body: NewAppRequest, session=Depends(get_current_session)):
     username = session["effective_user"]
     desktop_dir = os.path.join(home_for(username), "Desktop")
-    os.makedirs(desktop_dir, exist_ok=True)
+    mkdir_as(desktop_dir, username)
     safe_name = "".join(c if c.isalnum() or c in "-_ ." else "_" for c in (body.label or body.app_id))
     filename = safe_name + ".mvmos"
-    path = os.path.join(desktop_dir, filename)
-    with open(path, "w") as f:
-        f.write(body.app_id)
+    write_file_as(os.path.join(desktop_dir, filename), body.app_id, username)
     return JSONResponse({"ok": True, "name": filename})
 
 class NewLinkRequest(BaseModel):
@@ -397,45 +417,39 @@ class NewFolderRequest(BaseModel):
 async def desktop_new_link(body: NewLinkRequest, session=Depends(get_current_session)):
     username = session["effective_user"]
     desktop_dir = os.path.join(home_for(username), "Desktop")
-    os.makedirs(desktop_dir, exist_ok=True)
+    mkdir_as(desktop_dir, username)
     from urllib.parse import urlparse
     label = body.label or urlparse(body.url).hostname or "link"
     safe_name = "".join(c if c.isalnum() or c in "-_ ." else "_" for c in label)
     filename = safe_name + ".url"
-    path = os.path.join(desktop_dir, filename)
-    with open(path, "w") as f:
-        f.write(f"[InternetShortcut]\nURL={body.url}\n")
+    write_file_as(os.path.join(desktop_dir, filename), f"[InternetShortcut]\nURL={body.url}\n", username)
     return JSONResponse({"ok": True, "name": filename})
 
 @router.post("/desktop/folder")
 async def desktop_new_folder(body: NewFolderRequest, session=Depends(get_current_session)):
     username = session["effective_user"]
     desktop_dir = os.path.join(home_for(username), "Desktop")
-    folder_path = os.path.join(desktop_dir, body.name)
-    os.makedirs(folder_path, exist_ok=True)
+    mkdir_as(os.path.join(desktop_dir, body.name), username)
     return JSONResponse({"ok": True})
 
 @router.delete("/desktop/entry")
 async def desktop_delete_entry(path: str, session=Depends(get_current_session)):
+    username = session["effective_user"]
     real = safe_path(path)
-    desktop_dir = safe_path(os.path.join(home_for(session["effective_user"]), "Desktop"))
+    desktop_dir = safe_path(os.path.join(home_for(username), "Desktop"))
     if not real.startswith(desktop_dir):
         raise HTTPException(status_code=403, detail="Access denied")
-    if os.path.isdir(real):
-        shutil.rmtree(real)
-    else:
-        os.remove(real)
+    r = run_as(username, ["rm", "-rf", real])
+    if r.returncode != 0:
+        raise HTTPException(status_code=403, detail="Permission denied")
     return JSONResponse({"ok": True})
 
 @router.post("/chown")
-async def chown(body: ChownRequest, _session=Depends(get_current_session)):
+async def chown(body: ChownRequest, session=Depends(get_current_session)):
+    eu = session["effective_user"]
     real = safe_path(body.path)
-    if not os.path.exists(real):
-        raise HTTPException(status_code=404, detail="Not found")
-    try:
-        uid = pwd.getpwnam(body.owner).pw_uid
-        gid = grp.getgrnam(body.group).gr_gid if body.group else -1
-        os.chown(real, uid, gid)
-    except KeyError:
-        raise HTTPException(status_code=400, detail="Unknown user or group")
+    spec = body.owner + ((":" + body.group) if body.group else "")
+    r = run_as(eu, ["chown", spec, real])
+    if r.returncode != 0:
+        raise HTTPException(status_code=403, detail="Permission denied")
     return {"ok": True}

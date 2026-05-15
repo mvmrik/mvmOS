@@ -1,11 +1,13 @@
-import crypt
+import os
+import subprocess
 import pwd as _pwd
 import secrets
-import spwd
 from fastapi import APIRouter, Request, HTTPException, Depends
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from pydantic import BaseModel
 from .db import get_conn
+
+_AUTH_HELPER = os.path.join(os.path.dirname(__file__), "..", "bin", "mvmos-auth")
 
 router = APIRouter()
 
@@ -22,11 +24,21 @@ def get_current_session(request: Request):
 
 
 def verify_linux_password(username: str, password: str) -> bool:
+    if os.geteuid() == 0:
+        try:
+            import spwd, crypt
+            shadow = spwd.getspnam(username)
+            return crypt.crypt(password, shadow.sp_pwdp) == shadow.sp_pwdp
+        except Exception:
+            return False
     try:
-        shadow = spwd.getspnam(username)
-        hashed = shadow.sp_pwdp
-        return crypt.crypt(password, hashed) == hashed
-    except (KeyError, PermissionError):
+        r = subprocess.run(
+            ["sudo", os.path.realpath(_AUTH_HELPER)],
+            input=f"{username}:{password}",
+            capture_output=True, text=True, timeout=5,
+        )
+        return r.returncode == 0
+    except Exception:
         return False
 
 
