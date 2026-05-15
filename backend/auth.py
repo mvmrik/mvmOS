@@ -9,7 +9,22 @@ from .db import get_conn
 
 _AUTH_HELPER = os.path.join(os.path.dirname(__file__), "..", "bin", "mvmos-auth")
 
+_XDG_DIRS = ["Desktop", "Downloads", "Documents", "Music", "Pictures", "Videos", "Public", "Templates"]
+
 router = APIRouter()
+
+
+def _init_user_xdg(username: str):
+    try:
+        import pwd as _pwd
+        home = _pwd.getpwnam(username).pw_dir
+        prefix = [] if os.geteuid() == 0 else ["sudo"]
+        for d in _XDG_DIRS:
+            path = os.path.join(home, d)
+            subprocess.run(prefix + ["runuser", "-u", username, "--", "mkdir", "-p", path],
+                           capture_output=True)
+    except Exception:
+        pass
 
 
 def get_current_session(request: Request):
@@ -197,6 +212,7 @@ async def login(request: Request):
     if not verify_linux_password(username, password):
         return HTMLResponse(content="Unauthorized", status_code=401)
 
+    _init_user_xdg(username)
     token = secrets.token_hex(32)
     with get_conn() as conn:
         conn.execute("INSERT INTO sessions (token, effective_user) VALUES (?, ?)", (token, username))

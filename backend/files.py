@@ -179,6 +179,7 @@ async def upload_file(
     with tempfile.NamedTemporaryFile(delete=False, suffix=".mvmostmp") as tmp:
         tmp.write(data)
         tmp_path = tmp.name
+    os.chmod(tmp_path, 0o644)
     try:
         r = run_as(eu, ["cp", tmp_path, dest])
     finally:

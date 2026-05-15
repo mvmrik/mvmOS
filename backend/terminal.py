@@ -26,8 +26,9 @@ async def terminal_ws(websocket: WebSocket, session: str | None = Cookie(default
     await websocket.accept()
 
     eu = s.get("effective_user", "root")
+    needs_sudo = os.geteuid() != 0
     if eu and eu != "root":
-        cmd = ["runuser", "-l", eu]
+        cmd = (["sudo"] if needs_sudo else []) + ["runuser", "-l", eu]
     else:
         cmd = ["/bin/bash", "--login"]
 
