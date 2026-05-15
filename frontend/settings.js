@@ -683,7 +683,7 @@ const Settings = (() => {
             statusEl.textContent = t('about_update_failed');
             updateBtn.disabled = false;
             const repoDir = outputEl.dataset.repoDir || window.location.origin;
-            cmdEl.textContent = `cd $(systemctl show mvmos -p WorkingDirectory --value) && git pull origin main && sudo systemctl restart mvmos`;
+            cmdEl.textContent = `curl -fsSL https://github.com/mvmrik/mvmOS/archive/refs/heads/main.tar.gz | sudo tar -xz --strip-components=1 -C $(systemctl show mvmos -p WorkingDirectory --value) --exclude='*/venv' --exclude='*/backend/mvmos.db' && sudo systemctl restart mvmos`;
             manualEl.style.display = 'block';
           } else {
             outputEl.textContent += text + '\n';

@@ -1,10 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SERVICE_NAME="mvmos"
-VENV_DIR="$SCRIPT_DIR/venv"
-CURRENT_USER="$(whoami)"
+INSTALL_DIR="/opt/mvmos"
+TARBALL_URL="https://github.com/mvmrik/mvmOS/archive/refs/heads/main.tar.gz"
 
 echo ""
 echo "  ███╗   ███╗██╗   ██╗███╗   ███╗ ██████╗ ███████╗"
@@ -36,29 +35,51 @@ if [[ "$PY_VER" != "True" ]]; then
     exit 1
 fi
 
+# ── Download ──────────────────────────────────────────────────────────────────
+echo "  Downloading mvmOS..."
+TMP_DIR=$(mktemp -d)
+trap 'rm -rf "$TMP_DIR"' EXIT
+
+if command -v curl &>/dev/null; then
+    curl -fsSL "$TARBALL_URL" -o "$TMP_DIR/mvmos.tar.gz"
+elif command -v wget &>/dev/null; then
+    wget -q "$TARBALL_URL" -O "$TMP_DIR/mvmos.tar.gz"
+else
+    echo "  ERROR: curl or wget required."
+    exit 1
+fi
+
+echo "  Extracting..."
+tar -xzf "$TMP_DIR/mvmos.tar.gz" -C "$TMP_DIR"
+EXTRACTED=$(find "$TMP_DIR" -maxdepth 1 -mindepth 1 -type d | grep -v "^$TMP_DIR$" | head -1)
+
+sudo mkdir -p "$INSTALL_DIR"
+sudo cp -r "$EXTRACTED"/. "$INSTALL_DIR/"
+
+SCRIPT_DIR="$INSTALL_DIR"
+VENV_DIR="$SCRIPT_DIR/venv"
+
 # ── Ensure python3-venv is available ──────────────────────────────────────────
 echo "  Installing system dependencies..."
-PY_VER=$(python3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
+PY_MINOR=$(python3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
 if command -v apt-get &>/dev/null; then
-    sudo apt-get install -y -q "python${PY_VER}-venv" python3-venv 2>/dev/null || true
+    sudo apt-get install -y -q "python${PY_MINOR}-venv" python3-venv 2>/dev/null || true
 elif command -v dnf &>/dev/null; then
     sudo dnf install -y -q python3-virtualenv 2>/dev/null || true
 elif command -v zypper &>/dev/null; then
     sudo zypper install -y python3-virtualenv 2>/dev/null || true
 elif command -v pacman &>/dev/null; then
     sudo pacman -Sy --noconfirm python 2>/dev/null || true
-else
-    echo "  (Could not detect package manager — skipping venv install. If the next step fails, install python3-venv manually.)"
 fi
 
 # ── Virtualenv ────────────────────────────────────────────────────────────────
-echo "  [1/4] Creating virtualenv..."
-python3 -m venv "$VENV_DIR"
+echo "  [1/3] Creating virtualenv..."
+sudo python3 -m venv "$VENV_DIR"
 
 # ── Pip packages ─────────────────────────────────────────────────────────────
-echo "  [2/4] Installing Python packages..."
-"$VENV_DIR/bin/pip" install --quiet --upgrade pip
-"$VENV_DIR/bin/pip" install --quiet \
+echo "  [2/3] Installing Python packages..."
+sudo "$VENV_DIR/bin/pip" install --quiet --upgrade pip
+sudo "$VENV_DIR/bin/pip" install --quiet \
     "fastapi>=0.110.0" \
     "uvicorn[standard]>=0.29.0" \
     "ptyprocess>=0.7.0" \
@@ -66,15 +87,14 @@ echo "  [2/4] Installing Python packages..."
     "httpx>=0.27.0"
 
 # ── config.ini ────────────────────────────────────────────────────────────────
-echo "  [3/4] Writing config.ini..."
-cat > "$SCRIPT_DIR/config.ini" <<EOF
+sudo tee "$SCRIPT_DIR/config.ini" > /dev/null <<EOF
 [server]
 port = $PORT
 EOF
-chmod 600 "$SCRIPT_DIR/config.ini"
+sudo chmod 600 "$SCRIPT_DIR/config.ini"
 
 # ── systemd service ───────────────────────────────────────────────────────────
-echo "  [4/4] Installing systemd service..."
+echo "  [3/3] Installing systemd service..."
 SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
 
 sudo tee "$SERVICE_FILE" > /dev/null <<EOF

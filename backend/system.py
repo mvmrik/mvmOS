@@ -96,33 +96,65 @@ async def check_update(session=Depends(get_current_session)):
 @router.post("/update")
 async def do_update(session=Depends(get_current_session)):
     async def generate():
-        cmd = ["git", "pull", "https://github.com/mvmrik/mvmOS.git", "main"]
+        import tempfile, tarfile, shutil, httpx
         repo_dir = os.path.abspath(REPO_DIR)
-        import pwd
+        tarball_url = "https://github.com/mvmrik/mvmOS/archive/refs/heads/main.tar.gz"
+
+        yield "data: Downloading update…\n\n"
         try:
-            pw = pwd.getpwnam(session["effective_user"])
-            def _set_ids():
-                if os.getuid() == 0:
-                    os.setgid(pw.pw_gid)
-                    os.setuid(pw.pw_uid)
-        except KeyError:
-            _set_ids = None
-        proc = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.STDOUT,
-            cwd=repo_dir,
-            preexec_fn=_set_ids,
-        )
-        async for line in proc.stdout:
-            yield f"data: {line.decode(errors='replace').rstrip()}\n\n"
-        await proc.wait()
-        if proc.returncode == 0:
-            yield "data: __RESTARTING__\n\n"
-            # restart uvicorn by replacing the process
-            asyncio.get_event_loop().call_later(1, _restart)
-        else:
-            yield f"data: __EXIT_{proc.returncode}__\n\n"
+            async with httpx.AsyncClient(timeout=60, follow_redirects=True) as client:
+                r = await client.get(tarball_url)
+                r.raise_for_status()
+                tar_bytes = r.content
+        except Exception as e:
+            yield f"data: Download failed: {e}\n\n"
+            yield "data: __EXIT_1__\n\n"
+            return
+
+        yield "data: Extracting…\n\n"
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                tar_path = os.path.join(tmp, "update.tar.gz")
+                with open(tar_path, "wb") as f:
+                    f.write(tar_bytes)
+                with tarfile.open(tar_path, "r:gz") as tar:
+                    tar.extractall(tmp)
+                # extracted folder is mvmOS-main/
+                extracted = next(
+                    os.path.join(tmp, d) for d in os.listdir(tmp)
+                    if os.path.isdir(os.path.join(tmp, d)) and d != "__MACOSX"
+                )
+                # backup database
+                db_path = os.path.join(repo_dir, "backend", "mvmos.db")
+                db_bak = os.path.join(tmp, "mvmos.db.bak")
+                if os.path.exists(db_path):
+                    shutil.copy2(db_path, db_bak)
+
+                # overwrite everything except venv and .git
+                SKIP = {".git", "venv"}
+                for item in os.listdir(extracted):
+                    if item in SKIP:
+                        continue
+                    src = os.path.join(extracted, item)
+                    dst = os.path.join(repo_dir, item)
+                    if os.path.isdir(src):
+                        if os.path.exists(dst):
+                            shutil.rmtree(dst)
+                        shutil.copytree(src, dst)
+                    else:
+                        shutil.copy2(src, dst)
+
+                # restore database
+                if os.path.exists(db_bak):
+                    shutil.copy2(db_bak, db_path)
+        except Exception as e:
+            yield f"data: Extract failed: {e}\n\n"
+            yield "data: __EXIT_1__\n\n"
+            return
+
+        yield "data: Update applied.\n\n"
+        yield "data: __RESTARTING__\n\n"
+        asyncio.get_event_loop().call_later(1, _restart)
 
     return StreamingResponse(generate(), media_type="text/event-stream",
                              headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
