@@ -499,7 +499,7 @@ var mvmOS = (() => {
     items.push({ label: t('wstore_ctx_remove'), action: () => {
       fetch(`/api/widgets/${def.id}/position`, { method: 'DELETE' }).catch(() => {});
       _removeWidget(def.id);
-      fetch('/api/widgets/installed', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ id: def.id, installed: false }) }).catch(() => {});
+      fetch(`/api/widgets/${def.id}`, { method: 'DELETE' }).catch(() => {});
     }});
 
     items.forEach(item => {
