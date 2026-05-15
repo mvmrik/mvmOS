@@ -429,6 +429,7 @@ html, body {
   flex: 1;
   overflow: hidden;
   position: relative;
+  min-height: 0;
 }
 
 .window-resize {
@@ -849,9 +850,13 @@ html, body {
 }
 .settings-panels {
   flex: 1;
-  overflow-y: auto;
   padding: 16px 20px;
   min-height: 0;
+  box-sizing: border-box;
+}
+
+.settings-wrap .as-main {
+  overflow-y: auto;
 }
 .settings-panel { display: none; }
 .settings-panel.active { display: block; }

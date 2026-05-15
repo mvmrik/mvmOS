@@ -4,7 +4,6 @@ import subprocess
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse, StreamingResponse
 from .auth import get_current_session
-from .db import load_config
 
 router = APIRouter(prefix="/api/system", tags=["system"])
 
@@ -28,7 +27,6 @@ def _git(args):
 
 @router.get("/info")
 async def system_info(session=Depends(get_current_session)):
-    cfg = load_config()
     version = _local_version()
 
     # git info

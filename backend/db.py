@@ -1,5 +1,4 @@
 import sqlite3
-import configparser
 import os
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "..", "data.db")
@@ -136,10 +135,3 @@ def init_db():
                 "INSERT OR IGNORE INTO themes (id, name, icon, category, version, description, layout, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, 1)",
                 ("default", "mvmOS Default", "🖤", "Dark", "1.0.0", "The default dark theme.", "macos"),
             )
-
-
-def load_config():
-    cfg = configparser.ConfigParser()
-    cfg_path = os.path.join(os.path.dirname(__file__), "..", "config.ini")
-    cfg.read(cfg_path)
-    return cfg
