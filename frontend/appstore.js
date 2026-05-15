@@ -39,6 +39,23 @@ const AppStore = (() => {
           }
         }, 50);
       }
+    } else if (opts?.section === 'my-widgets') {
+      const tab = body.querySelector('.as-tab[data-tab="my-widgets"]');
+      if (tab) {
+        tab.click();
+        if (opts.widgetId) {
+          body._as._pendingWidgetSettings = opts.widgetId;
+          // after tab loads, open settings for this widget
+          let attempts = 0;
+          const iv = setInterval(() => {
+            const row = body.querySelector(`[data-widget-settings-id="${opts.widgetId}"]`);
+            if (row || ++attempts > 30) {
+              clearInterval(iv);
+              if (row) row.click();
+            }
+          }, 100);
+        }
+      }
     } else if (opts?.section === 'themes') {
       const thTab = body.querySelector('#as-theme-store-tabs .as-tab');
       if (thTab) thTab.click();
@@ -1046,8 +1063,9 @@ const AppStore = (() => {
         <div style="display:flex;align-items:center;gap:6px;padding-left:10px;flex-shrink:0">
           ${w.update_available ? `<button class="s-btn s-btn-sm ws-update" data-widget='${JSON.stringify(w)}'>${t('um_update_btn')}</button>` : ''}
           ${w.installed
-            ? `<button class="s-btn s-btn-sm s-btn-danger ws-remove" data-id="${w.id}">Remove</button>`
-            : `<button class="s-btn s-btn-sm ws-install" data-widget='${JSON.stringify(w)}'>Install</button>`}
+            ? `<button class="s-btn s-btn-sm ws-settings" data-id="${w.id}" data-widget-settings-id="${w.id}">${t('wstore_settings')}</button>
+               <button class="s-btn s-btn-sm s-btn-danger ws-remove" data-id="${w.id}">${t('um_removing_btn') || 'Remove'}</button>`
+            : `<button class="s-btn s-btn-sm ws-install" data-widget='${JSON.stringify(w)}'>${t('appstore_install')}</button>`}
         </div>
       `;
 
@@ -1085,8 +1103,72 @@ const AppStore = (() => {
         body._as.refreshCurrent?.();
       });
 
+      row.querySelector('.ws-settings')?.addEventListener('click', e => {
+        renderWidgetSettings(list, w.id);
+      });
+
       list.appendChild(row);
     });
+  }
+
+  function renderWidgetSettings(container, widgetId) {
+    const def = window.mvmOS?._widgets?.[widgetId];
+    const settings = def?.settings || [];
+    const panel = document.createElement('div');
+    panel.className = 'as-pkg-row';
+    panel.style.cssText = 'flex-direction:column;align-items:stretch;gap:10px;background:var(--surface2);border-radius:6px;padding:14px;margin-top:4px';
+
+    if (!settings.length) {
+      panel.innerHTML = `<div style="color:var(--text-dim);font-size:.83rem">${t('wstore_no_settings')}</div>`;
+    } else {
+      panel.innerHTML = `<div style="font-weight:600;font-size:.85rem;margin-bottom:4px">${t('wstore_settings_title')}</div>` +
+        settings.map(s => {
+          const val = mvmOS.storage.get(`widget_${widgetId}_${s.key}`) ?? s.default ?? '';
+          if (s.type === 'checkbox') return `
+            <div style="display:flex;align-items:center;gap:8px;font-size:.83rem">
+              <input type="checkbox" id="ws-${widgetId}-${s.key}" ${val ? 'checked' : ''}>
+              <label for="ws-${widgetId}-${s.key}">${s.label}</label>
+            </div>`;
+          if (s.type === 'select') return `
+            <div style="display:flex;align-items:center;gap:8px;font-size:.83rem">
+              <label style="flex:1">${s.label}</label>
+              <select id="ws-${widgetId}-${s.key}" class="s-input" style="width:auto">
+                ${(s.options || []).map(o => `<option ${o === val ? 'selected' : ''}>${o}</option>`).join('')}
+              </select>
+            </div>`;
+          return `
+            <div style="display:flex;align-items:center;gap:8px;font-size:.83rem">
+              <label style="flex:1">${s.label}</label>
+              <input type="${s.type || 'text'}" id="ws-${widgetId}-${s.key}" class="s-input"
+                value="${val}" ${s.min !== undefined ? `min="${s.min}"` : ''} ${s.max !== undefined ? `max="${s.max}"` : ''}
+                style="width:80px">
+            </div>`;
+        }).join('') +
+        `<div style="display:flex;justify-content:flex-end;gap:6px;margin-top:4px">
+          <button class="s-btn s-btn-sm ws-settings-cancel">${t('as_cancel_btn')}</button>
+          <button class="s-btn s-btn-sm ws-settings-save">${t('wstore_settings_save')}</button>
+        </div>`;
+
+      panel.querySelector('.ws-settings-save').addEventListener('click', () => {
+        settings.forEach(s => {
+          const el = panel.querySelector(`#ws-${widgetId}-${s.key}`);
+          if (!el) return;
+          const val = s.type === 'checkbox' ? el.checked : (s.type === 'number' ? parseFloat(el.value) : el.value);
+          mvmOS.storage.set(`widget_${widgetId}_${s.key}`, val);
+        });
+        panel.remove();
+        // notify widget to re-read settings
+        window.dispatchEvent(new CustomEvent('widget-settings-changed', { detail: { id: widgetId } }));
+      });
+    }
+
+    panel.querySelector('.ws-settings-cancel')?.addEventListener('click', () => panel.remove());
+
+    // insert after the widget row
+    const rows = container.querySelectorAll('.as-pkg-row');
+    const widgetRow = [...rows].find(r => r.querySelector(`[data-id="${widgetId}"]`));
+    if (widgetRow?.nextSibling) container.insertBefore(panel, widgetRow.nextSibling);
+    else container.appendChild(panel);
   }
 
   // ── Theme Store tabs (sidebar) ───────────────────────────────────────────────

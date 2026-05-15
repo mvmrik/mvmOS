@@ -87,6 +87,12 @@ window._i18n = {
   'wstore_no_widgets':            'Няма намерени уиджети.',
   'wstore_custom_stores':         'Уиджети от собствени магазини',
   'wstore_manage_stores':         'Управление на магазини за уиджети',
+  'wstore_settings':              'Настройки',
+  'wstore_settings_title':        'Настройки на уиджет',
+  'wstore_settings_save':         'Запази',
+  'wstore_no_settings':           'Този уиджет няма настройки.',
+  'wstore_ctx_settings':          'Настройки',
+  'wstore_ctx_remove':            'Премахни уиджет',
 
   // ── Theme store ───────────────────────────────────────────────────────────
   'tstore_installed':             'Инсталирани теми',

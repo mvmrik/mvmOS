@@ -277,6 +277,7 @@ var mvmOS = (() => {
     bar.appendChild(wrap);
     def.init(wrap);
     _applyEditMode(wrap);
+    _attachWidgetContextMenu(wrap, def);
     if (window.innerWidth < 768) _updateMobileTaskbarWidgets();
   }
 
@@ -385,6 +386,7 @@ var mvmOS = (() => {
     body.className = 'widget-body';
     wrap.appendChild(body);
     def.init(body);
+    _attachWidgetContextMenu(wrap, def);
 
     // close button
     titlebar.querySelector('.widget-close-btn').addEventListener('click', e => {
@@ -464,6 +466,83 @@ var mvmOS = (() => {
     delete _widgets[id];
     document.querySelector(`[data-widget-id="${id}"]`)?.remove();
     document.querySelector(`[data-desktop-widget="${id}"]`)?.remove();
+  }
+
+  function widgetSetting(id, key, defaultVal = null) {
+    const stored = storage.get(`widget_${id}_${key}`);
+    return stored !== null ? stored : defaultVal;
+  }
+
+  function _showWidgetContextMenu(e, def) {
+    e.preventDefault();
+    e.stopPropagation();
+    document.querySelector('.widget-ctx-menu')?.remove();
+
+    const t = k => (window._i18n?.[k] || k);
+    const menu = document.createElement('div');
+    menu.className = 'widget-ctx-menu ctx-menu';
+    menu.style.cssText = `position:fixed;left:${e.clientX}px;top:${e.clientY}px;z-index:99999`;
+
+    const items = [];
+    // Settings — only if widget has settings defined
+    if (def.settings?.length) {
+      items.push({ label: t('wstore_ctx_settings'), action: () => {
+        AppStore.openWindow({ section: 'my-widgets', widgetId: def.id });
+      }});
+    }
+    // Custom developer items
+    if (Array.isArray(def.contextMenu)) {
+      if (items.length && def.contextMenu.length) items.push(null); // separator
+      def.contextMenu.forEach(item => items.push(item));
+    }
+    // Remove
+    if (items.length) items.push(null);
+    items.push({ label: t('wstore_ctx_remove'), action: () => {
+      fetch(`/api/widgets/${def.id}/position`, { method: 'DELETE' }).catch(() => {});
+      _removeWidget(def.id);
+      fetch('/api/widgets/installed', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ id: def.id, installed: false }) }).catch(() => {});
+    }});
+
+    items.forEach(item => {
+      if (!item) {
+        const sep = document.createElement('div');
+        sep.className = 'ctx-sep';
+        menu.appendChild(sep);
+      } else {
+        const btn = document.createElement('div');
+        btn.className = 'ctx-item';
+        btn.textContent = item.label;
+        btn.addEventListener('click', () => { menu.remove(); item.action(); });
+        menu.appendChild(btn);
+      }
+    });
+
+    document.body.appendChild(menu);
+
+    // reposition if off-screen
+    const r = menu.getBoundingClientRect();
+    if (r.right > window.innerWidth) menu.style.left = (window.innerWidth - r.width - 4) + 'px';
+    if (r.bottom > window.innerHeight) menu.style.top = (window.innerHeight - r.height - 4) + 'px';
+
+    setTimeout(() => document.addEventListener('click', () => menu.remove(), { once: true }), 50);
+  }
+
+  function _attachWidgetContextMenu(wrap, def) {
+    wrap.addEventListener('contextmenu', e => _showWidgetContextMenu(e, def));
+
+    // long press for touch devices
+    if (navigator.maxTouchPoints > 0) {
+      let _lpTimer = null, _lpFired = false;
+      wrap.addEventListener('touchstart', e => {
+        _lpFired = false;
+        _lpTimer = setTimeout(() => {
+          _lpFired = true;
+          _showWidgetContextMenu({ preventDefault() {}, stopPropagation() {}, clientX: e.touches[0].clientX, clientY: e.touches[0].clientY }, def);
+        }, 500);
+      }, { passive: true });
+      wrap.addEventListener('touchend', () => clearTimeout(_lpTimer));
+      wrap.addEventListener('touchmove', () => clearTimeout(_lpTimer));
+    }
   }
 
   async function _loadWidget(id) {
@@ -748,6 +827,7 @@ var mvmOS = (() => {
     openSettings: (tab) => Settings.openWindow(tab),
     notify,
     storage,
+    widgetSetting,
     db: (appId) => _makeDb(appId),
     _loadPlugin,
     _loadWidget,

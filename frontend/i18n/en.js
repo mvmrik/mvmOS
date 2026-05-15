@@ -87,6 +87,12 @@ window._i18n = {
   'wstore_no_widgets':            'No widgets found.',
   'wstore_custom_stores':         'Widgets from custom stores',
   'wstore_manage_stores':         'Manage widget store sources',
+  'wstore_settings':              'Settings',
+  'wstore_settings_title':        'Widget Settings',
+  'wstore_settings_save':         'Save',
+  'wstore_no_settings':           'This widget has no settings.',
+  'wstore_ctx_settings':          'Settings',
+  'wstore_ctx_remove':            'Remove widget',
 
   // ── Theme store ───────────────────────────────────────────────────────────
   'tstore_installed':             'Installed themes',
