@@ -22,6 +22,8 @@ XDG_DIRS = ["Desktop", "Downloads", "Documents", "Music", "Pictures", "Videos", 
 
 def init_user_dirs():
     home = os.path.expanduser("~")
+    if not os.access(home, os.W_OK):
+        return
     for d in XDG_DIRS:
         os.makedirs(os.path.join(home, d), exist_ok=True)
 

@@ -140,7 +140,7 @@ async def get_places(session=Depends(get_current_session)):
     xdg = []
     for p in XDG_PLACES:
         path = os.path.join(home, p["name"])
-        if os.path.isdir(path):
+        if run_as(username, ["test", "-d", path]).returncode == 0:
             xdg.append({"name": p["name"], "icon": p["icon"], "path": path})
 
     return JSONResponse({
@@ -154,10 +154,11 @@ async def get_places(session=Depends(get_current_session)):
 async def list_dir(path: str = "/", as_root: bool = False, session=Depends(get_current_session)):
     eu = session["effective_user"]
     real = safe_path(path, home_for(eu))
-    if not os.path.isdir(real):
+    check_user = "root" if as_root else eu
+    if run_as(check_user, ["test", "-d", real]).returncode != 0:
         raise HTTPException(status_code=404, detail="Not a directory")
     try:
-        entries = readdir_as_user(real, "root" if as_root else eu)
+        entries = readdir_as_user(real, check_user)
     except PermissionError:
         raise HTTPException(status_code=403, detail="Permission denied")
     return JSONResponse({"path": path, "entries": entries, "as_root": as_root})
@@ -285,51 +286,64 @@ async def write_file(body: WriteRequest, session=Depends(get_current_session)):
     return {"ok": True}
 
 @router.get("/search")
-async def search_files(path: str, q: str, _session=Depends(get_current_session)):
-    real = safe_path(path)
-    if not os.path.isdir(real):
+async def search_files(path: str, q: str, session=Depends(get_current_session)):
+    eu = session["effective_user"]
+    real = safe_path(path, home_for(eu))
+    if run_as(eu, ["test", "-d", real]).returncode != 0:
         raise HTTPException(status_code=400, detail="Not a directory")
+    r = run_as(eu, ["find", real, "-maxdepth", "5",
+                    "!", "-name", ".*",
+                    "-iname", f"*{q}*",
+                    "-not", "-path", "*/.*/*"])
     results = []
-    q_lower = q.lower()
-    for dirpath, dirnames, filenames in os.walk(real):
-        dirnames[:] = [d for d in dirnames if not d.startswith('.')]
-        for name in dirnames + filenames:
-            if q_lower in name.lower():
-                full = os.path.join(dirpath, name)
-                st = os.stat(full)
-                results.append({
-                    "name": name,
-                    "path": full,
-                    "type": "dir" if os.path.isdir(full) else "file",
-                    "size": st.st_size,
-                    "modified": datetime.fromtimestamp(st.st_mtime).isoformat(),
-                })
-        if len(results) >= 200:
-            break
+    for line in r.stdout.splitlines()[:200]:
+        line = line.strip()
+        if not line or line == real:
+            continue
+        stat_r = run_as(eu, ["stat", "-c", "%F\t%s\t%Y", line])
+        if stat_r.returncode != 0:
+            continue
+        parts = stat_r.stdout.strip().split("\t")
+        if len(parts) != 3:
+            continue
+        ftype, size, mtime = parts
+        results.append({
+            "name": os.path.basename(line),
+            "path": line,
+            "type": "dir" if ftype == "directory" else "file",
+            "size": int(size),
+            "modified": datetime.fromtimestamp(int(mtime)).isoformat(),
+        })
     return JSONResponse({"results": results})
 
 @router.get("/dirsize")
-async def dir_size(path: str, _session=Depends(get_current_session)):
-    real = safe_path(path)
-    if not os.path.isdir(real):
+async def dir_size(path: str, session=Depends(get_current_session)):
+    eu = session["effective_user"]
+    real = safe_path(path, home_for(eu))
+    if run_as(eu, ["test", "-d", real]).returncode != 0:
         raise HTTPException(status_code=400, detail="Not a directory")
-    total = 0
-    for dirpath, _, filenames in os.walk(real):
-        for f in filenames:
-            try:
-                total += os.path.getsize(os.path.join(dirpath, f))
-            except OSError:
-                pass
+    r = run_as(eu, ["du", "-sb", real])
+    try:
+        total = int(r.stdout.split()[0])
+    except (IndexError, ValueError):
+        total = 0
     return {"size": total}
 
 @router.get("/raw")
-async def raw_file(path: str, _session=Depends(get_current_session)):
+async def raw_file(path: str, session=Depends(get_current_session)):
     import mimetypes
-    real = safe_path(path)
-    if not os.path.isfile(real):
+    from fastapi.responses import Response
+    eu = session["effective_user"]
+    real = safe_path(path, home_for(eu))
+    if run_as(eu, ["test", "-f", real]).returncode != 0:
         raise HTTPException(status_code=404, detail="Not found")
+    prefix = [] if os.geteuid() == 0 else ["sudo"]
+    cmd = (prefix + ["runuser", "-u", eu, "--", "cat", real]) if eu != "root" else ["cat", real]
+    r = subprocess.run(cmd, capture_output=True)
+    if r.returncode != 0:
+        raise HTTPException(status_code=403, detail="Permission denied")
     mime, _ = mimetypes.guess_type(real)
-    return FileResponse(real, media_type=mime or "application/octet-stream")
+    return Response(content=r.stdout, media_type=mime or "application/octet-stream")
 
 @router.get("/desktop/watch")
 async def desktop_watch(session=Depends(get_current_session)):
