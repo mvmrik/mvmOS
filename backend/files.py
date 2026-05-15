@@ -23,6 +23,72 @@ def run_as(user: str, cmd: list, input_data: str = None):
     return r
 
 
+
+def readdir_as_user(path: str, username: str) -> list:
+    """Return [{name,type,size,modified,permissions,owner,group}] as the given user."""
+    import json as _json, stat as _stat, datetime as _dt
+    script = """
+import os, json, stat, pwd, grp, datetime
+path = {path!r}
+entries = []
+for name in sorted(os.listdir(path)):
+    full = os.path.join(path, name)
+    try:
+        st = os.stat(full)
+    except Exception:
+        continue
+    try: owner = pwd.getpwuid(st.st_uid).pw_name
+    except KeyError: owner = str(st.st_uid)
+    try: group = grp.getgrgid(st.st_gid).gr_name
+    except KeyError: group = str(st.st_gid)
+    entries.append({{
+        'name': name,
+        'type': 'dir' if os.path.isdir(full) else 'file',
+        'size': st.st_size,
+        'modified': datetime.datetime.fromtimestamp(st.st_mtime).isoformat(),
+        'permissions': oct(stat.S_IMODE(st.st_mode))[2:],
+        'owner': owner, 'group': group,
+    }})
+print(json.dumps(entries))
+""".format(path=path)
+    try:
+        pw = pwd.getpwnam(username)
+        r = subprocess.run(
+            ["python3", "-c", script],
+            capture_output=True, text=True, timeout=10,
+            preexec_fn=lambda: (os.setgid(pw.pw_gid), os.setuid(pw.pw_uid)),
+        )
+        if r.returncode == 0:
+            return _json.loads(r.stdout)
+        if r.returncode != 0:
+            raise PermissionError(r.stderr.strip())
+    except PermissionError:
+        raise
+    except Exception:
+        pass
+    # fallback: direct read (works when server is root)
+    entries = []
+    for name in sorted(os.listdir(path)):
+        full = os.path.join(path, name)
+        try:
+            st = os.stat(full)
+        except Exception:
+            continue
+        try: owner = pwd.getpwuid(st.st_uid).pw_name
+        except KeyError: owner = str(st.st_uid)
+        try: group = grp.getgrgid(st.st_gid).gr_name
+        except KeyError: group = str(st.st_gid)
+        entries.append({
+            'name': name,
+            'type': 'dir' if os.path.isdir(full) else 'file',
+            'size': st.st_size,
+            'modified': datetime.fromtimestamp(st.st_mtime).isoformat(),
+            'permissions': oct(stat.S_IMODE(st.st_mode))[2:],
+            'owner': owner, 'group': group,
+        })
+    return entries
+
+
 def home_for(username: str) -> str:
     try:
         return pwd.getpwnam(username).pw_dir
@@ -72,24 +138,10 @@ async def list_dir(path: str = "/", session=Depends(get_current_session)):
     real = safe_path(path, home_for(eu))
     if not os.path.isdir(real):
         raise HTTPException(status_code=404, detail="Not a directory")
-    entries = []
-    for name in sorted(os.listdir(real)):
-        full = os.path.join(real, name)
-        st = os.stat(full)
-        try:
-            owner = pwd.getpwuid(st.st_uid).pw_name
-            group = grp.getgrgid(st.st_gid).gr_name
-        except KeyError:
-            owner, group = str(st.st_uid), str(st.st_gid)
-        entries.append({
-            "name": name,
-            "type": "dir" if os.path.isdir(full) else "file",
-            "size": st.st_size,
-            "modified": datetime.fromtimestamp(st.st_mtime).isoformat(),
-            "permissions": oct(stat.S_IMODE(st.st_mode))[2:],
-            "owner": owner,
-            "group": group,
-        })
+    try:
+        entries = readdir_as_user(real, eu)
+    except PermissionError:
+        raise HTTPException(status_code=403, detail="Permission denied")
     return JSONResponse({"path": path, "entries": entries})
 
 

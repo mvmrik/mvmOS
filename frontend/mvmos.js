@@ -71,7 +71,7 @@ var mvmOS = (() => {
     _flyout.appendChild(sysEl);
 
     const cats = {};
-    Object.values(_apps).forEach(app => {
+    Object.values(_apps).filter(app => !app.system).forEach(app => {
       const cat = app.category || 'Utilities';
       if (!cats[cat]) cats[cat] = [];
       cats[cat].push(app);
@@ -714,10 +714,10 @@ var mvmOS = (() => {
   function _init() {
     // register built-in apps so desktop icons can find their icons
     [
-      { id: 'terminal',    name: t('app_terminal'),    icon: '🖥️', launch: () => Terminal.openWindow() },
-      { id: 'filemanager', name: t('app_filemanager'), icon: '🗂️', launch: () => FileManager.openWindow() },
-      { id: 'appstore',    name: t('app_appstore'),    icon: '📦', launch: () => AppStore.openWindow() },
-      { id: 'settings',   name: t('app_settings'),    icon: '⚙️', launch: () => Settings.openWindow() },
+      { id: 'terminal',    name: t('app_terminal'),    icon: '🖥️', system: true, launch: () => Terminal.openWindow() },
+      { id: 'filemanager', name: t('app_filemanager'), icon: '🗂️', system: true, launch: () => FileManager.openWindow() },
+      { id: 'appstore',    name: t('app_appstore'),    icon: '📦', system: true, launch: () => AppStore.openWindow() },
+      { id: 'settings',   name: t('app_settings'),    icon: '⚙️', system: true, launch: () => Settings.openWindow() },
     ].forEach(def => { _apps[def.id] = def; });
 
     const btn   = document.getElementById('notif-btn');
