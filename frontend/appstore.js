@@ -42,19 +42,11 @@ const AppStore = (() => {
     } else if (opts?.section === 'my-widgets') {
       const tab = body.querySelector('.as-tab[data-tab="my-widgets"]');
       if (tab) {
-        tab.click();
         if (opts.widgetId) {
           body._as._pendingWidgetSettings = opts.widgetId;
-          // after tab loads, open settings for this widget
-          let attempts = 0;
-          const iv = setInterval(() => {
-            const row = body.querySelector(`[data-widget-settings-id="${opts.widgetId}"]`);
-            if (row || ++attempts > 30) {
-              clearInterval(iv);
-              if (row) row.click();
-            }
-          }, 100);
+          body._as._suppressWidgetStoreAutoActivate = true;
         }
+        setTimeout(() => tab.click(), 50);
       }
     } else if (opts?.section === 'themes') {
       const thTab = body.querySelector('#as-theme-store-tabs .as-tab');
@@ -398,8 +390,8 @@ const AppStore = (() => {
       });
     });
 
-    // auto-activate first store tab
-    if (stores.length) {
+    // auto-activate first store tab unless my-widgets settings pending
+    if (stores.length && !body._as._suppressWidgetStoreAutoActivate) {
       const firstTab = tabsEl.querySelector('.as-tab');
       if (firstTab) body._as.activateTab(firstTab);
       loadStoreCategories(body, stores[0]);
@@ -886,17 +878,19 @@ const AppStore = (() => {
     });
 
     if (stores.length) {
-      const firstTab = tabsEl.querySelector('.as-tab');
-      if (firstTab) body._as.activateTab(firstTab);
-      // apply pending filter if set before tabs loaded
-      const pending = body._as._pendingWidgetFilter;
-      if (pending !== undefined) {
-        delete body._as._pendingWidgetFilter;
-        _setWidgetFilter(body, stores[0], pending);
-      } else {
-        const wt = _getWidgetFilter(body, stores[0].id);
-        loadWidgetStoreCategories(body, stores[0], wt);
-        body._as.refreshCurrent = () => loadWidgetStoreCategories(body, stores[0], wt);
+      // don't auto-activate if my-widgets or my-themes tab is pending
+      if (!body._as._suppressWidgetStoreAutoActivate) {
+        const firstTab = tabsEl.querySelector('.as-tab');
+        if (firstTab) body._as.activateTab(firstTab);
+        const pending = body._as._pendingWidgetFilter;
+        if (pending !== undefined) {
+          delete body._as._pendingWidgetFilter;
+          _setWidgetFilter(body, stores[0], pending);
+        } else {
+          const wt = _getWidgetFilter(body, stores[0].id);
+          loadWidgetStoreCategories(body, stores[0], wt);
+          body._as.refreshCurrent = () => loadWidgetStoreCategories(body, stores[0], wt);
+        }
       }
     }
   }
@@ -980,9 +974,18 @@ const AppStore = (() => {
     list.innerHTML = `<div class="as-loading">${t('loading')}</div>`;
     const res = await fetch('/api/widgets');
     const widgets = await res.json();
-    const mine = widgets.filter(w => !w.official || w.official === 0);
-    if (!mine.length) { list.innerHTML = `<div class="as-loading">${t('wstore_no_custom')}</div>`; return; }
-    renderWidgetRows(list, mine.map(w => ({ ...w, installed: true })), body);
+    const pendingId = body._as?._pendingWidgetSettings;
+    if (pendingId) {
+      delete body._as._pendingWidgetSettings;
+      delete body._as._suppressWidgetStoreAutoActivate;
+    }
+    if (!widgets.length) { list.innerHTML = `<div class="as-loading">${t('wstore_no_installed')}</div>`; return; }
+    renderWidgetRows(list, widgets.map(w => ({ ...w, installed: true })), body);
+    if (pendingId) {
+      const def = window.mvmOS?._widgets?.[pendingId];
+      const wData = widgets.find(w => w.id === pendingId);
+      if (def && wData) renderWidgetSettingsPage(body, { ...wData, ...def });
+    }
   }
 
   async function loadWidgetInstalled(body) {
@@ -1064,7 +1067,7 @@ const AppStore = (() => {
           ${w.update_available ? `<button class="s-btn s-btn-sm ws-update" data-widget='${JSON.stringify(w)}'>${t('um_update_btn')}</button>` : ''}
           ${w.installed
             ? `<button class="s-btn s-btn-sm ws-settings" data-id="${w.id}" data-widget-settings-id="${w.id}">${t('wstore_settings')}</button>
-               <button class="s-btn s-btn-sm s-btn-danger ws-remove" data-id="${w.id}">${t('um_removing_btn') || 'Remove'}</button>`
+               <button class="s-btn s-btn-sm s-btn-danger ws-remove" data-id="${w.id}">${t('remove')}</button>`
             : `<button class="s-btn s-btn-sm ws-install" data-widget='${JSON.stringify(w)}'>${t('appstore_install')}</button>`}
         </div>
       `;
@@ -1104,7 +1107,7 @@ const AppStore = (() => {
       });
 
       row.querySelector('.ws-settings')?.addEventListener('click', e => {
-        renderWidgetSettings(list, w.id);
+        renderWidgetSettingsPage(body, w);
       });
 
       list.appendChild(row);
@@ -1112,63 +1115,183 @@ const AppStore = (() => {
   }
 
   function renderWidgetSettings(container, widgetId) {
+    const w = window.mvmOS?._widgets?.[widgetId];
+    if (w) renderWidgetSettingsPage(container._body || document.querySelector('.window[data-win-id="appstore"] .window-body'), w);
+  }
+
+  async function renderWidgetSettingsPage(body, w) {
+    const widgetId = w.id;
     const def = window.mvmOS?._widgets?.[widgetId];
     const settings = def?.settings || [];
-    const panel = document.createElement('div');
-    panel.className = 'as-pkg-row';
-    panel.style.cssText = 'flex-direction:column;align-items:stretch;gap:10px;background:var(--surface2);border-radius:6px;padding:14px;margin-top:4px';
+    const useDb = !!def?.useDb;
+    const main = body.querySelector('.as-main');
+    const prevContent = main.innerHTML;
 
-    if (!settings.length) {
-      panel.innerHTML = `<div style="color:var(--text-dim);font-size:.83rem">${t('wstore_no_settings')}</div>`;
-    } else {
-      panel.innerHTML = `<div style="font-weight:600;font-size:.85rem;margin-bottom:4px">${t('wstore_settings_title')}</div>` +
-        settings.map(s => {
-          const val = mvmOS.storage.get(`widget_${widgetId}_${s.key}`) ?? s.default ?? '';
-          if (s.type === 'checkbox') return `
-            <div style="display:flex;align-items:center;gap:8px;font-size:.83rem">
-              <input type="checkbox" id="ws-${widgetId}-${s.key}" ${val ? 'checked' : ''}>
-              <label for="ws-${widgetId}-${s.key}">${s.label}</label>
-            </div>`;
-          if (s.type === 'select') return `
-            <div style="display:flex;align-items:center;gap:8px;font-size:.83rem">
-              <label style="flex:1">${s.label}</label>
-              <select id="ws-${widgetId}-${s.key}" class="s-input" style="width:auto">
-                ${(s.options || []).map(o => `<option ${o === val ? 'selected' : ''}>${o}</option>`).join('')}
-              </select>
-            </div>`;
-          return `
-            <div style="display:flex;align-items:center;gap:8px;font-size:.83rem">
-              <label style="flex:1">${s.label}</label>
-              <input type="${s.type || 'text'}" id="ws-${widgetId}-${s.key}" class="s-input"
-                value="${val}" ${s.min !== undefined ? `min="${s.min}"` : ''} ${s.max !== undefined ? `max="${s.max}"` : ''}
-                style="width:80px">
-            </div>`;
-        }).join('') +
-        `<div style="display:flex;justify-content:flex-end;gap:6px;margin-top:4px">
-          <button class="s-btn s-btn-sm ws-settings-cancel">${t('as_cancel_btn')}</button>
-          <button class="s-btn s-btn-sm ws-settings-save">${t('wstore_settings_save')}</button>
-        </div>`;
+    // show loading while reading db values
+    main.innerHTML = `<div style="padding:20px;color:var(--text-dim)">${t('loading')}</div>`;
 
-      panel.querySelector('.ws-settings-save').addEventListener('click', () => {
-        settings.forEach(s => {
-          const el = panel.querySelector(`#ws-${widgetId}-${s.key}`);
-          if (!el) return;
-          const val = s.type === 'checkbox' ? el.checked : (s.type === 'number' ? parseFloat(el.value) : el.value);
-          mvmOS.storage.set(`widget_${widgetId}_${s.key}`, val);
-        });
-        panel.remove();
-        // notify widget to re-read settings
-        window.dispatchEvent(new CustomEvent('widget-settings-changed', { detail: { id: widgetId } }));
-      });
+    let _dbVals = {};
+    if (useDb) {
+      try {
+        const db = mvmOS.widgetDb(widgetId);
+        await db.run('CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)');
+        const rows = await db.query('SELECT key, value FROM settings');
+        rows.forEach(r => { try { _dbVals[r.key] = JSON.parse(r.value); } catch(_) {} });
+      } catch(_) {}
     }
 
-    panel.querySelector('.ws-settings-cancel')?.addEventListener('click', () => panel.remove());
+    function _storageKey(s) { return `widget_${widgetId}_${s.key}`; }
+    function _savedVal(s) {
+      if (useDb) return _dbVals[s.key] !== undefined ? _dbVals[s.key] : (s.default !== undefined ? s.default : '');
+      const v = mvmOS.storage.get(_storageKey(s));
+      return v !== null ? v : (s.default !== undefined ? s.default : '');
+    }
+    function _savedCountry() {
+      if (useDb) return _dbVals['country'] !== undefined ? _dbVals['country'] : '';
+      return mvmOS.storage.get(`widget_${widgetId}_country`) || '';
+    }
 
-    // insert after the widget row
-    const rows = container.querySelectorAll('.as-pkg-row');
-    const widgetRow = [...rows].find(r => r.querySelector(`[data-id="${widgetId}"]`));
-    if (widgetRow?.nextSibling) container.insertBefore(panel, widgetRow.nextSibling);
-    else container.appendChild(panel);
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'display:flex;flex-direction:column;height:100%;overflow-y:auto';
+
+    const toolbar = document.createElement('div');
+    toolbar.className = 'as-toolbar';
+    toolbar.style.flexShrink = '0';
+    toolbar.innerHTML = `
+      <button class="s-btn s-btn-sm" id="ws-settings-back">${t('as_back')}</button>
+      <span style="font-weight:600;font-size:.9rem;margin-left:8px">${w.icon || ''} ${w.name} — ${t('wstore_settings_title')}</span>`;
+    wrap.appendChild(toolbar);
+
+    const content = document.createElement('div');
+    content.style.cssText = 'padding:16px;display:flex;flex-direction:column;gap:14px;flex:1';
+
+    if (!settings.length) {
+      content.innerHTML = `<div style="color:var(--text-dim);font-size:.85rem">${t('wstore_no_settings')}</div>`;
+    } else {
+      settings.forEach(s => {
+        const row = document.createElement('div');
+        row.style.cssText = 'display:flex;align-items:center;gap:10px;font-size:.85rem';
+
+        if (s.type === 'checkbox') {
+          const val = _savedVal(s);
+          row.innerHTML = `
+            <input type="checkbox" id="ws-${widgetId}-${s.key}" ${val ? 'checked' : ''}>
+            <label for="ws-${widgetId}-${s.key}">${s.label}</label>`;
+        } else if (s.type === 'select') {
+          const val = _savedVal(s);
+          row.innerHTML = `
+            <label style="flex:1">${s.label}</label>
+            <select id="ws-${widgetId}-${s.key}" class="s-input" style="width:auto">
+              ${(s.options || []).map(o => `<option ${o === val ? 'selected' : ''}>${o}</option>`).join('')}
+            </select>`;
+        } else if (s.type === 'city') {
+          const val = _savedVal(s);
+          const ccVal = _savedCountry();
+          row.style.cssText += ';flex-direction:column;align-items:stretch;gap:8px';
+          row.innerHTML = `
+            <label style="font-size:.85rem">${s.label}</label>
+            <div style="position:relative">
+              <input type="text" id="ws-${widgetId}-${s.key}" class="s-input" value="${val}"
+                placeholder="Type to search…" autocomplete="off" style="width:100%;box-sizing:border-box">
+              <div id="ws-ac-${widgetId}-${s.key}" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--surface2);border:1px solid var(--border);border-radius:6px;z-index:9999;max-height:160px;overflow-y:auto;box-shadow:var(--shadow)"></div>
+            </div>
+            <input type="hidden" id="ws-${widgetId}-country" value="${ccVal}">`;
+          content.appendChild(row);
+
+          const inp  = row.querySelector(`#ws-${widgetId}-${s.key}`);
+          const ccEl = row.querySelector(`#ws-${widgetId}-country`);
+          const drop = row.querySelector(`#ws-ac-${widgetId}-${s.key}`);
+          let _acTimer = null;
+
+          inp.addEventListener('input', () => {
+            clearTimeout(_acTimer);
+            const q = inp.value.trim();
+            if (q.length < 2) { drop.style.display = 'none'; return; }
+            _acTimer = setTimeout(async () => {
+              try {
+                const res = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=8&language=en&format=json`);
+                const j = await res.json();
+                const results = j.results || [];
+                drop.innerHTML = results.map((r, i) =>
+                  `<div data-i="${i}" style="padding:7px 10px;cursor:pointer;font-size:.82rem;border-bottom:1px solid var(--border)"
+                    data-name="${r.name}" data-cc="${r.country_code || ''}">
+                    <strong>${r.name}</strong> <span style="color:var(--text-dim)">${r.admin1 ? r.admin1 + ', ' : ''}${r.country || ''}</span>
+                  </div>`
+                ).join('') || `<div style="padding:8px 10px;font-size:.82rem;color:var(--text-dim)">No results</div>`;
+                drop.style.display = 'block';
+                drop.querySelectorAll('[data-i]').forEach(el => {
+                  el.addEventListener('mouseenter', () => el.style.background = 'var(--surface)');
+                  el.addEventListener('mouseleave', () => el.style.background = '');
+                  el.addEventListener('mousedown', e => {
+                    e.preventDefault();
+                    inp.value = el.dataset.name;
+                    ccEl.value = el.dataset.cc;
+                    drop.style.display = 'none';
+                  });
+                });
+              } catch(_) {}
+            }, 300);
+          });
+          inp.addEventListener('blur', () => setTimeout(() => { drop.style.display = 'none'; }, 200));
+          return;
+        } else {
+          const val = _savedVal(s);
+          row.innerHTML = `
+            <label style="flex:1">${s.label}</label>
+            <input type="${s.type || 'text'}" id="ws-${widgetId}-${s.key}" class="s-input"
+              value="${val}" ${s.min !== undefined ? `min="${s.min}"` : ''} ${s.max !== undefined ? `max="${s.max}"` : ''}
+              style="width:100px">`;
+        }
+        content.appendChild(row);
+      });
+
+      const btnRow = document.createElement('div');
+      btnRow.style.cssText = 'display:flex;justify-content:flex-end;gap:8px;margin-top:8px';
+      btnRow.innerHTML = `
+        <button class="s-btn s-btn-sm" id="ws-settings-cancel">${t('as_cancel_btn')}</button>
+        <button class="s-btn s-btn-sm" id="ws-settings-save">${t('wstore_settings_save')}</button>`;
+      content.appendChild(btnRow);
+    }
+
+    wrap.appendChild(content);
+    main.innerHTML = '';
+    main.appendChild(wrap);
+
+    main.querySelector('#ws-settings-back')?.addEventListener('click', () => {
+      main.innerHTML = prevContent;
+      body._as.refreshCurrent?.();
+    });
+    main.querySelector('#ws-settings-cancel')?.addEventListener('click', () => {
+      main.innerHTML = prevContent;
+      body._as.refreshCurrent?.();
+    });
+    main.querySelector('#ws-settings-save')?.addEventListener('click', async () => {
+      const useDb = !!(window.mvmOS?._widgets?.[widgetId]?.useDb);
+      const db = useDb ? mvmOS.widgetDb(widgetId) : null;
+      if (db) await db.run('CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)');
+
+      async function _save(key, val) {
+        if (db) await db.run('INSERT OR REPLACE INTO settings (key,value) VALUES (?,?)', [key, JSON.stringify(val)]);
+        else mvmOS.storage.set(`widget_${widgetId}_${key}`, val);
+      }
+
+      for (const s of settings) {
+        if (s.type === 'city') {
+          const cityEl = main.querySelector(`#ws-${widgetId}-${s.key}`);
+          const ccEl   = main.querySelector(`#ws-${widgetId}-country`);
+          if (cityEl) await _save(s.key, cityEl.value.trim());
+          if (ccEl)   await _save('country', ccEl.value.trim());
+        } else {
+          const el = main.querySelector(`#ws-${widgetId}-${s.key}`);
+          if (!el) continue;
+          const val = s.type === 'checkbox' ? el.checked : (s.type === 'number' ? parseFloat(el.value) : el.value);
+          await _save(s.key, val);
+        }
+      }
+      window.dispatchEvent(new CustomEvent('widget-settings-changed', { detail: { id: widgetId } }));
+      main.innerHTML = prevContent;
+      body._as.refreshCurrent?.();
+    });
   }
 
   // ── Theme Store tabs (sidebar) ───────────────────────────────────────────────

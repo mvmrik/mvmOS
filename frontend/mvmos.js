@@ -548,17 +548,24 @@ var mvmOS = (() => {
   async function _loadWidget(id) {
     try {
       const base = `/widgets/${id}`;
-      let entry = 'main.js';
+      let entry = 'main.js', css = null;
       try {
         const mf = await fetch(`${base}/manifest.json?_=${Date.now()}`);
-        if (mf.ok) { const j = await mf.json(); entry = j.entry || 'main.js'; }
+        if (mf.ok) { const j = await mf.json(); entry = j.entry || 'main.js'; css = j.css || null; }
       } catch (_) {}
+      if (css && !document.getElementById(`widget-css-${id}`)) {
+        const link = document.createElement('link');
+        link.rel = 'stylesheet'; link.id = `widget-css-${id}`;
+        link.href = `${base}/${css}?_=${Date.now()}`;
+        document.head.appendChild(link);
+      }
       const res = await fetch(`${base}/${entry}?_=${Date.now()}`);
       if (!res.ok) {
         _pushNotif(`Widget needs reinstall: ${id}`, t('wstore_no_installed'), null, null);
         return;
       }
       const code = await res.text();
+      await (window.mvmOS?.i18nReady || Promise.resolve());
       (new Function(code))();
     } catch (e) { console.error('mvmOS: failed to load widget', id, e); }
   }
@@ -599,6 +606,7 @@ var mvmOS = (() => {
         document.head.appendChild(link);
       }
       const code = await res.text();
+      await (window.mvmOS?.i18nReady || Promise.resolve());
       (new Function(code))();
     } catch (e) { console.error('mvmOS: failed to load plugin', id, e); }
   }
@@ -788,6 +796,31 @@ var mvmOS = (() => {
   document.addEventListener('contextmenu', e => { if (!e.target.closest('.start-submenu-item')) _closeCtxMenu(); });
 
   // ── App DB helper ─────────────────────────────────────────────────────────
+  function _makeWidgetDb(widgetId) {
+    return {
+      async query(sql, params = []) {
+        const res = await fetch(`/api/widgets/${widgetId}/db`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sql, params }),
+        });
+        const data = await res.json();
+        if (data.error) throw new Error(data.error);
+        return data.rows;
+      },
+      async run(sql, params = []) {
+        const res = await fetch(`/api/widgets/${widgetId}/db`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sql, params }),
+        });
+        const data = await res.json();
+        if (data.error) throw new Error(data.error);
+        return data.rowcount;
+      },
+    };
+  }
+
   function _makeDb(appId) {
     return {
       async query(sql, params = []) {
@@ -819,7 +852,7 @@ var mvmOS = (() => {
     link.href = `/api/themes/active/css?_=${Date.now()}`;
   }
 
-  return {
+  const _api = {
     registerApp,
     registerWidget,
     onResources,
@@ -829,6 +862,7 @@ var mvmOS = (() => {
     storage,
     widgetSetting,
     db: (appId) => _makeDb(appId),
+    widgetDb: (widgetId) => _makeWidgetDb(widgetId),
     _loadPlugin,
     _loadWidget,
     _removeFromStartMenu,
@@ -840,4 +874,14 @@ var mvmOS = (() => {
     get _widgets() { return _widgets; },
     get _editMode() { return _editMode; },
   };
+
+  // i18n.js runs before this file and attaches onLangChange/i18nReady/lang/t
+  // to window.mvmOS = {}. Copy them over so they survive the reassignment.
+  if (window.mvmOS) {
+    if (window.mvmOS.onLangChange) _api.onLangChange = window.mvmOS.onLangChange;
+    if (window.mvmOS.i18nReady)    _api.i18nReady    = window.mvmOS.i18nReady;
+    if (window.mvmOS.lang)         _api.lang         = window.mvmOS.lang;
+  }
+
+  return _api;
 })();

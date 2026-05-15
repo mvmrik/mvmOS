@@ -278,3 +278,28 @@ async def save_position(widget_id: str, body: PositionRequest, session=Depends(g
         conn.execute("UPDATE widgets SET desktop_x=?, desktop_y=? WHERE id=?",
                      (body.x, body.y, widget_id))
     return JSONResponse({"ok": True})
+
+
+# ── Per-widget SQLite db ──────────────────────────────────────────────────────
+
+class DbRequest(BaseModel):
+    sql: str
+    params: list = []
+
+@router.post("/{widget_id}/db")
+async def widget_db(widget_id: str, body: DbRequest, session=Depends(get_current_session)):
+    widget_dir = os.path.join(WIDGETS_DIR, widget_id)
+    if not os.path.isdir(widget_dir):
+        return JSONResponse({"error": "Widget not installed"}, status_code=404)
+    db_path = os.path.join(widget_dir, "data.db")
+    try:
+        import sqlite3 as _sqlite3
+        conn = _sqlite3.connect(db_path)
+        conn.row_factory = _sqlite3.Row
+        cur = conn.execute(body.sql, body.params)
+        conn.commit()
+        rows = [dict(r) for r in cur.fetchall()] if cur.description else []
+        conn.close()
+        return JSONResponse({"rows": rows, "rowcount": cur.rowcount})
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
