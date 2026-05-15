@@ -174,11 +174,11 @@ const Desktop = (() => {
   }
 
   // ── Default icons ──
-  const BUILTIN_ICONS = [
-    { id: 'terminal', label: 'Terminal', emoji: '🖥️', app: 'terminal' },
-    { id: 'files',    label: 'Files',    emoji: '🗂️', app: 'filemanager' },
-    { id: 'settings', label: 'Settings', emoji: '⚙️', app: 'settings' },
-  ];
+  function BUILTIN_ICONS() { return [
+    { id: 'terminal', label: t('app_terminal'), emoji: '🖥️', app: 'terminal' },
+    { id: 'files',    label: t('app_filemanager'), emoji: '🗂️', app: 'filemanager' },
+    { id: 'settings', label: t('app_settings'), emoji: '⚙️', app: 'settings' },
+  ]; }
 
   // container for grid icons
   const iconsContainer = document.createElement('div');
@@ -233,7 +233,7 @@ const Desktop = (() => {
     const toRender = [];
 
     // built-in app icons
-    BUILTIN_ICONS.forEach((def, i) => {
+    BUILTIN_ICONS().forEach((def, i) => {
       if (desktopState.hidden?.[def.id]) return;
       toRender.push({ ...def, order: positions[def.id]?.order ?? i });
     });
@@ -286,7 +286,7 @@ const Desktop = (() => {
     renderIcons();
   }
 
-  function allIconDefs() { return BUILTIN_ICONS; }
+  function allIconDefs() { return BUILTIN_ICONS(); }
 
   function isOnDesktop(id) {
     return !desktopState.hidden?.[id];
@@ -703,10 +703,10 @@ const Desktop = (() => {
 
   function _startMenuAllApps() {
     const apps = [
-      { id: 'terminal',    label: 'Terminal',     emoji: '🖥️' },
-      { id: 'filemanager', label: 'File Manager',  emoji: '📁' },
-      { id: 'settings',    label: 'Settings',      emoji: '⚙️' },
-      { id: 'appstore',    label: 'App Store',      emoji: '📦' },
+      { id: 'terminal',    label: t('app_terminal'),     emoji: '🖥️' },
+      { id: 'filemanager', label: t('app_filemanager'),  emoji: '📁' },
+      { id: 'settings',    label: t('app_settings'),     emoji: '⚙️' },
+      { id: 'appstore',    label: t('app_appstore'),     emoji: '📦' },
     ];
     Object.values(window.mvmOS?._apps || {}).forEach(a => {
       apps.push({ id: a.id, label: a.name, emoji: a.icon || '📦' });
@@ -765,7 +765,7 @@ const Desktop = (() => {
     function _startMenuCtx(e, appId, label, emoji) {
     e.preventDefault();
     e.stopPropagation();
-    const isBuiltin = BUILTIN_ICONS.find(d => d.id === appId);
+    const isBuiltin = BUILTIN_ICONS().find(d => d.id === appId);
     const alreadyOn = isBuiltin
       ? !desktopState.hidden?.[appId]
       : window._desktopIsOn?.(appId);

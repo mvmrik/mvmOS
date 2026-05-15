@@ -6,7 +6,7 @@ const Terminal = (() => {
   function openWindow() {
     termCount++;
     const id = 'terminal-' + termCount;
-    const title = termCount === 1 ? 'Terminal' : `Terminal (${termCount})`;
+    const title = termCount === 1 ? t('app_terminal') : `${t('app_terminal')} (${termCount})`;
 
     let term, fitAddon, ws;
 

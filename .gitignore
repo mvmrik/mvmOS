@@ -9,3 +9,4 @@ apps/
 widgets/
 themes/
 CLAUDE.md
+*.db

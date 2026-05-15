@@ -59,10 +59,10 @@ var mvmOS = (() => {
     }
     // System category — always first
     const SYSTEM_APPS = [
-      { id: 'terminal',    name: 'Terminal',     icon: '🖥️', system: true, launch: () => Terminal.openWindow() },
-      { id: 'filemanager', name: 'File Manager', icon: '🗂️', system: true, launch: () => FileManager.openWindow() },
-      { id: 'appstore',    name: 'App Store',    icon: '📦', system: true, launch: () => AppStore.openWindow() },
-      { id: 'settings',   name: 'Settings',     icon: '⚙️', system: true, launch: () => Settings.openWindow() },
+      { id: 'terminal',    name: t('app_terminal'),     icon: '🖥️', system: true, launch: () => Terminal.openWindow() },
+      { id: 'filemanager', name: t('app_filemanager'), icon: '🗂️', system: true, launch: () => FileManager.openWindow() },
+      { id: 'appstore',    name: t('app_appstore'),    icon: '📦', system: true, launch: () => AppStore.openWindow() },
+      { id: 'settings',   name: t('app_settings'),    icon: '⚙️', system: true, launch: () => Settings.openWindow() },
     ];
     const sysEl = document.createElement('div');
     sysEl.className = 'start-submenu-item';
@@ -618,7 +618,7 @@ var mvmOS = (() => {
     if (!e.target.closest('.start-submenu') && !e.target.closest('#start-apps-btn')) _closeFlyout();
   });
 
-  document.addEventListener('DOMContentLoaded', () => {
+  function _init() {
     const btn   = document.getElementById('notif-btn');
     const panel = document.getElementById('notif-panel');
     if (btn && panel) {
@@ -633,6 +633,14 @@ var mvmOS = (() => {
     _loadAllWidgets();
     _startResourcePoller();
     document.addEventListener('mvmos-plugins-loaded', () => _renderQuickAccess());
+  }
+
+  document.addEventListener('DOMContentLoaded', () => {
+    // wait for i18n to load before initializing UI
+    if (window._i18n) { _init(); return; }
+    window.addEventListener('i18n-loaded', _init, { once: true });
+    // fallback if i18n takes too long
+    setTimeout(() => { if (!window._i18n) _init(); }, 1000);
   });
 
   // ── Context menu ──────────────────────────────────────────────────────────

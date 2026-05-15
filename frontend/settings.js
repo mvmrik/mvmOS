@@ -112,11 +112,11 @@ const Settings = (() => {
     }
     Desktop.createWindow({
       id: 'settings',
-      title: '⚙️ Settings',
+      title: `⚙️ ${t('app_settings')}`,
       width: 620,
       height: 480,
       onMount(body) {
-        loadSettings().then(s => {
+        Promise.all([loadSettings(), window.mvmOS?.i18nReady || Promise.resolve()]).then(([s]) => {
           render(body, s, tab);
           Desktop.initMobileSidebar(body);
         });
@@ -499,7 +499,7 @@ const Settings = (() => {
         });
         const msg = row.querySelector('.user-save-msg');
         if (r.ok) {
-          msg.style.color = '#50fa7b'; msg.textContent = '✓ Saved';
+          msg.style.color = '#50fa7b'; msg.textContent = t('users_saved');
           setTimeout(() => renderUsers(body), 800);
         } else {
           const e = await r.json();
@@ -518,7 +518,7 @@ const Settings = (() => {
       const groups   = container.querySelector('#nu-groups').value.split(',').map(g => g.trim()).filter(Boolean);
       const msg      = container.querySelector('#nu-msg');
 
-      if (!username || !password) { msg.style.color='#e05555'; msg.textContent='Username and password required'; return; }
+      if (!username || !password) { msg.style.color='#e05555'; msg.textContent=t('users_req_fields'); return; }
 
       const r = await fetch('/api/users', {
         method: 'POST',
@@ -526,7 +526,7 @@ const Settings = (() => {
         body: JSON.stringify({ username, password, shell, groups }),
       });
       if (r.ok) {
-        msg.style.color = '#50fa7b'; msg.textContent = '✓ User created';
+        msg.style.color = '#50fa7b'; msg.textContent = t('users_created');
         container.querySelector('#nu-name').value = '';
         container.querySelector('#nu-pass').value = '';
         container.querySelector('#nu-groups').value = '';
@@ -567,6 +567,7 @@ const Settings = (() => {
     if (!wrap) return;
     wrap.innerHTML = `<div style="color:var(--text-dim);font-size:.85rem">${t('loading')}</div>`;
 
+    await (window.mvmOS?.i18nReady || Promise.resolve());
     const res  = await fetch('/api/system/info');
     const info = await res.json();
 
@@ -590,18 +591,18 @@ const Settings = (() => {
       </div>
 
       <div class="settings-section" style="margin-top:16px">
-        <div class="settings-section-title">⬆️ System Update</div>
+        <div class="settings-section-title">${t('about_system_update')}</div>
         <div style="margin-bottom:10px">
           <button class="s-btn" id="about-check-btn">${t('um_check')}</button>
           <span id="about-update-status" style="margin-left:10px;font-size:.82rem;color:var(--text-dim)"></span>
         </div>
         <div id="about-update-output" style="display:none;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:10px;font-size:.78rem;font-family:monospace;max-height:180px;overflow-y:auto;white-space:pre-wrap"></div>
-        <button class="s-btn" id="about-update-btn" style="display:none;margin-top:8px">↑ Apply update &amp; restart</button>
+        <button class="s-btn" id="about-update-btn" style="display:none;margin-top:8px">${t('about_apply_update')}</button>
         <div id="about-update-manual" style="display:none;margin-top:8px;font-size:.8rem;color:var(--text-dim)">
-          SSH грешка — изпълни ръчно в терминала:<br>
+          ${t('about_ssh_error')}<br>
           <code id="about-update-cmd" style="display:block;margin-top:4px;padding:6px 8px;background:var(--surface);border-radius:4px;color:var(--text);font-size:.78rem;word-break:break-all"></code>
-          <button class="s-btn" id="about-update-copy-btn" style="margin-top:6px;font-size:.75rem">📋 Copy command</button>
-          <button class="s-btn" id="about-update-terminal-btn" style="margin-top:6px;margin-left:6px;font-size:.75rem">⬛ Open in Terminal</button>
+          <button class="s-btn" id="about-update-copy-btn" style="margin-top:6px;font-size:.75rem">${t('about_copy_cmd')}</button>
+          <button class="s-btn" id="about-update-terminal-btn" style="margin-top:6px;margin-left:6px;font-size:.75rem">${t('about_open_terminal')}</button>
         </div>
       </div>
     `;
@@ -616,7 +617,7 @@ const Settings = (() => {
     const termBtn   = wrap.querySelector('#about-update-terminal-btn');
 
     copyBtn.addEventListener('click', () => {
-      navigator.clipboard.writeText(cmdEl.textContent).then(() => { copyBtn.textContent = '✓ Copied!'; setTimeout(() => { copyBtn.textContent = '📋 Copy command'; }, 2000); });
+      navigator.clipboard.writeText(cmdEl.textContent).then(() => { copyBtn.textContent = t('about_copied'); setTimeout(() => { copyBtn.textContent = t('about_copy_cmd'); }, 2000); });
     });
     termBtn.addEventListener('click', () => {
       Terminal.openWindow();
@@ -631,11 +632,11 @@ const Settings = (() => {
         const d = await r.json();
         if (d.error) { statusEl.style.color = '#f38ba8'; statusEl.textContent = d.error; return; }
         if (d.up_to_date) {
-          if (!silent) { statusEl.style.color = '#50fa7b'; statusEl.textContent = '✓ Already up to date'; }
+          if (!silent) { statusEl.style.color = '#50fa7b'; statusEl.textContent = t('about_up_to_date'); }
           updateBtn.style.display = 'none';
         } else {
           statusEl.style.color = '#f1fa8c';
-          statusEl.textContent = `New version available: ${d.local} → ${d.remote}`;
+          statusEl.textContent = t('about_new_version', { local: d.local, remote: d.remote });
           updateBtn.style.display = '';
           if (d.notes) {
             outputEl.style.display = 'block';
@@ -643,7 +644,7 @@ const Settings = (() => {
           }
         }
       } catch (_) {
-        if (!silent) { statusEl.style.color = '#f38ba8'; statusEl.textContent = 'Check failed.'; }
+        if (!silent) { statusEl.style.color = '#f38ba8'; statusEl.textContent = t('about_check_failed'); }
       } finally {
         checkBtn.disabled = false;
       }
@@ -657,7 +658,7 @@ const Settings = (() => {
       updateBtn.disabled = true;
       outputEl.style.display = 'block';
       outputEl.textContent = '';
-      statusEl.textContent = 'Updating…';
+      statusEl.textContent = t('about_updating');
 
       const res = await fetch('/api/system/update', { method: 'POST' });
       const reader = res.body.getReader();
@@ -673,13 +674,13 @@ const Settings = (() => {
           if (!line.startsWith('data: ')) continue;
           const text = line.slice(6);
           if (text === '__RESTARTING__') {
-            outputEl.textContent += '\nRestarting server…';
+            outputEl.textContent += '\n' + t('about_restarting');
             statusEl.style.color = '#50fa7b';
-            statusEl.textContent = '✓ Update applied — reconnecting…';
+            statusEl.textContent = t('about_update_applied');
             setTimeout(() => location.reload(), 3000);
           } else if (text.startsWith('__EXIT_')) {
             statusEl.style.color = '#f38ba8';
-            statusEl.textContent = '✗ Update failed';
+            statusEl.textContent = t('about_update_failed');
             updateBtn.disabled = false;
             const repoDir = outputEl.dataset.repoDir || window.location.origin;
             cmdEl.textContent = `cd $(systemctl show mvmos -p WorkingDirectory --value) && git pull origin main && sudo systemctl restart mvmos`;
@@ -696,7 +697,7 @@ const Settings = (() => {
   async function renderThemePicker(body) {
     const wrap = body.querySelector('#theme-picker-wrap');
     if (!wrap) return;
-    wrap.innerHTML = '<div style="color:var(--text-dim);font-size:.83rem">Loading…</div>';
+    wrap.innerHTML = `<div style="color:var(--text-dim);font-size:.83rem">${t('loading')}</div>`;
 
     let themes;
     try {

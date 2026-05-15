@@ -11,17 +11,19 @@ const FileManager = (() => {
 
     Desktop.createWindow({
       id,
-      title: '📁 File Manager',
+      title: `📁 ${t('app_filemanager')}`,
       width: 720,
       height: 480,
       appSettings: 'filemanager',
       onMount(body) {
-        const fm = new FMInstance(body);
-        if (startPath) {
-          fm.navigate(startPath);
-        } else {
-          fetch('/api/files/places').then(r => r.json()).then(d => fm.navigate(d.home)).catch(() => fm.navigate('/'));
-        }
+        (window.mvmOS?.i18nReady || Promise.resolve()).then(() => {
+          const fm = new FMInstance(body);
+          if (startPath) {
+            fm.navigate(startPath);
+          } else {
+            fetch('/api/files/places').then(r => r.json()).then(d => fm.navigate(d.home)).catch(() => fm.navigate('/'));
+          }
+        });
       },
     });
   }
@@ -38,12 +40,12 @@ const FileManager = (() => {
       body.innerHTML = `
         <div class="fm-container">
           <div class="fm-toolbar">
-            <button class="fm-up">↑ Up</button>
+            <button class="fm-up">${t('fm_up')}</button>
             <span class="fm-breadcrumb"></span>
-            <input class="fm-search" type="text" placeholder="Search…" autocomplete="off">
-            <button class="fm-search-deep" title="Search in subfolders">🔍</button>
-            <button class="fm-mkdir">+ Folder</button>
-            <button class="fm-upload-btn">↑ Upload</button>
+            <input class="fm-search" type="text" placeholder="${t('fm_search_ph')}" autocomplete="off">
+            <button class="fm-search-deep" title="${t('fm_search_deep_title')}">🔍</button>
+            <button class="fm-mkdir">${t('fm_new_folder')}</button>
+            <button class="fm-upload-btn">${t('fm_upload')}</button>
             <input type="file" class="fm-upload-input" style="display:none" multiple>
           </div>
           <div class="fm-body">
@@ -85,14 +87,14 @@ const FileManager = (() => {
       const deepSearch = async () => {
         const q = this.searchEl.value.trim();
         if (!q) return;
-        this.footerStatus.textContent = `Searching…`;
+        this.footerStatus.textContent = t('fm_searching');
         const res = await fetch(`/api/files/search?path=${encodeURIComponent(this.currentPath)}&q=${encodeURIComponent(q)}`);
-        if (!res.ok) { this.footerStatus.textContent = 'Search failed'; return; }
+        if (!res.ok) { this.footerStatus.textContent = t('fm_search_failed'); return; }
         const data = await res.json();
-        this.footerStatus.textContent = `${data.results.length} result${data.results.length !== 1 ? 's' : ''} for "${q}"`;
+        this.footerStatus.textContent = t('fm_results', {n: data.results.length, s: data.results.length !== 1 ? 's' : '', q});
         this.listEl.innerHTML = '';
         if (!data.results.length) {
-          this.listEl.innerHTML = '<div class="fm-empty">No results</div>';
+          this.listEl.innerHTML = `<div class="fm-empty">${t('fm_no_results')}</div>`;
           return;
         }
         data.results.forEach(entry => {
@@ -203,7 +205,7 @@ const FileManager = (() => {
         this.placesEl.appendChild(userLabel);
 
         // Home (always)
-        this._addPlace('🏠', 'Home', data.home);
+        this._addPlace('🏠', t('fm_home'), data.home);
 
         // XDG folders (only if exist)
         if (data.xdg.length > 0) {
@@ -217,7 +219,7 @@ const FileManager = (() => {
         const sep2 = document.createElement('div');
         sep2.className = 'fm-places-sep';
         this.placesEl.appendChild(sep2);
-        this._addPlace('💻', 'Computer', '/');
+        this._addPlace('💻', t('fm_computer'), '/');
 
         // Bookmarks
         const bookmarks = this._loadBookmarks();
@@ -227,7 +229,7 @@ const FileManager = (() => {
           this.placesEl.appendChild(sep3);
           const bLabel = document.createElement('div');
           bLabel.className = 'fm-places-user';
-          bLabel.textContent = 'Bookmarks';
+          bLabel.textContent = t('fm_bookmarks');
           this.placesEl.appendChild(bLabel);
           bookmarks.forEach(b => this._addBookmark(b.name, b.path));
         }
@@ -367,11 +369,11 @@ const FileManager = (() => {
 
       try {
         const res = await fetch(`/api/files?path=${encodeURIComponent(path)}`);
-        if (!res.ok) { this.showError('Cannot read directory'); return; }
+        if (!res.ok) { this.showError(t('fm_cannot_read')); return; }
         const data = await res.json();
         this.render(data.entries);
       } catch (e) {
-        this.showError('Network error');
+        this.showError(t('fm_network_error'));
       }
     }
 
@@ -401,7 +403,7 @@ const FileManager = (() => {
         const date = entry.modified ? entry.modified.slice(0, 16).replace('T', ' ') : '';
 
         const permsHtml = prefs.showPerms
-          ? `<span class="fm-perms fm-editable" title="Click to change">${entry.permissions || ''}</span>` : '';
+          ? `<span class="fm-perms fm-editable" title="${t('fm_perms_title')}">${entry.permissions || ''}</span>` : '';
         const ownerHtml = prefs.showOwner
           ? `<span class="fm-owner fm-editable" title="Click to change">${entry.owner || ''}${entry.group ? ':'+entry.group : ''}</span>` : '';
 
@@ -687,13 +689,13 @@ const FileManager = (() => {
         if (file.size > MAX_SIZE) {
           this.progressWrap.style.display = 'none';
           this.footerStatus.style.color = '#f38ba8';
-          this.footerStatus.textContent = `✗ ${file.name}: File too large (max 2GB)`;
+          this.footerStatus.textContent = t('fm_file_too_large', {name: file.name});
           setTimeout(() => { this.footerStatus.textContent = ''; this.footerStatus.style.color = ''; }, 5000);
           if (i < total) uploadNext(); else this.navigate(this.currentPath);
           return;
         }
         this.progressWrap.style.display = '';
-        this.progressLabel.textContent = `Uploading ${i}/${total}: ${file.name}`;
+        this.progressLabel.textContent = t('fm_uploading', {i, total, name: file.name});
         this.progressFill.style.width = '0%';
 
         const xhr = new XMLHttpRequest();
@@ -706,7 +708,7 @@ const FileManager = (() => {
             const msg = xhr.status === 413 || xhr.status === 0 ? 'File too large' : `Error ${xhr.status}`;
             this.progressWrap.style.display = 'none';
             this.footerStatus.style.color = '#f38ba8';
-            this.footerStatus.textContent = `✗ ${file.name}: ${msg}`;
+            this.footerStatus.textContent = t('fm_upload_failed_file', {name: file.name, msg});
             setTimeout(() => { this.footerStatus.textContent = ''; this.footerStatus.style.color = ''; }, 5000);
             if (i < total) uploadNext(); else this.navigate(this.currentPath);
             return;
@@ -714,14 +716,14 @@ const FileManager = (() => {
           if (i < total) { uploadNext(); return; }
           this.progressWrap.style.display = 'none';
           this.footerStatus.style.color = '#50fa7b';
-          this.footerStatus.textContent = `✓ Uploaded ${total} file${total > 1 ? 's' : ''}`;
+          this.footerStatus.textContent = t('fm_uploaded', {n: total, s: total > 1 ? 's' : ''});
           setTimeout(() => { this.footerStatus.textContent = ''; this.footerStatus.style.color = ''; }, 3000);
           this.navigate(this.currentPath);
         });
         xhr.addEventListener('error', () => {
           this.progressWrap.style.display = 'none';
           this.footerStatus.style.color = '#f38ba8';
-          this.footerStatus.textContent = `✗ Failed: ${file.name}`;
+          this.footerStatus.textContent = t('fm_upload_failed', {name: file.name});
           setTimeout(() => { this.footerStatus.textContent = ''; this.footerStatus.style.color = ''; }, 5000);
           if (i < total) uploadNext(); else this.navigate(this.currentPath);
         });
@@ -745,13 +747,13 @@ const FileManager = (() => {
       const isDir = entry.type === 'dir';
       const icon = isDir ? '📁' : this.fileIcon(entry.name);
       const rows = [
-        ['Name', entry.name],
-        ['Type', isDir ? 'Folder' : (entry.name.split('.').pop().toUpperCase() + ' file')],
-        ['Size', isDir ? '<span id="fm-info-size">calculating…</span>' : this.formatSize(entry.size)],
-        ['Modified', entry.modified ? entry.modified.slice(0, 16).replace('T', ' ') : '—'],
-        ['Permissions', entry.permissions || '—'],
-        ['Owner', entry.owner + (entry.group ? ':' + entry.group : '')],
-        ['Path', this.joinPath(this.currentPath, entry.name)],
+        [t('fm_info_name'), entry.name],
+        [t('fm_info_type'), isDir ? t('fm_type_folder') : (entry.name.split('.').pop().toUpperCase() + ' file')],
+        [t('fm_info_size'), isDir ? `<span id="fm-info-size">${t('fm_info_calculating')}</span>` : this.formatSize(entry.size)],
+        [t('fm_info_modified'), entry.modified ? entry.modified.slice(0, 16).replace('T', ' ') : '—'],
+        [t('fm_info_permissions'), entry.permissions || '—'],
+        [t('fm_info_owner'), entry.owner + (entry.group ? ':' + entry.group : '')],
+        [t('fm_info_path'), this.joinPath(this.currentPath, entry.name)],
       ];
       const win = document.createElement('div');
       win.style.cssText = `position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);
@@ -787,7 +789,7 @@ const FileManager = (() => {
         img.onload = () => {
           const el = win.querySelector('#fm-info-extra');
           if (el) el.innerHTML = `<tr style="border-bottom:1px solid var(--border);">
-            <td style="padding:7px 14px;color:var(--text-dim);width:100px;">Resolution</td>
+            <td style="padding:7px 14px;color:var(--text-dim);width:100px;">${t('fm_info_resolution')}</td>
             <td style="padding:7px 14px;">${img.naturalWidth} × ${img.naturalHeight} px</td></tr>`;
         };
         img.src = `/api/files/raw?path=${encodeURIComponent(fullPath)}`;
@@ -849,8 +851,8 @@ const FileManager = (() => {
       const files = entries.filter(e => e.type !== 'dir');
       const totalSize = files.reduce((s, e) => s + (e.size || 0), 0);
       const parts = [];
-      if (dirs > 0) parts.push(`${dirs} folder${dirs > 1 ? 's' : ''}`);
-      if (files.length > 0) parts.push(`${files.length} file${files.length > 1 ? 's' : ''}`);
+      if (dirs > 0) parts.push(t('fm_folder_count', {n: dirs, s: dirs > 1 ? 's' : ''}));
+      if (files.length > 0) parts.push(t('fm_file_count', {n: files.length, s: files.length > 1 ? 's' : ''}));
       if (totalSize > 0) parts.push(this.formatSize(totalSize));
       this.footerStatus.textContent = parts.join(' · ');
     }

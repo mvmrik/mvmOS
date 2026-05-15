@@ -12,10 +12,10 @@ const AppStore = (() => {
     }
     Desktop.createWindow({
       id: 'appstore',
-      title: '📦 App Store',
+      title: `📦 ${t('app_appstore')}`,
       width: 880,
       height: 580,
-      onMount(body) { render(body); if (opts) _applyOpts(body, opts); },
+      onMount(body) { (window.mvmOS?.i18nReady || Promise.resolve()).then(() => { render(body); if (opts) _applyOpts(body, opts); }); },
     });
   }
 
@@ -52,29 +52,29 @@ const AppStore = (() => {
     body.innerHTML = `
       <div class="as-wrap">
         <nav class="as-sidebar">
-          <div class="as-sidebar-group-label">Linux Packages</div>
-          <div class="as-tab" data-tab="browse">🗂️ Browse</div>
-          <div class="as-tab" data-tab="installed">✅ Installed</div>
-          <div class="as-tab" data-tab="search">🔍 Search</div>
+          <div class="as-sidebar-group-label">${t('as_linux_packages')}</div>
+          <div class="as-tab" data-tab="browse">${t('as_browse')}</div>
+          <div class="as-tab" data-tab="installed">✅ ${t('as_installed')}</div>
+          <div class="as-tab" data-tab="search">${t('as_search')}</div>
           <div class="as-sidebar-sep"></div>
-          <div class="as-sidebar-group-label">mvmOS Apps</div>
+          <div class="as-sidebar-group-label">${t('as_mvmos_apps')}</div>
 
           <div id="as-store-tabs"></div>
-          <div class="as-tab" data-tab="app-installed">✅ Installed</div>
-          <div class="as-tab" data-tab="myapps">👤 My Apps</div>
-          <div class="as-tab" data-tab="app-stores">🔗 Stores</div>
+          <div class="as-tab" data-tab="app-installed">✅ ${t('as_installed')}</div>
+          <div class="as-tab" data-tab="myapps">${t('as_my_apps')}</div>
+          <div class="as-tab" data-tab="app-stores">🔗 ${t('as_stores')}</div>
           <div class="as-sidebar-sep"></div>
-          <div class="as-sidebar-group-label">mvmOS Widgets</div>
+          <div class="as-sidebar-group-label">${t('as_mvmos_widgets')}</div>
           <div id="as-widget-store-tabs"></div>
-          <div class="as-tab" data-tab="widget-installed">✅ Installed</div>
-          <div class="as-tab" data-tab="my-widgets">👤 My Widgets</div>
-          <div class="as-tab" data-tab="widget-stores">🔗 Stores</div>
+          <div class="as-tab" data-tab="widget-installed">✅ ${t('as_installed')}</div>
+          <div class="as-tab" data-tab="my-widgets">${t('as_my_widgets')}</div>
+          <div class="as-tab" data-tab="widget-stores">🔗 ${t('as_stores')}</div>
           <div class="as-sidebar-sep"></div>
-          <div class="as-sidebar-group-label">mvmOS Themes</div>
+          <div class="as-sidebar-group-label">${t('as_mvmos_themes')}</div>
           <div id="as-theme-store-tabs"></div>
-          <div class="as-tab" data-tab="theme-installed">✅ Installed</div>
-          <div class="as-tab" data-tab="my-themes">👤 My Themes</div>
-          <div class="as-tab" data-tab="theme-stores">🔗 Stores</div>
+          <div class="as-tab" data-tab="theme-installed">✅ ${t('as_installed')}</div>
+          <div class="as-tab" data-tab="my-themes">${t('as_my_themes')}</div>
+          <div class="as-tab" data-tab="theme-stores">🔗 ${t('as_stores')}</div>
         </nav>
         <div class="as-main">
 
@@ -83,7 +83,7 @@ const AppStore = (() => {
             <div class="as-list as-cat-grid" id="as-cat-grid"><div class="as-loading"\>${t('appstore_loading_categories')}</div></div>
             <div class="as-browse-pkg" id="as-browse-pkg" style="display:none">
               <div class="as-toolbar">
-                <button class="s-btn-sm" id="as-back">← Back</button>
+                <button class="s-btn-sm" id="as-back">${t('as_back')}</button>
                 <span id="as-browse-title" style="font-size:.85rem;font-weight:600;flex:1;padding-left:8px"></span>
                 <input class="as-filter" id="as-browse-filter" placeholder="Filter…" style="max-width:160px">
               </div>
@@ -95,7 +95,7 @@ const AppStore = (() => {
           <!-- Installed (Linux) -->
           <div class="as-panel" id="asp-installed">
             <div class="as-toolbar">
-              <input class="as-filter" id="as-installed-filter" placeholder="Filter installed…">
+              <input class="as-filter" id="as-installed-filter" placeholder="${t('as_filter_installed_ph')}">
               <button class="s-btn" id="as-refresh">↺</button>
             </div>
             <div class="as-list" id="as-installed-list"><div class="as-loading"\>${t('loading')}</div></div>
@@ -104,17 +104,17 @@ const AppStore = (() => {
           <!-- Search (Linux) -->
           <div class="as-panel" id="asp-search">
             <div class="as-toolbar">
-              <input class="as-filter" id="as-search-input" placeholder="Search all packages…">
-              <button class="s-btn" id="as-search-btn">Search</button>
+              <input class="as-filter" id="as-search-input" placeholder="${t('as_search_all_ph')}">
+              <button class="s-btn" id="as-search-btn">${t('as_search_btn')}</button>
             </div>
-            <div class="as-list" id="as-search-list"><div class="as-loading">Type to search</div></div>
+            <div class="as-list" id="as-search-list"><div class="as-loading">${t('as_type_to_search')}</div></div>
           </div>
 
           <!-- My Apps -->
           <!-- App Installed -->
           <div class="as-panel" id="asp-app-installed">
             <div class="as-toolbar">
-              <span style="font-size:.8rem;color:var(--text-dim);flex:1">Installed mvmOS apps</span>
+              <span style="font-size:.8rem;color:var(--text-dim);flex:1">${t('as_installed_apps_label')}</span>
               <button class="s-btn" id="as-app-installed-refresh">↺</button>
             </div>
             <div class="as-list" id="as-app-installed-list"><div class="as-loading"\>${t('loading')}</div></div>
@@ -123,7 +123,7 @@ const AppStore = (() => {
           <!-- My Apps (custom stores) -->
           <div class="as-panel" id="asp-myapps">
             <div class="as-toolbar">
-              <span style="font-size:.8rem;color:var(--text-dim);flex:1">Apps from custom stores</span>
+              <span style="font-size:.8rem;color:var(--text-dim);flex:1">${t('as_custom_apps_label')}</span>
               <button class="s-btn" id="as-myapps-refresh">↺</button>
             </div>
             <div class="as-list" id="as-myapps-list"><div class="as-loading"\>${t('loading')}</div></div>
@@ -132,15 +132,15 @@ const AppStore = (() => {
           <!-- App Stores management -->
           <div class="as-panel" id="asp-app-stores">
             <div class="as-toolbar" style="flex-wrap:wrap;gap:6px">
-              <span style="font-size:.8rem;color:var(--text-dim);flex:1">Manage app store sources</span>
-              <button class="s-btn" id="as-stores-add-btn">+ Add store</button>
+              <span style="font-size:.8rem;color:var(--text-dim);flex:1">${t('as_manage_app_stores')}</span>
+              <button class="s-btn" id="as-stores-add-btn">${t('as_add_store')}</button>
             </div>
             <div id="as-add-store-form" style="display:none;padding:10px 12px;border-bottom:1px solid var(--border);display:none;flex-direction:column;gap:6px">
-              <input class="as-filter" id="as-store-name-input" placeholder="Store name">
-              <input class="as-filter" id="as-store-url-input" placeholder="manifest.json URL (raw GitHub link)">
+              <input class="as-filter" id="as-store-name-input" placeholder="${t('as_store_name_ph')}">
+              <input class="as-filter" id="as-store-url-input" placeholder="${t('as_store_url_ph')}">
               <div style="display:flex;gap:6px">
-                <button class="s-btn" id="as-store-submit">Add</button>
-                <button class="s-btn-sm" id="as-store-cancel">Cancel</button>
+                <button class="s-btn" id="as-store-submit">${t('as_add_btn')}</button>
+                <button class="s-btn-sm" id="as-store-cancel">${t('as_cancel_btn')}</button>
                 <span id="as-store-err" style="font-size:.78rem;color:#f38ba8;align-self:center"></span>
               </div>
             </div>
@@ -150,7 +150,7 @@ const AppStore = (() => {
           <!-- My Widgets -->
           <div class="as-panel" id="asp-my-widgets">
             <div class="as-toolbar">
-              <span style="font-size:.8rem;color:var(--text-dim);flex:1">Widgets from custom stores</span>
+              <span style="font-size:.8rem;color:var(--text-dim);flex:1">${t('as_custom_widgets_label')}</span>
               <button class="s-btn" id="as-my-widgets-refresh">↺</button>
             </div>
             <div class="as-list" id="as-my-widgets-list"><div class="as-loading"\>${t('loading')}</div></div>
@@ -159,7 +159,7 @@ const AppStore = (() => {
           <!-- Widget Installed -->
           <div class="as-panel" id="asp-widget-installed">
             <div class="as-toolbar">
-              <span style="font-size:.8rem;color:var(--text-dim);flex:1">Installed widgets</span>
+              <span style="font-size:.8rem;color:var(--text-dim);flex:1">${t('as_installed_widgets_label')}</span>
               <button class="s-btn" id="as-widget-installed-refresh">↺</button>
             </div>
             <div class="as-list" id="as-widget-installed-list"><div class="as-loading"\>${t('loading')}</div></div>
@@ -168,15 +168,15 @@ const AppStore = (() => {
           <!-- Widget Stores management -->
           <div class="as-panel" id="asp-widget-stores">
             <div class="as-toolbar" style="flex-wrap:wrap;gap:6px">
-              <span style="font-size:.8rem;color:var(--text-dim);flex:1">Manage widget store sources</span>
-              <button class="s-btn" id="as-wstores-add-btn">+ Add store</button>
+              <span style="font-size:.8rem;color:var(--text-dim);flex:1">${t('as_manage_widget_stores')}</span>
+              <button class="s-btn" id="as-wstores-add-btn">${t('as_add_store')}</button>
             </div>
             <div id="as-add-wstore-form" style="display:none;padding:10px 12px;border-bottom:1px solid var(--border);flex-direction:column;gap:6px">
-              <input class="as-filter" id="as-wstore-name-input" placeholder="Store name">
-              <input class="as-filter" id="as-wstore-url-input" placeholder="manifest.json URL">
+              <input class="as-filter" id="as-wstore-name-input" placeholder="${t('as_store_name_ph')}">
+              <input class="as-filter" id="as-wstore-url-input" placeholder="${t('as_store_url_ph')}">
               <div style="display:flex;gap:6px">
-                <button class="s-btn" id="as-wstore-submit">Add</button>
-                <button class="s-btn-sm" id="as-wstore-cancel">Cancel</button>
+                <button class="s-btn" id="as-wstore-submit">${t('as_add_btn')}</button>
+                <button class="s-btn-sm" id="as-wstore-cancel">${t('as_cancel_btn')}</button>
                 <span id="as-wstore-err" style="font-size:.78rem;color:#f38ba8;align-self:center"></span>
               </div>
             </div>
@@ -186,7 +186,7 @@ const AppStore = (() => {
           <!-- Theme Installed -->
           <div class="as-panel" id="asp-theme-installed">
             <div class="as-toolbar">
-              <span style="font-size:.8rem;color:var(--text-dim);flex:1">Installed themes</span>
+              <span style="font-size:.8rem;color:var(--text-dim);flex:1">${t('as_installed_themes_label')}</span>
               <button class="s-btn" id="as-theme-installed-refresh">↺</button>
             </div>
             <div class="as-list" id="as-theme-installed-list"><div class="as-loading"\>${t('loading')}</div></div>
@@ -195,7 +195,7 @@ const AppStore = (() => {
           <!-- My Themes (custom stores only) -->
           <div class="as-panel" id="asp-my-themes">
             <div class="as-toolbar">
-              <span style="font-size:.8rem;color:var(--text-dim);flex:1">Themes from custom stores</span>
+              <span style="font-size:.8rem;color:var(--text-dim);flex:1">${t('as_custom_themes_label')}</span>
               <button class="s-btn" id="as-my-themes-refresh">↺</button>
             </div>
             <div class="as-list" id="as-my-themes-list"><div class="as-loading"\>${t('loading')}</div></div>
@@ -204,15 +204,15 @@ const AppStore = (() => {
           <!-- Theme Stores management -->
           <div class="as-panel" id="asp-theme-stores">
             <div class="as-toolbar" style="flex-wrap:wrap;gap:6px">
-              <span style="font-size:.8rem;color:var(--text-dim);flex:1">Manage theme store sources</span>
-              <button class="s-btn" id="as-tstores-add-btn">+ Add store</button>
+              <span style="font-size:.8rem;color:var(--text-dim);flex:1">${t('as_manage_theme_stores')}</span>
+              <button class="s-btn" id="as-tstores-add-btn">${t('as_add_store')}</button>
             </div>
             <div id="as-add-tstore-form" style="display:none;padding:10px 12px;border-bottom:1px solid var(--border);flex-direction:column;gap:6px">
-              <input class="as-filter" id="as-tstore-name-input" placeholder="Store name">
-              <input class="as-filter" id="as-tstore-url-input" placeholder="manifest.json URL">
+              <input class="as-filter" id="as-tstore-name-input" placeholder="${t('as_store_name_ph')}">
+              <input class="as-filter" id="as-tstore-url-input" placeholder="${t('as_store_url_ph')}">
               <div style="display:flex;gap:6px">
-                <button class="s-btn" id="as-tstore-submit">Add</button>
-                <button class="s-btn-sm" id="as-tstore-cancel">Cancel</button>
+                <button class="s-btn" id="as-tstore-submit">${t('as_add_btn')}</button>
+                <button class="s-btn-sm" id="as-tstore-cancel">${t('as_cancel_btn')}</button>
                 <span id="as-tstore-err" style="font-size:.78rem;color:#f38ba8;align-self:center"></span>
               </div>
             </div>
@@ -514,7 +514,7 @@ const AppStore = (() => {
     const name = body.querySelector('#as-store-name-input').value.trim();
     const url  = body.querySelector('#as-store-url-input').value.trim();
     const err  = body.querySelector('#as-store-err');
-    if (!name || !url) { err.textContent = 'Name and URL are required.'; return; }
+    if (!name || !url) { err.textContent = t('um_name_url_required'); return; }
     err.textContent = t('appstore_checking');
     const res = await fetch('/api/plugins/stores', {
       method: 'POST',
@@ -548,7 +548,7 @@ const AppStore = (() => {
           <span class="as-pkg-desc">${app.description || ''}</span>
         </div>
         <div style="display:flex;align-items:center;gap:6px;padding-left:10px;flex-shrink:0">
-          ${app.update_available ? `<button class="s-btn s-btn-sm as-mvmos-update" data-app='${JSON.stringify(app)}'>↑ Update</button>` : ''}
+          ${app.update_available ? `<button class="s-btn s-btn-sm as-mvmos-update" data-app='${JSON.stringify(app)}'>${t('um_update_btn')}</button>` : ''}
           ${app.installed
             ? `<button class="s-btn s-btn-sm as-mvmos-open" data-id="${app.id}">▶ Open</button>
                <button class="s-btn s-btn-sm s-btn-danger as-mvmos-remove" data-id="${app.id}">Remove</button>`
@@ -591,15 +591,15 @@ const AppStore = (() => {
 
       row.querySelector('.as-mvmos-install')?.addEventListener('click', async e => {
         e.target.dataset.orig = t('appstore_install');
-        await doInstall(JSON.parse(e.target.dataset.app), e.target, 'Installing…');
+        await doInstall(JSON.parse(e.target.dataset.app), e.target, t('um_installing'));
       });
       row.querySelector('.as-mvmos-update')?.addEventListener('click', async e => {
-        e.target.dataset.orig = '↑ Update';
+        e.target.dataset.orig = t('um_update_btn');
         await doInstall(JSON.parse(e.target.dataset.app), e.target, 'Updating…');
       });
       row.querySelector('.as-mvmos-remove')?.addEventListener('click', async e => {
         const btn = e.target;
-        btn.disabled = true; btn.textContent = 'Removing…';
+        btn.disabled = true; btn.textContent = t('um_removing');
         await fetch(`/api/plugins/${btn.dataset.id}`, { method: 'DELETE' });
         mvmOS._removeFromStartMenu(btn.dataset.id);
         body._as?.refreshCurrent?.();
@@ -765,7 +765,7 @@ const AppStore = (() => {
     const wrap  = body.querySelector('#as-output-wrap');
     const out   = body.querySelector('#as-output');
     const title = body.querySelector('#as-output-title');
-    title.textContent = `${action === 'install' ? 'Installing' : 'Removing'} ${pkgName}…`;
+    title.textContent = action === 'install' ? t('as_pkg_installing', {pkg: pkgName}) : t('as_pkg_removing', {pkg: pkgName});
     out.textContent = '';
     wrap.style.display = 'flex';
     const res = await fetch(`/api/packages/${action}`, {
@@ -790,8 +790,8 @@ const AppStore = (() => {
           const el = document.createElement('div');
           el.className = success ? 'as-out-ok' : 'as-out-err';
           el.textContent = success
-            ? `✓ ${action === 'install' ? 'Installed' : 'Removed'} successfully`
-            : `✗ Failed (exit code ${code})`;
+            ? (action === 'install' ? t('as_pkg_installed_ok') : t('as_pkg_removed_ok'))
+            : t('as_pkg_failed', {code});
           out.appendChild(el);
         } else {
           const el = document.createElement('div');
@@ -1010,7 +1010,7 @@ const AppStore = (() => {
     const name = body.querySelector('#as-wstore-name-input').value.trim();
     const url  = body.querySelector('#as-wstore-url-input').value.trim();
     const err  = body.querySelector('#as-wstore-err');
-    if (!name || !url) { err.textContent = 'Name and URL required.'; return; }
+    if (!name || !url) { err.textContent = t('um_name_url_required2'); return; }
     err.textContent = t('appstore_checking');
     const res = await fetch('/api/widgets/stores', {
       method: 'POST',
@@ -1044,7 +1044,7 @@ const AppStore = (() => {
           <span class="as-pkg-desc">${w.description || ''}</span>
         </div>
         <div style="display:flex;align-items:center;gap:6px;padding-left:10px;flex-shrink:0">
-          ${w.update_available ? `<button class="s-btn s-btn-sm ws-update" data-widget='${JSON.stringify(w)}'>↑ Update</button>` : ''}
+          ${w.update_available ? `<button class="s-btn s-btn-sm ws-update" data-widget='${JSON.stringify(w)}'>${t('um_update_btn')}</button>` : ''}
           ${w.installed
             ? `<button class="s-btn s-btn-sm s-btn-danger ws-remove" data-id="${w.id}">Remove</button>`
             : `<button class="s-btn s-btn-sm ws-install" data-widget='${JSON.stringify(w)}'>Install</button>`}
@@ -1072,14 +1072,14 @@ const AppStore = (() => {
       }
 
       row.querySelector('.ws-install')?.addEventListener('click', e => {
-        doWidgetInstall(JSON.parse(e.target.dataset.widget), e.target, 'Installing…');
+        doWidgetInstall(JSON.parse(e.target.dataset.widget), e.target, t('um_installing'));
       });
       row.querySelector('.ws-update')?.addEventListener('click', e => {
         doWidgetInstall(JSON.parse(e.target.dataset.widget), e.target, 'Updating…');
       });
       row.querySelector('.ws-remove')?.addEventListener('click', async e => {
         const btn = e.target;
-        btn.disabled = true; btn.textContent = 'Removing…';
+        btn.disabled = true; btn.textContent = t('um_removing');
         await fetch(`/api/widgets/${btn.dataset.id}`, { method: 'DELETE' });
         mvmOS._removeWidget(btn.dataset.id);
         body._as.refreshCurrent?.();
@@ -1161,7 +1161,7 @@ const AppStore = (() => {
     gridEl.innerHTML = '';
     const backBtn = document.createElement('div');
     backBtn.style.cssText = 'padding:8px 12px;border-bottom:1px solid var(--border);';
-    backBtn.innerHTML = `<button class="s-btn-sm">← Back</button>`;
+    backBtn.innerHTML = `<button class="s-btn-sm">${t('as_back')}</button>`;
     backBtn.querySelector('button').addEventListener('click', async () => {
       const catRes2 = await fetch('/api/themes/categories');
       const cats2 = await catRes2.json();
@@ -1322,7 +1322,7 @@ const AppStore = (() => {
     const name = body.querySelector('#as-tstore-name-input').value.trim();
     const url  = body.querySelector('#as-tstore-url-input').value.trim();
     const err  = body.querySelector('#as-tstore-err');
-    if (!name || !url) { err.textContent = 'Name and URL required'; return; }
+    if (!name || !url) { err.textContent = t('um_name_url_required2'); return; }
     const res = await fetch('/api/themes/stores', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -1358,10 +1358,10 @@ const UpdateManager = (() => {
     if (existing) { Desktop.focusWindow('update-manager'); return; }
     Desktop.createWindow({
       id: 'update-manager',
-      title: '🔄 Update Manager',
+      title: `🔄 ${t('um_title')}`,
       width: 600,
       height: 460,
-      onMount(body) { render(body); },
+      onMount(body) { (window.mvmOS?.i18nReady || Promise.resolve()).then(() => render(body)); },
     });
   }
 
@@ -1371,31 +1371,31 @@ const UpdateManager = (() => {
     body.innerHTML = `
       <div style="display:flex;flex-direction:column;height:100%">
         <div style="display:flex;border-bottom:1px solid var(--border)">
-          <button class="um-tab active" data-tab="mvmos" style="flex:1;padding:10px;background:none;border:none;border-bottom:2px solid var(--accent);color:var(--text);font-size:.82rem;cursor:pointer">📦 mvmOS Updates</button>
-          <button class="um-tab" data-tab="system" style="flex:1;padding:10px;background:none;border:none;border-bottom:2px solid transparent;color:var(--text-dim);font-size:.82rem;cursor:pointer">🐧 System Packages</button>
+          <button class="um-tab active" data-tab="mvmos" style="flex:1;padding:10px;background:none;border:none;border-bottom:2px solid var(--accent);color:var(--text);font-size:.82rem;cursor:pointer">${t('um_title')} — mvmOS</button>
+          <button class="um-tab" data-tab="system" style="flex:1;padding:10px;background:none;border:none;border-bottom:2px solid transparent;color:var(--text-dim);font-size:.82rem;cursor:pointer">${t('um_linux_packages')}</button>
         </div>
 
         <div id="um-panel-mvmos" style="display:flex;flex-direction:column;flex:1;overflow:hidden">
           <div style="padding:10px 16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
-            <span style="font-size:.8rem;color:var(--text-dim)" id="um-mvmos-status">Checking…</span>
-            <button class="s-btn s-btn-sm" id="um-mvmos-all" style="display:none">↑ Update All</button>
+            <span style="font-size:.8rem;color:var(--text-dim)" id="um-mvmos-status">${t('appstore_checking')}</span>
+            <button class="s-btn s-btn-sm" id="um-mvmos-all" style="display:none">${t('um_update_all')}</button>
           </div>
           <div id="um-mvmos-list" style="flex:1;overflow-y:auto;padding:6px 0"></div>
         </div>
 
         <div id="um-panel-system" style="display:none;flex-direction:column;flex:1;overflow:hidden">
           <div style="padding:10px 16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:8px">
-            <span style="font-size:.8rem;color:var(--text-dim)" id="um-sys-status">Click Refresh to check</span>
+            <span style="font-size:.8rem;color:var(--text-dim)" id="um-sys-status">${t('um_click_refresh')}</span>
             <div style="display:flex;gap:6px;align-items:center">
               <label style="font-size:.78rem;color:var(--text-dim);display:flex;align-items:center;gap:4px;cursor:pointer">
-                <input type="checkbox" id="um-sys-show-all"> Show system libraries
+                <input type="checkbox" id="um-sys-show-all"> ${t('um_linux_packages')}
               </label>
-              <button class="s-btn s-btn-sm" id="um-sys-refresh">↺ Refresh</button>
-              <button class="s-btn s-btn-sm" id="um-sys-all" style="display:none">↑ Update All</button>
+              <button class="s-btn s-btn-sm" id="um-sys-refresh">${t('um_refresh_btn')}</button>
+              <button class="s-btn s-btn-sm" id="um-sys-all" style="display:none">${t('um_update_all')}</button>
             </div>
           </div>
           <div id="um-sys-list" style="flex:1;overflow-y:auto;padding:6px 0;min-height:0">
-            <div class="as-loading">Press Refresh to check for system package updates.</div>
+            <div class="as-loading">${t('um_refresh')}</div>
           </div>
           <div id="um-sys-log" style="display:none;flex-shrink:0;height:120px;background:#0d1117;border-top:1px solid var(--border);overflow-y:auto;padding:6px 10px;font-family:var(--mono);font-size:.72rem;color:#a6e3a1;white-space:pre-wrap;word-break:break-all"></div>
         </div>
@@ -1437,12 +1437,13 @@ const UpdateManager = (() => {
 
     function renderMvmOS() {
       if (!mvmosUpdates.length) {
-        mvmosStatus.textContent = 'Everything is up to date.';
+        mvmosStatus.textContent = t('um_up_to_date');
         mvmosAllBtn.style.display = 'none';
-        mvmosList.innerHTML = '<div class="as-loading" style="padding-top:40px">✓ No updates available</div>';
+        mvmosList.innerHTML = `<div class="as-loading" style="padding-top:40px">${t('um_no_updates')}</div>`;
         return;
       }
-      mvmosStatus.textContent = `${mvmosUpdates.length} update${mvmosUpdates.length !== 1 ? 's' : ''} available`;
+      const s = mvmosUpdates.length !== 1 ? 's' : '';
+      mvmosStatus.textContent = t('um_updates_available', { n: mvmosUpdates.length, s });
       mvmosAllBtn.style.display = '';
       mvmosList.innerHTML = '';
       mvmosUpdates.forEach(u => {
@@ -1460,11 +1461,11 @@ const UpdateManager = (() => {
             <div class="as-pkg-ver">${u.current_version} → <span style="color:var(--accent)">${u.new_version}</span></div>
           </div>
           <div class="as-pkg-actions">
-            <button class="s-btn s-btn-sm um-update-btn">↑ Update</button>
+            <button class="s-btn s-btn-sm um-update-btn">${t('um_update_btn')}</button>
           </div>
         `;
         row.querySelector('.um-update-btn').addEventListener('click', async e => {
-          const btn = e.target; btn.disabled = true; btn.textContent = 'Updating…';
+          const btn = e.target; btn.disabled = true; btn.textContent = t('um_updating');
           await doMvmOSUpdate(u);
           mvmosUpdates = mvmosUpdates.filter(x => !(x.id === u.id && x.type === u.type));
           row.remove();
@@ -1475,11 +1476,11 @@ const UpdateManager = (() => {
     }
 
     mvmosAllBtn.addEventListener('click', async () => {
-      mvmosAllBtn.disabled = true; mvmosAllBtn.textContent = 'Updating…';
+      mvmosAllBtn.disabled = true; mvmosAllBtn.textContent = t('um_updating');
       for (const u of [...mvmosUpdates]) {
         const row = mvmosList.querySelector(`[data-uid="${u.id}_${u.type}"]`);
         const btn = row?.querySelector('.um-update-btn');
-        if (btn) { btn.disabled = true; btn.textContent = 'Updating…'; }
+        if (btn) { btn.disabled = true; btn.textContent = t('um_updating'); }
         await doMvmOSUpdate(u);
         row?.remove();
       }
@@ -1501,12 +1502,14 @@ const UpdateManager = (() => {
       const showAll = sysShowAll.checked;
       const visible = showAll ? sysPkgs : sysPkgs.filter(p => p.is_app);
       if (!visible.length) {
-        sysStatus.textContent = showAll ? 'No system updates.' : 'No application updates.';
+        sysStatus.textContent = showAll ? t('um_no_sys_updates') : t('um_no_app_updates2');
         sysAllBtn.style.display = 'none';
-        sysList.innerHTML = `<div class="as-loading" style="padding-top:40px">✓ ${showAll ? 'No updates' : 'No application updates'}${!showAll && sysPkgs.length ? ` (${sysPkgs.length} system library updates hidden)` : ''}</div>`;
+        sysList.innerHTML = `<div class="as-loading" style="padding-top:40px">${showAll ? t('um_no_updates') : t('um_no_app_updates')}</div>`;
         return;
       }
-      sysStatus.textContent = `${visible.length} update${visible.length !== 1 ? 's' : ''} available${!showAll && sysPkgs.length > visible.length ? ` · ${sysPkgs.length - visible.length} system libraries hidden` : ''}`;
+      const s2 = visible.length !== 1 ? 's' : '';
+      const hidden = !showAll && sysPkgs.length > visible.length ? ' ' + t('um_sys_hidden', { n: sysPkgs.length - visible.length }) : '';
+      sysStatus.textContent = t('um_updates_available', { n: visible.length, s: s2 }) + hidden;
       sysAllBtn.style.display = '';
       sysList.innerHTML = '';
       visible.forEach(p => {
@@ -1521,11 +1524,11 @@ const UpdateManager = (() => {
             <div class="as-pkg-ver">${p.current_version} → <span style="color:var(--accent)">${p.new_version}</span></div>
           </div>
           <div class="as-pkg-actions">
-            <button class="s-btn s-btn-sm um-sys-update-btn">↑ Update</button>
+            <button class="s-btn s-btn-sm um-sys-update-btn">${t('um_update_btn')}</button>
           </div>
         `;
         row.querySelector('.um-sys-update-btn').addEventListener('click', async e => {
-          const btn = e.target; btn.disabled = true; btn.textContent = 'Updating…';
+          const btn = e.target; btn.disabled = true; btn.textContent = t('um_updating');
           await doSysUpdate(p.name, body.querySelector('#um-sys-log'));
           sysPkgs = sysPkgs.filter(x => x.name !== p.name);
           row.remove();
@@ -1537,29 +1540,29 @@ const UpdateManager = (() => {
 
     sysRefresh.addEventListener('click', async () => {
       sysRefresh.disabled = true; sysRefresh.textContent = '↺ ' + t('appstore_checking');
-      sysList.innerHTML = '<div class="as-loading">Running apt update…</div>';
+      sysList.innerHTML = `<div class="as-loading">${t('um_apt_update')}</div>`;
       const res = await fetch('/api/packages/upgradable');
       sysPkgs = await res.json();
-      sysRefresh.disabled = false; sysRefresh.textContent = '↺ Refresh';
+      sysRefresh.disabled = false; sysRefresh.textContent = t('um_refresh_btn');
       renderSys();
     });
 
     sysShowAll.addEventListener('change', renderSys);
 
     sysAllBtn.addEventListener('click', async () => {
-      sysAllBtn.disabled = true; sysAllBtn.textContent = 'Updating…';
+      sysAllBtn.disabled = true; sysAllBtn.textContent = t('um_updating');
       const showAll = sysShowAll.checked;
       const toUpdate = showAll ? [...sysPkgs] : sysPkgs.filter(p => p.is_app);
       const logEl = body.querySelector('#um-sys-log');
       for (const p of toUpdate) {
         const row = sysList.querySelector(`[data-pkg="${p.name}"]`);
         const btn = row?.querySelector('.um-sys-update-btn');
-        if (btn) { btn.disabled = true; btn.textContent = 'Updating…'; }
+        if (btn) { btn.disabled = true; btn.textContent = t('um_updating'); }
         await doSysUpdate(p.name, logEl);
         sysPkgs = sysPkgs.filter(x => x.name !== p.name);
         row?.remove();
       }
-      sysAllBtn.disabled = false; sysAllBtn.textContent = '↑ Update All';
+      sysAllBtn.disabled = false; sysAllBtn.textContent = t('um_update_all');
       renderSys();
     });
   }
