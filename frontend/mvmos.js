@@ -240,7 +240,6 @@ var mvmOS = (() => {
   function _removeFromStartMenu(id) {
     delete _apps[id];
     _closeFlyout();
-    if (!Object.keys(_apps).length) _removeAppsMenuItem();
   }
 
   // ── Widget registration & taskbar ─────────────────────────────────────────
@@ -732,6 +731,7 @@ var mvmOS = (() => {
     }
     setTimeout(() => { _checkUpdates(); setInterval(_checkUpdates, 5 * 60 * 1000); }, 10000);
     setTimeout(() => { _checkOsUpdate(); setInterval(_checkOsUpdate, 30 * 60 * 1000); }, 15000);
+    _ensureAppsMenuItem();
     _loadAllWidgets();
     _startResourcePoller();
     document.addEventListener('mvmos-plugins-loaded', () => _renderQuickAccess());
