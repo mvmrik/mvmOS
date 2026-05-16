@@ -314,6 +314,18 @@ window._i18n = {
   'sm_dedup':                     'Hide duplicates already shown above',
   'sm_add_app':                   '+ Add application…',
 
+  // ── Screen Saver ─────────────────────────────────────────────────────────
+  'settings_screensaver':           '🖵 Screen Saver',
+  'ss_title':                       'Screen Saver',
+  'ss_timeout':                     'Activate after',
+  'ss_off':                         'Off',
+  'ss_min':                         'min',
+  'ss_require_password':            'Require password to unlock',
+  'ss_preview':                     'Preview',
+  'ss_password_ph':                 'Password',
+  'ss_unlock':                      'Unlock',
+  'ss_wrong_password':              'Wrong password. Try again.',
+
   // ── General ───────────────────────────────────────────────────────────────
   'loading':                      'Loading…',
   'save':                         'Save',

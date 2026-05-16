@@ -732,17 +732,33 @@ var mvmOS = (() => {
     setTimeout(() => { _checkUpdates(); setInterval(_checkUpdates, 5 * 60 * 1000); }, 10000);
     setTimeout(() => { _checkOsUpdate(); setInterval(_checkOsUpdate, 30 * 60 * 1000); }, 15000);
     _ensureAppsMenuItem();
-    _loadAllWidgets();
+    _loadAllWidgets().then(() => _splashProgress(80));
     _startResourcePoller();
-    document.addEventListener('mvmos-plugins-loaded', () => _renderQuickAccess());
+    document.addEventListener('mvmos-plugins-loaded', () => {
+      _renderQuickAccess();
+      _splashProgress(100);
+      setTimeout(_splashHide, 300);
+    });
+  }
+
+  function _splashProgress(pct) {
+    const bar = document.getElementById('splash-progress');
+    if (bar) bar.style.width = pct + '%';
+  }
+  function _splashHide() {
+    const el = document.getElementById('splash');
+    if (!el) return;
+    el.classList.add('hide');
+    document.body.classList.remove('splashing');
+    setTimeout(() => el.remove(), 450);
   }
 
   document.addEventListener('DOMContentLoaded', () => {
-    // wait for i18n to load before initializing UI
-    if (window._i18n) { _init(); return; }
-    window.addEventListener('i18n-loaded', _init, { once: true });
-    // fallback if i18n takes too long
-    setTimeout(() => { if (!window._i18n) _init(); }, 1000);
+    _splashProgress(20);
+    const run = () => { _splashProgress(60); _init(); };
+    if (window._i18n) { run(); return; }
+    window.addEventListener('i18n-loaded', run, { once: true });
+    setTimeout(() => { if (!window._i18n) run(); }, 1000);
   });
 
   // ── Context menu ──────────────────────────────────────────────────────────

@@ -549,6 +549,10 @@ html, body {
 }
 #xterm-placeholder { width: 100%; height: 100%; }
 
+/* Mobile terminal xterm containment */
+.xterm { height: 100% !important; }
+.xterm-screen { overflow: hidden !important; }
+
 /* ── File manager ── */
 .fm-container {
   display: flex;
@@ -1084,3 +1088,76 @@ html, body {
   #taskbar-widgets { display: none !important; }
   #taskbar-windows { flex: 1; }
 }
+
+/* ── Splash screen ────────────────────────────────────────────────────────── */
+body.splashing #desktop,
+body.splashing #taskbar { visibility: hidden; }
+
+#splash {
+  position: fixed; inset: 0; z-index: 99999;
+  background: #000;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 2.5rem;
+  transition: opacity .4s ease;
+}
+#splash.hide { opacity: 0; pointer-events: none; }
+#splash img { width: min(280px, 55vw); height: auto; }
+#splash-bar {
+  width: min(260px, 50vw); height: 3px;
+  background: #1a1a1a; border-radius: 2px; overflow: hidden;
+}
+#splash-progress {
+  height: 100%; width: 0%;
+  background: linear-gradient(90deg, #7c3aed, #38bdf8);
+  border-radius: 2px;
+  transition: width .25s ease;
+}
+
+/* ── Screen Saver ─────────────────────────────────────────────────────────── */
+#screensaver {
+  position: fixed; inset: 0; z-index: 99998;
+  background: #000;
+  opacity: 0; transition: opacity .5s ease;
+  cursor: none;
+}
+#screensaver.visible { opacity: 1; }
+#ss-logo {
+  position: absolute;
+  width: 25vmin;
+  animation: ss-pulse 4s ease-in-out infinite;
+}
+@keyframes ss-pulse {
+  0%,100% {
+    filter: drop-shadow(0 0 1px rgba(255,255,255,.08));
+  }
+  50% {
+    filter:
+      drop-shadow(0 0 1px rgba(255,255,255,1))
+      drop-shadow(0 0 6px rgba(255,255,255,1))
+      drop-shadow(0 0 18px rgba(255,255,255,.6));
+  }
+}
+#ss-unlock {
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(0,0,0,.5); backdrop-filter: blur(6px);
+  cursor: default;
+}
+#ss-unlock-box {
+  background: #111; border: 1px solid #333; border-radius: 12px;
+  padding: 2rem 2.2rem; display: flex; flex-direction: column;
+  align-items: center; gap: .75rem; width: 300px;
+}
+#ss-unlock-box p { color: #aaa; font-size: .85rem; margin: 0; }
+#ss-unlock-box input {
+  width: 100%; background: #1a1a1a; border: 1px solid #444;
+  border-radius: 6px; color: #e0e0e0; padding: .5rem .75rem;
+  font-size: .95rem; outline: none;
+}
+#ss-unlock-box input:focus { border-color: #7c3aed; }
+#ss-unlock-box button {
+  width: 100%; background: #7c3aed; color: #fff; border: none;
+  border-radius: 6px; padding: .55rem; font-size: .95rem; cursor: pointer;
+}
+#ss-unlock-box button:hover { background: #6d28d9; }
+#ss-unlock-err { color: #f87171; font-size: .8rem; min-height: 1em; }

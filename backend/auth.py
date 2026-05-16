@@ -228,6 +228,18 @@ async def whoami(session=Depends(get_current_session)):
     return JSONResponse({"effective_user": session["effective_user"]})
 
 
+class VerifyRequest(BaseModel):
+    password: str
+
+
+@router.post("/api/auth/verify")
+async def verify_password(body: VerifyRequest, session=Depends(get_current_session)):
+    username = session["effective_user"]
+    if not verify_linux_password(username, body.password):
+        raise HTTPException(status_code=403, detail="Wrong password")
+    return JSONResponse({"ok": True})
+
+
 class SwitchUserRequest(BaseModel):
     username: str
     password: str

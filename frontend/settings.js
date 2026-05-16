@@ -147,6 +147,7 @@ const Settings = (() => {
 
         <nav class="settings-tabs as-sidebar">
           <div class="settings-tab ${activeTab==='display'?'active':''}" data-tab="display">${t('settings_display')}</div>
+          <div class="settings-tab ${activeTab==='screensaver'?'active':''}" data-tab="screensaver">${t('settings_screensaver')}</div>
           <div class="settings-tab ${activeTab==='regional'?'active':''}" data-tab="regional">${t('settings_regional')}</div>
           <div class="settings-tab ${activeTab==='filemanager'?'active':''}" data-tab="filemanager">${t('settings_filemanager')}</div>
           <div class="settings-tab ${activeTab==='users'?'active':''}" data-tab="users">${t('settings_users')}</div>
@@ -320,6 +321,30 @@ const Settings = (() => {
           <!-- Start Menu panel -->
           <div class="settings-panel ${activeTab==='startmenu'?'active':''}" id="sp-startmenu"></div>
 
+          <!-- Screen Saver panel -->
+          <div class="settings-panel ${activeTab==='screensaver'?'active':''}" id="sp-screensaver">
+            <div class="settings-section">
+              <div class="settings-section-title">${t('ss_title')}</div>
+              <div class="settings-row">
+                <span>${t('ss_timeout')}</span>
+                <select id="ss-timeout">
+                  <option value="0">${t('ss_off')}</option>
+                  <option value="1">1 ${t('ss_min')}</option>
+                  <option value="5">5 ${t('ss_min')}</option>
+                  <option value="10">10 ${t('ss_min')}</option>
+                  <option value="30">30 ${t('ss_min')}</option>
+                </select>
+              </div>
+              <div class="settings-row">
+                <span>${t('ss_require_password')}</span>
+                <label class="toggle"><input type="checkbox" id="ss-password"><span class="toggle-slider"></span></label>
+              </div>
+              <div style="margin-top:8px">
+                <button class="settings-btn" id="ss-preview">${t('ss_preview')}</button>
+              </div>
+            </div>
+          </div>
+
           <!-- About panel -->
           <div class="settings-panel ${activeTab==='about'?'active':''}" id="sp-about">
             <div id="about-content" style="padding:8px 0"><div style="color:var(--text-dim);font-size:.85rem">Loading…</div></div>
@@ -344,6 +369,7 @@ const Settings = (() => {
         if (tab.dataset.tab === 'about') renderAbout(body);
         if (tab.dataset.tab === 'display') renderThemePicker(body);
         if (tab.dataset.tab === 'startmenu') renderStartMenu(body);
+        if (tab.dataset.tab === 'screensaver') initScreenSaver(body);
       });
     });
 
@@ -352,6 +378,7 @@ const Settings = (() => {
     if (activeTab === 'about') renderAbout(body);
     if (activeTab === 'display' || !activeTab) renderThemePicker(body);
     if (activeTab === 'startmenu') renderStartMenu(body);
+    if (activeTab === 'screensaver') initScreenSaver(body);
 
     // Display — auto-save on slider change
     const iconSlider = body.querySelector('#s-icon-size');
@@ -894,5 +921,22 @@ const Settings = (() => {
     _draw();
   }
 
-  return { openWindow, get, initDisplay, loadFMPrefs, loadStartMenuPrefs, defaultStartMenuPrefs };
+  function initScreenSaver(body) {
+    const timeoutSel = body.querySelector('#ss-timeout');
+    const passwordChk = body.querySelector('#ss-password');
+    const previewBtn = body.querySelector('#ss-preview');
+    if (!timeoutSel) return;
+    timeoutSel.value = localStorage.getItem('ss_timeout') ?? '5';
+    passwordChk.checked = localStorage.getItem('ss_password') === '1';
+    timeoutSel.addEventListener('change', () => {
+      localStorage.setItem('ss_timeout', timeoutSel.value);
+      ScreenSaver.applyTimeout(parseInt(timeoutSel.value));
+    });
+    passwordChk.addEventListener('change', () => {
+      localStorage.setItem('ss_password', passwordChk.checked ? '1' : '0');
+    });
+    if (previewBtn) previewBtn.addEventListener('click', () => ScreenSaver.activate());
+  }
+
+  return { openWindow, get, initDisplay, loadFMPrefs, loadStartMenuPrefs, defaultStartMenuPrefs, initScreenSaver };
 })();

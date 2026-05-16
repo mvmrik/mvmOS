@@ -8,7 +8,13 @@
 <link id="theme-css" rel="stylesheet" href="/api/themes/active/css">
 <link rel="stylesheet" href="/lib/xterm.css">
 </head>
-<body>
+<body class="splashing">
+
+<!-- Splash screen -->
+<div id="splash">
+  <img src="/logo.png" alt="mvmOS">
+  <div id="splash-bar"><div id="splash-progress"></div></div>
+</div>
 
 <!-- Desktop area -->
 <div id="desktop"></div>
@@ -92,5 +98,7 @@
 <script src="/terminal.js"></script>
 <script src="/mediaviewer.js"></script>
 <script src="/filemanager.js"></script>
+<script src="/screensaver.js"></script>
+<script>ScreenSaver.init();</script>
 </body>
 </html>
