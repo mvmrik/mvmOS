@@ -9,6 +9,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from .auth import get_current_session
 from .db import get_conn, APPS_DIR
+from . import app_backends
 
 router = APIRouter(prefix="/api/plugins", tags=["plugins"])
 
@@ -232,7 +233,18 @@ async def list_plugins(session=Depends(get_current_session)):
             "FROM plugins p LEFT JOIN stores s ON p.store_id = s.id "
             "ORDER BY p.open_count DESC, p.last_opened_at DESC"
         ).fetchall()
-    return JSONResponse([dict(r) for r in rows])
+    result = []
+    for r in rows:
+        item = dict(r)
+        mf_path = os.path.join(_app_dir(r["id"]), "manifest.json")
+        try:
+            with open(mf_path) as f:
+                mf = json.load(f)
+            item["settings"] = mf.get("settings", [])
+        except Exception:
+            item["settings"] = []
+        result.append(item)
+    return JSONResponse(result)
 
 
 # ── Install ───────────────────────────────────────────────────────────────────
@@ -248,6 +260,7 @@ class InstallRequest(BaseModel):
     js_url: str = ""
     base_url: str = ""
     store_id: int = 0
+    install_backend: bool = False
 
 
 @router.post("/install")
@@ -291,7 +304,33 @@ async def install_plugin(body: InstallRequest, session=Depends(get_current_sessi
                 except Exception:
                     pass
 
+            # fetch optional backend.py — stored separately, not auto-installed
+            # returns has_backend: true so frontend can ask for confirmation
+            backend_url = body.base_url.rstrip("/") + "/backend.py"
+            try:
+                be_r = await client.get(backend_url)
+                has_be = be_r.status_code == 200
+                be_code = be_r.text if has_be else None
+            except Exception:
+                has_be = False
+                be_code = None
+
+            # if backend.py exists and caller confirmed → install it
+            if body.install_backend and has_be and be_code:
+                app_backends.install(body.id, be_code)
+
             entry_path = entry
+            if has_be and not body.install_backend:
+                with get_conn() as conn:
+                    conn.execute(
+                        """INSERT OR REPLACE INTO plugins
+                           (id, name, icon, category, version, description, store_id, installed_at, open_count)
+                           VALUES (?, ?, ?, ?, ?, ?, ?, strftime('%s','now'), COALESCE(
+                               (SELECT open_count FROM plugins WHERE id=?), 0))""",
+                        (body.id, body.name, body.icon, body.category,
+                         body.version, body.description, body.store_id or None, body.id),
+                    )
+                return JSONResponse({"needs_backend_confirm": True, "entry": entry_path})
         else:
             # legacy single js_url
             try:
@@ -327,6 +366,7 @@ async def uninstall_plugin(plugin_id: str, session=Depends(get_current_session))
     app_dir = _app_dir(plugin_id)
     if os.path.isdir(app_dir):
         shutil.rmtree(app_dir)
+    app_backends.uninstall(plugin_id)
     with get_conn() as conn:
         conn.execute("DELETE FROM plugins WHERE id=?", (plugin_id,))
     return JSONResponse({"ok": True})

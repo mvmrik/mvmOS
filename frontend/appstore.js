@@ -48,6 +48,13 @@ const AppStore = (() => {
         }
         setTimeout(() => tab.click(), 50);
       }
+    } else if (opts?.section === 'my-apps') {
+      if (opts.appId) {
+        body._as._pendingAppSettings = opts.appId;
+        body._as._suppressWidgetStoreAutoActivate = true;
+      }
+      const tab = body.querySelector('.as-tab[data-tab="app-installed"]');
+      if (tab) setTimeout(() => tab.click(), 50);
     } else if (opts?.section === 'themes') {
       const thTab = body.querySelector('#as-theme-store-tabs .as-tab');
       if (thTab) thTab.click();
@@ -471,7 +478,13 @@ const AppStore = (() => {
       list.innerHTML = `<div class="as-loading">${t('appstore_no_installed')}</div>`;
       return;
     }
+    const pendingAppId = body._as?._pendingAppSettings;
+    if (pendingAppId) delete body._as._pendingAppSettings;
     renderMvmosApps(list, plugins.map(p => ({ ...p, installed: true })), body);
+    if (pendingAppId) {
+      const app = plugins.find(p => p.id === pendingAppId);
+      if (app) _openAppSettings(body, pendingAppId, app);
+    }
   }
 
   // ── My Apps (custom stores only) ──────────────────────────────────────────
@@ -485,7 +498,13 @@ const AppStore = (() => {
       list.innerHTML = `<div class="as-loading">${t('appstore_no_custom')}</div>`;
       return;
     }
+    const pendingAppId = body._as?._pendingAppSettings;
+    if (pendingAppId) delete body._as._pendingAppSettings;
     renderMvmosApps(list, myApps.map(p => ({ ...p, installed: true })), body);
+    if (pendingAppId) {
+      const app = myApps.find(p => p.id === pendingAppId);
+      if (app) _openAppSettings(body, pendingAppId);
+    }
   }
 
   // ── Stores management ─────────────────────────────────────────────────────
@@ -559,9 +578,10 @@ const AppStore = (() => {
         <div style="display:flex;align-items:center;gap:6px;padding-left:10px;flex-shrink:0">
           ${app.update_available ? `<button class="s-btn s-btn-sm as-mvmos-update" data-app='${JSON.stringify(app)}'>${t('um_update_btn')}</button>` : ''}
           ${app.installed
-            ? `<button class="s-btn s-btn-sm as-mvmos-open" data-id="${app.id}">▶ Open</button>
-               <button class="s-btn s-btn-sm s-btn-danger as-mvmos-remove" data-id="${app.id}">Remove</button>`
-            : `<button class="s-btn s-btn-sm as-mvmos-install" data-app='${JSON.stringify(app)}'>Install</button>`}
+            ? `<button class="s-btn s-btn-sm as-mvmos-open" data-id="${app.id}">▶ ${t('appstore_open')}</button>
+               ${app.settings?.length ? `<button class="s-btn s-btn-sm as-mvmos-settings" data-id="${app.id}">⚙ ${t('wstore_settings')}</button>` : ''}
+               <button class="s-btn s-btn-sm s-btn-danger as-mvmos-remove" data-id="${app.id}">${t('appstore_remove')}</button>`
+            : `<button class="s-btn s-btn-sm as-mvmos-install" data-app='${JSON.stringify(app)}'>${t('appstore_install')}</button>`}
         </div>
       `;
 
@@ -583,7 +603,27 @@ const AppStore = (() => {
           body: JSON.stringify(appData),
         });
         const result = await res.json();
-        if (result.ok) {
+        if (result.needs_backend_confirm) {
+          const ok = confirm(
+            `⚠️ ${t('appstore_backend_title')}\n\n` +
+            `"${appData.name}" ${t('appstore_backend_msg')}\n\n` +
+            t('appstore_backend_warn')
+          );
+          if (!ok) { btn.disabled = false; btn.textContent = btn.dataset.orig || t('appstore_install'); return; }
+          const res2 = await fetch('/api/plugins/install', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ...appData, install_backend: true }),
+          });
+          const result2 = await res2.json();
+          if (result2.ok) {
+            mvmOS._loadPlugin(appData.id);
+            body._as?.refreshCurrent?.();
+          } else {
+            btn.disabled = false; btn.textContent = btn.dataset.orig || t('appstore_install');
+            alert('Failed: ' + (result2.error || 'unknown'));
+          }
+        } else if (result.ok) {
           mvmOS._loadPlugin(appData.id);
           body._as?.refreshCurrent?.();
         } else {
@@ -606,6 +646,9 @@ const AppStore = (() => {
         e.target.dataset.orig = t('um_update_btn');
         await doInstall(JSON.parse(e.target.dataset.app), e.target, 'Updating…');
       });
+      row.querySelector('.as-mvmos-settings')?.addEventListener('click', e => {
+        _openAppSettings(body, e.target.dataset.id, app);
+      });
       row.querySelector('.as-mvmos-remove')?.addEventListener('click', async e => {
         const btn = e.target;
         btn.disabled = true; btn.textContent = t('um_removing');
@@ -615,6 +658,65 @@ const AppStore = (() => {
       });
 
       list.appendChild(row);
+    });
+  }
+
+  async function _openAppSettings(body, appId, appData) {
+    const def = mvmOS._apps?.[appId];
+    const settings = appData?.settings || def?.settings || [];
+    const main = body.querySelector('#as-app-installed-list') || body.querySelector('#as-installed-list');
+    if (!main) return;
+
+    const db = mvmOS.db(appId);
+    await db.run('CREATE TABLE IF NOT EXISTS cfg (key TEXT PRIMARY KEY, value TEXT)');
+    const rows = await db.query('SELECT key, value FROM cfg');
+    const saved = {};
+    rows.forEach(r => { try { saved[r.key] = JSON.parse(r.value); } catch(_) { saved[r.key] = r.value; } });
+
+    const prev = main.innerHTML;
+    const header = body.querySelector('#as-app-installed-list')?.previousElementSibling || null;
+
+    main.innerHTML = `
+      <div style="padding:10px 14px;display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--border)">
+        <button class="s-btn s-btn-sm" id="as-app-settings-back">← ${t('as_back')}</button>
+        <span style="font-weight:600;font-size:.9rem">${def.icon || ''} ${def.name} — ${t('wstore_settings_title')}</span>
+      </div>
+      <div id="as-app-settings-content" style="padding:14px;display:flex;flex-direction:column;gap:10px"></div>
+      <div style="padding:10px 14px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end">
+        <button class="s-btn s-btn-sm" id="as-app-settings-cancel">${t('as_cancel_btn')}</button>
+        <button class="s-btn s-btn-sm" id="as-app-settings-save">${t('wstore_settings_save')}</button>
+      </div>
+    `;
+
+    const content = main.querySelector('#as-app-settings-content');
+    const inputs = {};
+    settings.forEach(s => {
+      const val = saved[s.key] ?? s.default ?? '';
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex;flex-direction:column;gap:4px';
+      let input;
+      if (s.type === 'select') {
+        input = `<select class="s-input" data-key="${s.key}">${s.options.map(o => `<option value="${o}"${val===o?' selected':''}>${o}</option>`).join('')}</select>`;
+      } else if (s.type === 'checkbox') {
+        input = `<label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" data-key="${s.key}" ${val?'checked':''}> ${s.label}</label>`;
+      } else {
+        input = `<input class="s-input" type="${s.type === 'password' ? 'password' : s.type === 'number' ? 'number' : 'text'}" data-key="${s.key}" value="${val}" ${s.min!=null?`min="${s.min}"`:''}  ${s.max!=null?`max="${s.max}"`:''}  placeholder="${s.default ?? ''}">`;
+      }
+      row.innerHTML = `<label style="font-size:.8rem;color:var(--text-dim)">${s.label}</label>${input}`;
+      content.appendChild(row);
+    });
+
+    main.querySelector('#as-app-settings-back').addEventListener('click', () => { main.innerHTML = prev; });
+    main.querySelector('#as-app-settings-cancel').addEventListener('click', () => { main.innerHTML = prev; });
+    main.querySelector('#as-app-settings-save').addEventListener('click', async () => {
+      for (const s of settings) {
+        const el = main.querySelector(`[data-key="${s.key}"]`);
+        if (!el) continue;
+        const val = s.type === 'checkbox' ? el.checked : (s.type === 'number' ? Number(el.value) : el.value);
+        await db.run('INSERT OR REPLACE INTO cfg (key,value) VALUES (?,?)', [s.key, JSON.stringify(val)]);
+      }
+      window.dispatchEvent(new CustomEvent('settings-changed', { detail: { app: appId } }));
+      main.innerHTML = prev;
     });
   }
 

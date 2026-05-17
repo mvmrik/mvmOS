@@ -560,7 +560,7 @@ const Desktop = (() => {
   }
 
   // ── Window factory ──
-  function createWindow({ id, title, width = 700, height = 450, onMount, onResize, appSettings }) {
+  function createWindow({ id, title, width = 700, height = 450, onMount, onResize, appSettings, onAppSettings }) {
     // bring existing to front if already open
     if (windows[id]) {
       focusWindow(id);
@@ -612,7 +612,8 @@ const Desktop = (() => {
       const btn = el.querySelector('.wbtn-appsettings');
       btn.addEventListener('click', e => {
         e.stopPropagation();
-        Settings.openWindow(appSettings);
+        if (onAppSettings) onAppSettings();
+        else Settings.openWindow(appSettings);
       });
     }
 
