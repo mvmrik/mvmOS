@@ -333,20 +333,34 @@ async def dir_size(path: str, session=Depends(get_current_session)):
 @router.get("/raw")
 async def raw_file(path: str, session=Depends(get_current_session)):
     import mimetypes
-    from fastapi.responses import Response
     eu = session["effective_user"]
     real = safe_path(path, home_for(eu))
     if run_as(eu, ["test", "-f", real]).returncode != 0:
         raise HTTPException(status_code=404, detail="Not found")
+    # verify read access with a small test before streaming
     prefix = [] if os.geteuid() == 0 else ["sudo"]
-    cmd = (prefix + ["runuser", "-u", eu, "--", "cat", real]) if eu != "root" else ["cat", real]
-    r = subprocess.run(cmd, capture_output=True)
-    if r.returncode != 0:
+    test_cmd = (prefix + ["runuser", "-u", eu, "--", "head", "-c", "1", real]) if eu != "root" else ["head", "-c", "1", real]
+    if subprocess.run(test_cmd, capture_output=True).returncode != 0:
         raise HTTPException(status_code=403, detail="Permission denied")
+
     mime, _ = mimetypes.guess_type(real)
     filename = os.path.basename(real)
-    return Response(
-        content=r.stdout,
+
+    def _stream():
+        cmd = (prefix + ["runuser", "-u", eu, "--", "cat", real]) if eu != "root" else ["cat", real]
+        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE)
+        try:
+            while True:
+                chunk = proc.stdout.read(1024 * 1024)  # 1MB chunks
+                if not chunk:
+                    break
+                yield chunk
+        finally:
+            proc.stdout.close()
+            proc.wait()
+
+    return StreamingResponse(
+        _stream(),
         media_type=mime or "application/octet-stream",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )

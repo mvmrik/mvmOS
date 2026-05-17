@@ -355,6 +355,16 @@ var mvmOS = (() => {
     });
   }
 
+  const WIDGET_SIZES = { s: 's', m: 'm', l: 'l' };
+  const WIDGET_SIZE_WIDTHS = { s: 180, m: 240, l: 340 };
+
+  function _getWidgetSize(id, def) {
+    return localStorage.getItem(`widget-size-${id}`) || def.defaultSize || 'm';
+  }
+  function _setWidgetSize(id, size) {
+    localStorage.setItem(`widget-size-${id}`, size);
+  }
+
   // ── Desktop widgets ───────────────────────────────────────────────────────
   async function _mountDesktopWidget(def) {
     const desktop = document.getElementById('desktop');
@@ -384,13 +394,31 @@ var mvmOS = (() => {
     const body = document.createElement('div');
     body.className = 'widget-body';
     wrap.appendChild(body);
-    def.init(body);
-    _attachWidgetContextMenu(wrap, def);
+
+    // init with size if widget supports it
+    const sizes = def.sizes;
+    function _applySize(size) {
+      if (!sizes) return;
+      body.innerHTML = '';
+      def.init(body, size);
+    }
+    if (sizes) {
+      const sz = _getWidgetSize(def.id, def);
+      _applySize(sz);
+    } else {
+      def.init(body);
+    }
+
+    _attachWidgetContextMenu(wrap, def, sizes ? () => {
+      const sz = _getWidgetSize(def.id, def);
+      _applySize(sz);
+    } : null);
 
     // close button
     titlebar.querySelector('.widget-close-btn').addEventListener('click', e => {
       e.stopPropagation();
       fetch(`/api/widgets/${def.id}/position`, { method: 'DELETE' }).catch(() => {});
+      fetch(`/api/widgets/${def.id}`, { method: 'DELETE' }).catch(() => {});
       wrap.remove();
       _removeWidget(def.id);
     });
@@ -472,7 +500,7 @@ var mvmOS = (() => {
     return stored !== null ? stored : defaultVal;
   }
 
-  function _showWidgetContextMenu(e, def) {
+  function _showWidgetContextMenu(e, def, onSizeChange) {
     e.preventDefault();
     e.stopPropagation();
     document.querySelector('.widget-ctx-menu')?.remove();
@@ -488,6 +516,17 @@ var mvmOS = (() => {
       items.push({ label: t('wstore_ctx_settings'), action: () => {
         AppStore.openWindow({ section: 'my-widgets', widgetId: def.id });
       }});
+    }
+    // Size submenu — only if widget declares sizes
+    if (def.sizes?.length && onSizeChange) {
+      const SIZE_LABELS = { s: `S — ${WIDGET_SIZE_WIDTHS.s}px`, m: `M — ${WIDGET_SIZE_WIDTHS.m}px`, l: `L — ${WIDGET_SIZE_WIDTHS.l}px` };
+      def.sizes.forEach(sz => {
+        const cur = _getWidgetSize(def.id, def);
+        items.push({ label: (cur === sz ? '✓ ' : '   ') + SIZE_LABELS[sz], action: () => {
+          _setWidgetSize(def.id, sz);
+          onSizeChange();
+        }});
+      });
     }
     // Custom developer items
     if (Array.isArray(def.contextMenu)) {
@@ -526,8 +565,8 @@ var mvmOS = (() => {
     setTimeout(() => document.addEventListener('click', () => menu.remove(), { once: true }), 50);
   }
 
-  function _attachWidgetContextMenu(wrap, def) {
-    wrap.addEventListener('contextmenu', e => _showWidgetContextMenu(e, def));
+  function _attachWidgetContextMenu(wrap, def, onSizeChange) {
+    wrap.addEventListener('contextmenu', e => _showWidgetContextMenu(e, def, onSizeChange));
 
     // long press for touch devices
     if (navigator.maxTouchPoints > 0) {
@@ -536,7 +575,7 @@ var mvmOS = (() => {
         _lpFired = false;
         _lpTimer = setTimeout(() => {
           _lpFired = true;
-          _showWidgetContextMenu({ preventDefault() {}, stopPropagation() {}, clientX: e.touches[0].clientX, clientY: e.touches[0].clientY }, def);
+          _showWidgetContextMenu({ preventDefault() {}, stopPropagation() {}, clientX: e.touches[0].clientX, clientY: e.touches[0].clientY }, def, onSizeChange);
         }, 500);
       }, { passive: true });
       wrap.addEventListener('touchend', () => clearTimeout(_lpTimer));

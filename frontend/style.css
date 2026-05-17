@@ -479,6 +479,17 @@ html, body {
 }
 #taskbar-ctx-menu.open { display: flex; }
 
+.ctx-menu {
+  position: fixed;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  z-index: 99999;
+  min-width: 160px;
+  overflow: hidden;
+}
+
 .widget-titlebar {
   position: absolute;
   top: -28px;
