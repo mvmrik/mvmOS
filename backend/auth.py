@@ -10,6 +10,7 @@ from .db import get_conn
 _AUTH_HELPER = os.path.join(os.path.dirname(__file__), "..", "bin", "mvmos-auth")
 
 _XDG_DIRS = ["Desktop", "Downloads", "Documents", "Music", "Pictures", "Videos", "Public", "Templates"]
+_TRASH_DIRS = [".Trash", ".Trash/files", ".Trash/info"]
 
 router = APIRouter()
 
@@ -19,7 +20,7 @@ def _init_user_xdg(username: str):
         import pwd as _pwd
         home = _pwd.getpwnam(username).pw_dir
         prefix = [] if os.geteuid() == 0 else ["sudo"]
-        for d in _XDG_DIRS:
+        for d in _XDG_DIRS + _TRASH_DIRS:
             path = os.path.join(home, d)
             subprocess.run(prefix + ["runuser", "-u", username, "--", "mkdir", "-p", path],
                            capture_output=True)

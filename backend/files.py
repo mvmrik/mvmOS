@@ -344,7 +344,229 @@ async def raw_file(path: str, session=Depends(get_current_session)):
     if r.returncode != 0:
         raise HTTPException(status_code=403, detail="Permission denied")
     mime, _ = mimetypes.guess_type(real)
-    return Response(content=r.stdout, media_type=mime or "application/octet-stream")
+    filename = os.path.basename(real)
+    return Response(
+        content=r.stdout,
+        media_type=mime or "application/octet-stream",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+def _free_ram_bytes() -> int:
+    try:
+        import psutil
+        return psutil.virtual_memory().available
+    except ImportError:
+        with open("/proc/meminfo") as f:
+            for line in f:
+                if line.startswith("MemAvailable:"):
+                    return int(line.split()[1]) * 1024
+    return 512 * 1024 * 1024  # fallback 512MB
+
+
+class DownloadZipRequest(BaseModel):
+    paths: list[str]
+
+@router.post("/download-zip")
+@router.post("/download-zip/")
+async def download_zip(body: DownloadZipRequest, session=Depends(get_current_session)):
+    import io, zipfile, mimetypes
+    eu = session["effective_user"]
+    home = home_for(eu)
+    reals = [safe_path(p, home) for p in body.paths]
+
+    # verify all paths exist and are accessible
+    for real in reals:
+        if run_as(eu, ["test", "-e", real]).returncode != 0:
+            raise HTTPException(status_code=404, detail=f"Not found: {real}")
+
+    # measure total size
+    total = 0
+    for real in reals:
+        r = run_as(eu, ["du", "-sb", real])
+        if r.returncode == 0:
+            try:
+                total += int(r.stdout.decode().split()[0])
+            except Exception:
+                pass
+
+    free = _free_ram_bytes()
+    limit = int(free * 0.6)
+    if total > limit:
+        free_mb = free // (1024 * 1024)
+        total_mb = total // (1024 * 1024)
+        raise HTTPException(
+            status_code=507,
+            detail=f"Insufficient memory: files are {total_mb} MB but only {free_mb} MB available (limit is 60% of free RAM)",
+        )
+
+    prefix = [] if os.geteuid() == 0 else ["sudo"]
+
+    def _read_file(real: str) -> bytes | None:
+        cmd = (prefix + ["runuser", "-u", eu, "--", "cat", real]) if eu != "root" else ["cat", real]
+        r = subprocess.run(cmd, capture_output=True)
+        return r.stdout if r.returncode == 0 else None
+
+    def _list_files(real: str) -> list[str]:
+        cmd = (prefix + ["runuser", "-u", eu, "--", "find", real, "-type", "f"]) if eu != "root" else ["find", real, "-type", "f"]
+        r = subprocess.run(cmd, capture_output=True, text=True)
+        return r.stdout.splitlines() if r.returncode == 0 else []
+
+    def _list_dirs(real: str) -> list[str]:
+        cmd = (prefix + ["runuser", "-u", eu, "--", "find", real, "-mindepth", "1", "-type", "d"]) if eu != "root" else ["find", real, "-mindepth", "1", "-type", "d"]
+        r = subprocess.run(cmd, capture_output=True, text=True)
+        return r.stdout.splitlines() if r.returncode == 0 else []
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for real in reals:
+            if run_as(eu, ["test", "-f", real]).returncode == 0:
+                data = _read_file(real)
+                if data is not None:
+                    arcname = os.path.basename(real) if len(reals) == 1 else os.path.relpath(real, os.path.dirname(real))
+                    zf.writestr(arcname, data)
+            else:
+                # directory — add all subdirs (including empty) and files
+                base = os.path.dirname(real)
+                for dpath in _list_dirs(real):
+                    arcname = os.path.relpath(dpath, base) + "/"
+                    zf.mkdir(arcname) if hasattr(zf, "mkdir") else zf.writestr(zipfile.ZipInfo(arcname), "")
+                for fpath in _list_files(real):
+                    data = _read_file(fpath)
+                    if data is not None:
+                        zf.writestr(os.path.relpath(fpath, base), data)
+
+    buf.seek(0)
+    name = os.path.basename(reals[0]) if len(reals) == 1 else "download"
+    return StreamingResponse(
+        buf,
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{name}.zip"'},
+    )
+
+def _trash_dir(eu: str) -> str:
+    return os.path.join(home_for(eu), ".Trash")
+
+def _ensure_trash(eu: str):
+    prefix = [] if os.geteuid() == 0 else ["sudo"]
+    for sub in ["", "files", "info"]:
+        p = os.path.join(_trash_dir(eu), sub) if sub else _trash_dir(eu)
+        subprocess.run(prefix + ["runuser", "-u", eu, "--", "mkdir", "-p", p], capture_output=True)
+
+
+class TrashMoveRequest(BaseModel):
+    paths: list[str]
+
+@router.post("/trash/move")
+async def trash_move(body: TrashMoveRequest, session=Depends(get_current_session)):
+    import json as _json
+    from datetime import datetime
+    eu = session["effective_user"]
+    _ensure_trash(eu)
+    trash_files = os.path.join(_trash_dir(eu), "files")
+    trash_info  = os.path.join(_trash_dir(eu), "info")
+    prefix = [] if os.geteuid() == 0 else ["sudo"]
+    errors = []
+    for path in body.paths:
+        real = safe_path(path, home_for(eu))
+        if run_as(eu, ["test", "-e", real]).returncode != 0:
+            errors.append(path)
+            continue
+        name = os.path.basename(real)
+        # avoid collisions
+        dest_name = name
+        i = 1
+        while run_as(eu, ["test", "-e", os.path.join(trash_files, dest_name)]).returncode == 0:
+            base, ext = os.path.splitext(name)
+            dest_name = f"{base}_{i}{ext}"
+            i += 1
+        # move file
+        cmd = (prefix + ["runuser", "-u", eu, "--", "mv", real, os.path.join(trash_files, dest_name)]) if eu != "root" else ["mv", real, os.path.join(trash_files, dest_name)]
+        r = subprocess.run(cmd, capture_output=True)
+        if r.returncode != 0:
+            errors.append(path)
+            continue
+        # write trashinfo
+        info = _json.dumps({"path": real, "date": datetime.now().isoformat(), "name": name})
+        info_path = os.path.join(trash_info, dest_name + ".trashinfo")
+        write_cmd = (prefix + ["runuser", "-u", eu, "--", "bash", "-c", f"cat > {info_path}"]) if eu != "root" else ["bash", "-c", f"cat > {info_path}"]
+        subprocess.run(write_cmd, input=info.encode(), capture_output=True)
+    if errors:
+        raise HTTPException(status_code=207, detail=f"Some items could not be moved: {errors}")
+    return JSONResponse({"ok": True})
+
+
+@router.get("/trash/list")
+async def trash_list(session=Depends(get_current_session)):
+    import json as _json
+    eu = session["effective_user"]
+    trash_files = os.path.join(_trash_dir(eu), "files")
+    trash_info  = os.path.join(_trash_dir(eu), "info")
+    prefix = [] if os.geteuid() == 0 else ["sudo"]
+
+    cmd = (prefix + ["runuser", "-u", eu, "--", "ls", "-1", trash_files]) if eu != "root" else ["ls", "-1", trash_files]
+    r = subprocess.run(cmd, capture_output=True, text=True)
+    names = [n for n in r.stdout.splitlines() if n]
+
+    items = []
+    for name in names:
+        info_path = os.path.join(trash_info, name + ".trashinfo")
+        cmd2 = (prefix + ["runuser", "-u", eu, "--", "cat", info_path]) if eu != "root" else ["cat", info_path]
+        r2 = subprocess.run(cmd2, capture_output=True, text=True)
+        meta = {}
+        try: meta = _json.loads(r2.stdout)
+        except: pass
+        fpath = os.path.join(trash_files, name)
+        is_dir = run_as(eu, ["test", "-d", fpath]).returncode == 0
+        items.append({
+            "name": name,
+            "original_name": meta.get("name", name),
+            "original_path": meta.get("path", ""),
+            "date": meta.get("date", ""),
+            "type": "dir" if is_dir else "file",
+        })
+    return JSONResponse(items)
+
+
+class TrashRestoreRequest(BaseModel):
+    names: list[str]
+
+@router.post("/trash/restore")
+async def trash_restore(body: TrashRestoreRequest, session=Depends(get_current_session)):
+    import json as _json
+    eu = session["effective_user"]
+    trash_files = os.path.join(_trash_dir(eu), "files")
+    trash_info  = os.path.join(_trash_dir(eu), "info")
+    prefix = [] if os.geteuid() == 0 else ["sudo"]
+    for name in body.names:
+        fpath = os.path.join(trash_files, name)
+        info_path = os.path.join(trash_info, name + ".trashinfo")
+        cmd = (prefix + ["runuser", "-u", eu, "--", "cat", info_path]) if eu != "root" else ["cat", info_path]
+        r = subprocess.run(cmd, capture_output=True, text=True)
+        try: meta = _json.loads(r.stdout)
+        except: meta = {}
+        dest = meta.get("path") or os.path.join(home_for(eu), name)
+        # ensure parent dir exists
+        parent = os.path.dirname(dest)
+        subprocess.run((prefix + ["runuser", "-u", eu, "--", "mkdir", "-p", parent]) if eu != "root" else ["mkdir", "-p", parent], capture_output=True)
+        mv = (prefix + ["runuser", "-u", eu, "--", "mv", fpath, dest]) if eu != "root" else ["mv", fpath, dest]
+        subprocess.run(mv, capture_output=True)
+        rm = (prefix + ["runuser", "-u", eu, "--", "rm", "-f", info_path]) if eu != "root" else ["rm", "-f", info_path]
+        subprocess.run(rm, capture_output=True)
+    return JSONResponse({"ok": True})
+
+
+@router.delete("/trash/empty")
+async def trash_empty(session=Depends(get_current_session)):
+    eu = session["effective_user"]
+    trash_files = os.path.join(_trash_dir(eu), "files")
+    trash_info  = os.path.join(_trash_dir(eu), "info")
+    prefix = [] if os.geteuid() == 0 else ["sudo"]
+    for sub in [trash_files, trash_info]:
+        cmd = (prefix + ["runuser", "-u", eu, "--", "bash", "-c", f"rm -rf {sub}/* {sub}/.[!.]*"]) if eu != "root" else ["bash", "-c", f"rm -rf {sub}/* {sub}/.[!.]*"]
+        subprocess.run(cmd, capture_output=True)
+    return JSONResponse({"ok": True})
+
 
 @router.get("/desktop/watch")
 async def desktop_watch(session=Depends(get_current_session)):

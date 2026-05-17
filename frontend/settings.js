@@ -312,6 +312,20 @@ const Settings = (() => {
                 <label>${t('fm_show_owner')}</label>
                 <input type="checkbox" id="s-fm-owner" ${fm.showOwner ? 'checked' : ''} style="accent-color:var(--accent);width:15px;height:15px;cursor:pointer;">
               </div>
+              <div class="settings-row">
+                <label>${t('fm_trash_ask')}</label>
+                <input type="checkbox" id="s-fm-trash-ask" ${fm.trashAsk !== false ? 'checked' : ''} style="accent-color:var(--accent);width:15px;height:15px;cursor:pointer;">
+              </div>
+              <div class="settings-row">
+                <label>${t('fm_trash_auto_days_label')}</label>
+                <select id="s-fm-trash-days" style="background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:4px 8px;color:var(--text);cursor:pointer;">
+                  <option value="0"  ${(fm.trashDays||30)==0  ?'selected':''}>${t('fm_trash_auto_never')}</option>
+                  <option value="7"  ${(fm.trashDays||30)==7  ?'selected':''}>${t('fm_trash_auto_7')}</option>
+                  <option value="14" ${(fm.trashDays||30)==14 ?'selected':''}>${t('fm_trash_auto_14')}</option>
+                  <option value="30" ${(fm.trashDays||30)==30 ?'selected':''}>${t('fm_trash_auto_30')}</option>
+                  <option value="60" ${(fm.trashDays||30)==60 ?'selected':''}>${t('fm_trash_auto_60')}</option>
+                </select>
+              </div>
             </div>
           </div>
 
@@ -450,6 +464,12 @@ const Settings = (() => {
     });
     body.querySelector('#s-fm-owner').addEventListener('change', e => {
       saveFMPrefs({ ...loadFMPrefs(), showOwner: e.target.checked });
+    });
+    body.querySelector('#s-fm-trash-ask').addEventListener('change', e => {
+      saveFMPrefs({ ...loadFMPrefs(), trashAsk: e.target.checked });
+    });
+    body.querySelector('#s-fm-trash-days').addEventListener('change', e => {
+      saveFMPrefs({ ...loadFMPrefs(), trashDays: parseInt(e.target.value) });
     });
   }
 

@@ -23,6 +23,7 @@ const FileManager = (() => {
           } else {
             fetch('/api/files/places').then(r => r.json()).then(d => fm.navigate(d.home)).catch(() => fm.navigate('/'));
           }
+          fm.autoCleanTrash();
           Desktop.initMobileSidebar(body);
         });
       },
@@ -48,6 +49,8 @@ const FileManager = (() => {
             <button class="fm-mkdir">${t('fm_new_folder')}</button>
             <button class="fm-upload-btn">${t('fm_upload')}</button>
             <input type="file" class="fm-upload-input" style="display:none" multiple>
+            <button class="fm-trash-restore-all" style="display:none">${t('fm_trash_restore_all')}</button>
+            <button class="fm-trash-empty" style="display:none">${t('fm_trash_empty_btn')}</button>
           </div>
           <div class="fm-body">
             <nav class="fm-places"></nav>
@@ -132,8 +135,15 @@ const FileManager = (() => {
       this.progressLabel = body.querySelector('.fm-progress-label');
       this.progressFill  = body.querySelector('.fm-progress-fill');
 
+      this.mkdirBtn       = body.querySelector('.fm-mkdir');
+      this.uploadBtn2     = body.querySelector('.fm-upload-btn');
+      this.trashRestoreAllBtn = body.querySelector('.fm-trash-restore-all');
+      this.trashEmptyBtn  = body.querySelector('.fm-trash-empty');
+
       body.querySelector('.fm-up').addEventListener('click', () => this.goUp());
-      body.querySelector('.fm-mkdir').addEventListener('click', () => this.mkdirPrompt());
+      this.mkdirBtn.addEventListener('click', () => this.mkdirPrompt());
+      this.trashRestoreAllBtn.addEventListener('click', () => this.trashRestoreAll());
+      this.trashEmptyBtn.addEventListener('click', () => this.trashEmpty());
 
       this.loadPlaces();
 
@@ -216,11 +226,12 @@ const FileManager = (() => {
           data.xdg.forEach(p => this._addPlace(p.icon, p.name, p.path));
         }
 
-        // separator + Computer
+        // separator + Computer + Trash
         const sep2 = document.createElement('div');
         sep2.className = 'fm-places-sep';
         this.placesEl.appendChild(sep2);
         this._addPlace('💻', t('fm_computer'), '/');
+        this._addPlace('🗑️', t('fm_trash'), '__trash__');
 
         // Bookmarks
         const bookmarks = this._loadBookmarks();
@@ -339,6 +350,14 @@ const FileManager = (() => {
       });
     }
 
+    _setTrashMode(on) {
+      this._inTrash = on;
+      this.mkdirBtn.style.display      = on ? 'none' : '';
+      this.uploadBtn2.style.display    = on ? 'none' : '';
+      this.trashRestoreAllBtn.style.display = on ? '' : 'none';
+      this.trashEmptyBtn.style.display = on ? '' : 'none';
+    }
+
     async navigate(path) {
       if (this._navigating) return;
       this._navigating = true;
@@ -349,6 +368,22 @@ const FileManager = (() => {
       this.footerStatus.textContent = '';
       this.searchEl.value = '';
       this.updatePreview(null);
+      this.updateActivePlacea(path);
+
+      // ── Trash view ──
+      if (path === '__trash__') {
+        this._setTrashMode(true);
+        this.breadEl.innerHTML = `<span class="fm-bread-btn">🗑️ ${t('fm_trash')}</span>`;
+        try {
+          const res = await fetch('/api/files/trash/list');
+          const items = await res.json();
+          this.renderTrash(items);
+        } catch { this.showError(t('fm_network_error')); }
+        finally { this._navigating = false; }
+        return;
+      }
+
+      this._setTrashMode(false);
       // breadcrumb buttons
       this.breadEl.innerHTML = '';
       const parts = path.split('/').filter(p => p);
@@ -368,7 +403,6 @@ const FileManager = (() => {
         btn.addEventListener('click', () => this.navigate(seg));
         this.breadEl.appendChild(btn);
       });
-      this.updateActivePlacea(path);
 
       try {
         const url = `/api/files?path=${encodeURIComponent(path)}` + (this._asRoot ? '&as_root=true' : '');
@@ -418,6 +452,110 @@ const FileManager = (() => {
       } else if (!isRoot && badge) {
         badge.remove();
       }
+    }
+
+    renderTrash(items) {
+      this.listEl.innerHTML = '';
+      if (items.length === 0) {
+        this.listEl.innerHTML = `<div class="fm-empty">${t('fm_trash_empty_folder')}</div>`;
+        return;
+      }
+      items.forEach(item => {
+        const row = document.createElement('div');
+        row.className = 'fm-entry';
+        row.dataset.name = item.name;
+        row.dataset.type = item.type;
+        const icon = item.type === 'dir' ? '📁' : this.fileIcon(item.original_name);
+        const date = item.date ? item.date.slice(0, 16).replace('T', ' ') : '';
+        row.innerHTML = `
+          <span class="fm-entry-icon">${icon}</span>
+          <span class="fm-entry-name">${item.original_name}</span>
+          <span class="fm-entry-size" style="color:var(--text-dim);font-size:.8rem">${item.original_path}</span>
+          <span class="fm-entry-date">${date}</span>`;
+        row.addEventListener('contextmenu', e => {
+          e.preventDefault(); e.stopPropagation();
+          this._showTrashCtxMenu(e, item);
+        });
+        this.listEl.appendChild(row);
+      });
+    }
+
+    _showTrashCtxMenu(e, item) {
+      const existing = document.getElementById('fm-ctx');
+      if (existing) existing.remove();
+      const menu = document.createElement('div');
+      menu.id = 'fm-ctx';
+      menu.style.cssText = `position:fixed;left:${e.clientX}px;top:${e.clientY}px;z-index:99999;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:4px 0;min-width:140px;box-shadow:0 4px 16px rgba(0,0,0,.4)`;
+      const addItem = (label, action, danger) => {
+        const el = document.createElement('div');
+        el.style.cssText = 'padding:8px 14px;cursor:pointer;font-size:.85rem;transition:background .1s;';
+        if (danger) el.style.color = '#e05555';
+        el.textContent = label;
+        el.addEventListener('mouseenter', () => el.style.background = 'var(--surface2)');
+        el.addEventListener('mouseleave', () => el.style.background = '');
+        el.addEventListener('click', () => { action(); menu.remove(); });
+        menu.appendChild(el);
+      };
+      addItem(t('fm_trash_restore'), () => this.trashRestore([item.name]));
+      addItem(t('fm_trash_delete_perm'), () => this.trashDeletePermanent([item.name]), true);
+      document.body.appendChild(menu);
+      const close = () => { menu.remove(); document.removeEventListener('click', close); };
+      setTimeout(() => document.addEventListener('click', close), 0);
+    }
+
+    async trashRestore(names) {
+      await fetch('/api/files/trash/restore', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ names }),
+      });
+      this.navigate('__trash__');
+    }
+
+    async trashRestoreAll() {
+      const res = await fetch('/api/files/trash/list');
+      const items = await res.json();
+      if (items.length === 0) return;
+      await this.trashRestore(items.map(i => i.name));
+    }
+
+    async trashEmpty() {
+      if (!confirm(t('fm_trash_confirm_empty'))) return;
+      await fetch('/api/files/trash/empty', { method: 'DELETE' });
+      this.navigate('__trash__');
+    }
+
+    async trashDeletePermanent(names) {
+      if (!confirm(t('fm_trash_confirm_perm').replace('{n}', names.length))) return;
+      // use trash files path for permanent deletion
+      for (const name of names) {
+        await fetch('/api/files/trash/restore', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ names: [] }), // noop
+        });
+      }
+      // actually delete via /api/files/delete using trash path
+      const res2 = await fetch('/api/files/trash/list');
+      const all = await res2.json();
+      // get home to build trash path
+      const placesRes = await fetch('/api/files/places');
+      const places = await placesRes.json();
+      const trashFilesPath = `${places.home}/.Trash/files`;
+      for (const name of names) {
+        await fetch('/api/files/delete', {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ path: `${trashFilesPath}/${name}` }),
+        });
+        // also remove trashinfo
+        await fetch('/api/files/delete', {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ path: `${places.home}/.Trash/info/${name}.trashinfo` }),
+        });
+      }
+      this.navigate('__trash__');
     }
 
     render(entries, fromSearch = false) {
@@ -602,6 +740,7 @@ const FileManager = (() => {
         items.push({ label: `📋 Copy${names.length > 1 ? ' ('+names.length+')' : ''}`, action: () => { window._fmClipboard = { paths: names.map(n => this.joinPath(this.currentPath, n)), cut: false }; } });
         items.push({ label: `✂️ Cut${names.length > 1 ? ' ('+names.length+')' : ''}`,  action: () => { window._fmClipboard = { paths: names.map(n => this.joinPath(this.currentPath, n)), cut: true  }; } });
         items.push({ label: `🗑️ Delete${names.length > 1 ? ' ('+names.length+')' : ''}`, action: () => this.deleteEntries(names), danger: true });
+        items.push({ label: `⬇️ Download${names.length > 1 ? ' ('+names.length+')' : ''}`, action: () => this.download(names) });
         if (names.length === 1) items.push({ label: 'ℹ️ Info', action: () => this.showInfo(this._lastEntries.find(e => e.name === name)) });
         if (names.length === 1 && this._lastEntries.find(e => e.name === name)?.type === 'dir')
           items.push({ label: t('fm_open_as_root'), action: () => this.navigateAsRoot(this.joinPath(this.currentPath, name)) });
@@ -613,9 +752,9 @@ const FileManager = (() => {
           Terminal.openWindow();
           setTimeout(() => document.dispatchEvent(new CustomEvent('terminal-run', { detail: `cd ${this.currentPath}` })), 500);
         }});
+        items.push({ label: '📁 New Folder', action: () => this.mkdirPrompt() });
+        items.push({ label: '🔄 Refresh', action: () => this.navigate(this.currentPath) });
       }
-      items.push({ label: '📁 New Folder', action: () => this.mkdirPrompt() });
-      items.push({ label: '🔄 Refresh', action: () => this.navigate(this.currentPath) });
 
       items.forEach(item => {
         const el = document.createElement('div');
@@ -648,16 +787,75 @@ const FileManager = (() => {
       this.navigate(this.currentPath);
     }
 
+    async autoCleanTrash() {
+      const prefs = loadPrefs();
+      const days = prefs.trashDays !== undefined ? prefs.trashDays : 30;
+      if (!days) return;
+      try {
+        const res = await fetch('/api/files/trash/list');
+        const items = await res.json();
+        const cutoff = Date.now() - days * 86400000;
+        const old = items.filter(i => i.date && new Date(i.date).getTime() < cutoff).map(i => i.name);
+        if (!old.length) return;
+        // permanently delete old items
+        const placesRes = await fetch('/api/files/places');
+        const places = await placesRes.json();
+        const trashFiles = `${places.home}/.Trash/files`;
+        const trashInfo  = `${places.home}/.Trash/info`;
+        for (const name of old) {
+          await fetch('/api/files/delete', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: `${trashFiles}/${name}` }) });
+          await fetch('/api/files/delete', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: `${trashInfo}/${name}.trashinfo` }) });
+        }
+      } catch (_) {}
+    }
+
     async deleteEntries(names) {
-      if (!confirm(`Delete ${names.length} item(s)?`)) return;
-      for (const name of names) {
-        await fetch('/api/files/delete', {
-          method: 'DELETE',
+      const prefs = loadPrefs();
+      const trashAsk = prefs.trashAsk !== false;
+      let choice;
+      if (trashAsk) {
+        choice = await this._deleteDialog(names.length);
+        if (!choice) return;
+      } else {
+        choice = 'permanent';
+      }
+      if (choice === 'trash') {
+        const paths = names.map(n => this.joinPath(this.currentPath, n));
+        await fetch('/api/files/trash/move', {
+          method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ path: this.joinPath(this.currentPath, name) }),
+          body: JSON.stringify({ paths }),
         });
+      } else {
+        for (const name of names) {
+          await fetch('/api/files/delete', {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ path: this.joinPath(this.currentPath, name) }),
+          });
+        }
       }
       this.navigate(this.currentPath);
+    }
+
+    _deleteDialog(count) {
+      return new Promise(resolve => {
+        const overlay = document.createElement('div');
+        overlay.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;';
+        overlay.innerHTML = `
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:24px;min-width:280px;max-width:360px;box-shadow:var(--shadow)">
+            <div style="font-size:1rem;margin-bottom:16px;">${t('fm_delete_title').replace('{n}', count)}</div>
+            <div style="display:flex;flex-direction:column;gap:8px;">
+              <button id="del-trash" style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:8px 14px;color:var(--text);cursor:pointer;text-align:left;">${t('fm_delete_to_trash')}</button>
+              <button id="del-perm" style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:8px 14px;color:#e05555;cursor:pointer;text-align:left;">${t('fm_delete_permanent')}</button>
+              <button id="del-cancel" style="background:transparent;border:none;padding:6px;color:var(--text-dim);cursor:pointer;">${t('fm_delete_cancel')}</button>
+            </div>
+          </div>`;
+        document.body.appendChild(overlay);
+        overlay.querySelector('#del-trash').addEventListener('click',  () => { overlay.remove(); resolve('trash'); });
+        overlay.querySelector('#del-perm').addEventListener('click',   () => { overlay.remove(); resolve('permanent'); });
+        overlay.querySelector('#del-cancel').addEventListener('click', () => { overlay.remove(); resolve(null); });
+      });
     }
 
     async renamePrompt(name) {
@@ -679,6 +877,40 @@ const FileManager = (() => {
         body: JSON.stringify({ path: this.joinPath(this.currentPath, name) }),
       });
       this.navigate(this.currentPath);
+    }
+
+    async download(names) {
+      const paths = names.map(n => this.joinPath(this.currentPath, n));
+      const entry = this._lastEntries.find(e => e.name === names[0]);
+      const isSingleFile = names.length === 1 && entry?.type === 'file';
+
+      if (isSingleFile) {
+        const a = document.createElement('a');
+        a.href = `/api/files/raw?path=${encodeURIComponent(paths[0])}`;
+        a.download = names[0];
+        a.click();
+        return;
+      }
+
+      // multiple files or folders — zip
+      const res = await fetch('/api/files/download-zip', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ paths }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        alert(err.detail || 'Download failed');
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const zipName = names.length === 1 ? names[0] : 'download';
+      a.download = zipName + '.zip';
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 10000);
     }
 
     async mkdirPrompt() {
