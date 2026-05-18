@@ -34,6 +34,9 @@ def _load_one(app: FastAPI, app_id: str) -> bool:
         return False
     mod_name = f"app_backend_{app_id}"
     try:
+        # remove old routes from this backend before reloading
+        app.routes[:] = [r for r in app.routes if not getattr(r, "_app_backend", None) == app_id]
+
         spec = importlib.util.spec_from_file_location(mod_name, path)
         mod = importlib.util.module_from_spec(spec)
         sys.modules[mod_name] = mod
@@ -43,6 +46,10 @@ def _load_one(app: FastAPI, app_id: str) -> bool:
             print(f"[app-backends] {app_id}: no router found, skipping")
             return False
         app.include_router(router)
+        # tag newly added routes so we can remove them on reload
+        for route in app.routes:
+            if not hasattr(route, "_app_backend"):
+                route._app_backend = app_id
         print(f"[app-backends] loaded backend: {app_id}")
         return True
     except Exception as e:

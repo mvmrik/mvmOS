@@ -270,7 +270,7 @@ async def install_plugin(body: InstallRequest, session=Depends(get_current_sessi
 
     async with httpx.AsyncClient(timeout=15) as client:
         if body.base_url:
-            # fetch per-app manifest.json then each file
+            # fetch per-app manifest.json first
             try:
                 mf_url = body.base_url.rstrip("/") + "/manifest.json"
                 mf_r = await client.get(mf_url)
@@ -279,12 +279,26 @@ async def install_plugin(body: InstallRequest, session=Depends(get_current_sessi
             except Exception as e:
                 return JSONResponse({"error": f"Cannot fetch app manifest: {e}"}, status_code=502)
 
-            # write manifest
+            entry = mf.get("entry", "main.js")
+
+            # check for backend.py BEFORE writing any files
+            backend_url = body.base_url.rstrip("/") + "/backend.py"
+            try:
+                be_r = await client.get(backend_url)
+                has_be = be_r.status_code == 200
+                be_code = be_r.text if has_be else None
+            except Exception:
+                has_be = False
+                be_code = None
+
+            # if backend exists and not yet confirmed → ask first, write nothing
+            if has_be and not body.install_backend:
+                return JSONResponse({"needs_backend_confirm": True, "entry": entry})
+
+            # confirmed (or no backend) — now write all files
             with open(os.path.join(app_dir, "manifest.json"), "w") as f:
                 json.dump(mf, f)
 
-            # fetch entry JS
-            entry = mf.get("entry", "main.js")
             try:
                 js_r = await client.get(body.base_url.rstrip("/") + "/" + entry)
                 js_r.raise_for_status()
@@ -293,7 +307,6 @@ async def install_plugin(body: InstallRequest, session=Depends(get_current_sessi
             except Exception as e:
                 return JSONResponse({"error": f"Cannot fetch entry JS: {e}"}, status_code=502)
 
-            # fetch optional CSS
             css_file = mf.get("css")
             if css_file:
                 try:
@@ -304,33 +317,10 @@ async def install_plugin(body: InstallRequest, session=Depends(get_current_sessi
                 except Exception:
                     pass
 
-            # fetch optional backend.py — stored separately, not auto-installed
-            # returns has_backend: true so frontend can ask for confirmation
-            backend_url = body.base_url.rstrip("/") + "/backend.py"
-            try:
-                be_r = await client.get(backend_url)
-                has_be = be_r.status_code == 200
-                be_code = be_r.text if has_be else None
-            except Exception:
-                has_be = False
-                be_code = None
-
-            # if backend.py exists and caller confirmed → install it
             if body.install_backend and has_be and be_code:
                 app_backends.install(body.id, be_code)
 
             entry_path = entry
-            if has_be and not body.install_backend:
-                with get_conn() as conn:
-                    conn.execute(
-                        """INSERT OR REPLACE INTO plugins
-                           (id, name, icon, category, version, description, store_id, installed_at, open_count)
-                           VALUES (?, ?, ?, ?, ?, ?, ?, strftime('%s','now'), COALESCE(
-                               (SELECT open_count FROM plugins WHERE id=?), 0))""",
-                        (body.id, body.name, body.icon, body.category,
-                         body.version, body.description, body.store_id or None, body.id),
-                    )
-                return JSONResponse({"needs_backend_confirm": True, "entry": entry_path})
         else:
             # legacy single js_url
             try:
