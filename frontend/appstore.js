@@ -1951,10 +1951,19 @@ const UpdateManager = (() => {
 
   async function doMvmOSUpdate(u) {
     if (u.type === 'app') {
-      await fetch('/api/plugins/install', { method: 'POST', headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ id: u.id, name: u.name, icon: u.icon, category: u.category,
-          version: u.new_version, description: u.description, base_url: u.base_url,
-          js_url: u.js_url, store_id: u.store_id }) });
+      const payload = { id: u.id, name: u.name, icon: u.icon, category: u.category,
+        version: u.new_version, description: u.description, base_url: u.base_url,
+        js_url: u.js_url, store_id: u.store_id };
+      const res = await fetch('/api/plugins/install', { method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify(payload) });
+      const result = await res.json();
+      if (result.needs_backend_confirm) {
+        const confirmed = await _backendConfirmDialog(document.body, u.name);
+        if (confirmed) {
+          await fetch('/api/plugins/install', { method: 'POST', headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({ ...payload, install_backend: true }) });
+        }
+      }
     } else if (u.type === 'widget') {
       await fetch('/api/widgets/install', { method: 'POST', headers: {'Content-Type':'application/json'},
         body: JSON.stringify({ id: u.id, name: u.name, icon: u.icon, version: u.new_version,
