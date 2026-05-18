@@ -744,6 +744,14 @@ const AppStore = (() => {
       content.appendChild(row);
     });
 
+    // extra section rendered by the app itself
+    const def2 = mvmOS._apps?.[appId];
+    if (typeof def2?.renderSettingsExtra === 'function') {
+      const extraWrap = document.createElement('div');
+      content.appendChild(extraWrap);
+      def2.renderSettingsExtra(extraWrap, saved);
+    }
+
     main.querySelector('#as-app-settings-back').addEventListener('click', () => { main.innerHTML = prev; });
     main.querySelector('#as-app-settings-cancel').addEventListener('click', () => { main.innerHTML = prev; });
     main.querySelector('#as-app-settings-save').addEventListener('click', async () => {
@@ -752,6 +760,11 @@ const AppStore = (() => {
         if (!el) continue;
         const val = s.type === 'checkbox' ? el.checked : (s.type === 'number' ? Number(el.value) : el.value);
         await db.run('INSERT OR REPLACE INTO cfg (key,value) VALUES (?,?)', [s.key, JSON.stringify(val)]);
+      }
+      // let the app save its extra settings too
+      const def3 = mvmOS._apps?.[appId];
+      if (typeof def3?.saveSettingsExtra === 'function') {
+        await def3.saveSettingsExtra(main);
       }
       window.dispatchEvent(new CustomEvent('settings-changed', { detail: { app: appId } }));
       main.innerHTML = prev;

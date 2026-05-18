@@ -1117,7 +1117,7 @@ const Desktop = (() => {
     if (!isMobile()) return;
     const sidebar = body.querySelector('.as-sidebar, .fm-places');
     if (!sidebar) return;
-    if (body.querySelector('.as-mobile-menu-btn')) return; // already added
+    if (body.closest('.window')?.querySelector('.as-mobile-menu-btn')) return; // already added
     const titlebar = body.closest('.window')?.querySelector('.window-titlebar');
     if (!titlebar) return;
     const menuBtn = document.createElement('button');

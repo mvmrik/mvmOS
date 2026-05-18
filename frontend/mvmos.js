@@ -921,6 +921,7 @@ var mvmOS = (() => {
     registerWidget,
     onResources,
     createWindow: (opts) => Desktop.createWindow(opts),
+    initMobileSidebar: (body) => Desktop.initMobileSidebar(body),
     openSettings: (tab) => Settings.openWindow(tab),
     notify,
     storage,
