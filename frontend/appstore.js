@@ -1958,11 +1958,8 @@ const UpdateManager = (() => {
         body: JSON.stringify(payload) });
       const result = await res.json();
       if (result.needs_backend_confirm) {
-        const confirmed = await _backendConfirmDialog(document.body, u.name);
-        if (confirmed) {
-          await fetch('/api/plugins/install', { method: 'POST', headers: {'Content-Type':'application/json'},
-            body: JSON.stringify({ ...payload, install_backend: true }) });
-        }
+        await fetch('/api/plugins/install', { method: 'POST', headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({ ...payload, install_backend: true }) });
       }
     } else if (u.type === 'widget') {
       await fetch('/api/widgets/install', { method: 'POST', headers: {'Content-Type':'application/json'},
