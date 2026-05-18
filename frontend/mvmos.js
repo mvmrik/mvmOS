@@ -363,6 +363,9 @@ var mvmOS = (() => {
   }
   function _setWidgetSize(id, size) {
     localStorage.setItem(`widget-size-${id}`, size);
+    // update cached value on def so _getWidgetSize returns it immediately
+    const def = _widgets[id];
+    if (def) def._savedSize = size;
     fetch(`/api/widgets/${id}/size`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
