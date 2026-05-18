@@ -488,9 +488,19 @@ var mvmOS = (() => {
     _resourceInterval = setInterval(_pollResources, sec * 1000);
   }
 
-  window.addEventListener('settings-changed', e => {
+  window.addEventListener('settings-changed', async e => {
     const sec = Math.max(1, parseInt(e.detail?.widget_refresh) || 3);
     if (_resourceInterval) { clearInterval(_resourceInterval); _resourceInterval = setInterval(_pollResources, sec * 1000); }
+    // update closeToTray for open trayable windows
+    const appId = e.detail?.app;
+    if (appId && _apps[appId]?.trayable) {
+      try {
+        const db = mvmOS.db(appId);
+        const rows = await db.query("SELECT value FROM cfg WHERE key='close_to_tray'");
+        const val = rows.length ? JSON.parse(rows[0].value) : false;
+        Desktop.setWindowCloseToTray(appId, val);
+      } catch (_) {}
+    }
   });
 
   function onResources(fn) {
@@ -709,6 +719,10 @@ var mvmOS = (() => {
     badge.style.display = count ? 'flex' : 'none';
     const icon = document.getElementById('notif-icon');
     if (icon) icon.style.filter = count ? '' : 'grayscale(1) opacity(.45)';
+    const baseTitle = window._effectiveUser && window._hostname
+      ? `mvmOS — ${window._effectiveUser}@${window._hostname}`
+      : 'mvmOS';
+    document.title = count ? `(${count}) ${baseTitle}` : baseTitle;
   }
 
   function _pushNotif(title, body, action, actionLabel) {
@@ -920,7 +934,18 @@ var mvmOS = (() => {
     registerApp,
     registerWidget,
     onResources,
-    createWindow: (opts) => Desktop.createWindow(opts),
+    createWindow: async (opts) => {
+      let closeToTray = opts.closeToTray || false;
+      const appDef = opts.id ? _apps[opts.id] : null;
+      if (appDef?.trayable && !closeToTray) {
+        try {
+          const db = mvmOS.db(opts.id);
+          const rows = await db.query("SELECT value FROM cfg WHERE key='close_to_tray'");
+          if (rows.length) closeToTray = JSON.parse(rows[0].value);
+        } catch (_) {}
+      }
+      return Desktop.createWindow({ ...opts, closeToTray });
+    },
     initMobileSidebar: (body) => Desktop.initMobileSidebar(body),
     openSettings: (tab) => Settings.openWindow(tab),
     notify,

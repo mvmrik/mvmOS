@@ -366,4 +366,8 @@ window._i18n = {
   'close':                        'Затвори',
   'back':                         '‹ Назад',
   'no_results':                   'Няма резултати',
+  'tray_section':                 'Система',
+  'tray_close_to_tray':          'Затвори в трей',
+  'tray_close_to_tray_hint':     'При активиране, затварянето на прозореца го изпраща в system tray вместо да го затвори.',
+  'tray_quit':                    'Изход',
 };

@@ -752,6 +752,21 @@ const AppStore = (() => {
       def2.renderSettingsExtra(extraWrap, saved);
     }
 
+    // tray section — auto-added if app has trayable: true
+    if (def?.trayable) {
+      const trayWrap = document.createElement('div');
+      trayWrap.style.cssText = 'border-top:1px solid var(--border);margin-top:8px;padding-top:12px';
+      trayWrap.innerHTML = `
+        <div style="font-size:.75rem;font-weight:600;color:var(--text-dim);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">${t('tray_section')}</div>
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:.85rem">
+          <input type="checkbox" data-key="close_to_tray" ${saved.close_to_tray ? 'checked' : ''}>
+          ${t('tray_close_to_tray')}
+        </label>
+        <div style="font-size:.74rem;color:var(--text-dim);margin-top:4px;margin-left:24px">${t('tray_close_to_tray_hint')}</div>
+      `;
+      content.appendChild(trayWrap);
+    }
+
     main.querySelector('#as-app-settings-back').addEventListener('click', () => { main.innerHTML = prev; });
     main.querySelector('#as-app-settings-cancel').addEventListener('click', () => { main.innerHTML = prev; });
     main.querySelector('#as-app-settings-save').addEventListener('click', async () => {
@@ -761,6 +776,9 @@ const AppStore = (() => {
         const val = s.type === 'checkbox' ? el.checked : (s.type === 'number' ? Number(el.value) : el.value);
         await db.run('INSERT OR REPLACE INTO cfg (key,value) VALUES (?,?)', [s.key, JSON.stringify(val)]);
       }
+      // save tray setting if present
+      const trayCb = main.querySelector('[data-key="close_to_tray"]');
+      if (trayCb) await db.run('INSERT OR REPLACE INTO cfg (key,value) VALUES (?,?)', ['close_to_tray', JSON.stringify(trayCb.checked)]);
       // let the app save its extra settings too
       const def3 = mvmOS._apps?.[appId];
       if (typeof def3?.saveSettingsExtra === 'function') {

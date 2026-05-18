@@ -560,8 +560,9 @@ const Desktop = (() => {
   }
 
   // ── Window factory ──
-  function createWindow({ id, title, width = 700, height = 450, onMount, onResize, appSettings, onAppSettings }) {
-    // bring existing to front if already open
+  function createWindow({ id, title, icon, width = 700, height = 450, onMount, onResize, appSettings, onAppSettings, closeToTray = false }) {
+    // bring existing to front if already open (or restore from tray)
+    if (_trayItems[id]) { restoreFromTray(id); return windows[id]?.el; }
     if (windows[id]) {
       focusWindow(id);
       if (windows[id].minimized) toggleMinimize(id);
@@ -625,7 +626,7 @@ const Desktop = (() => {
     el.style.zIndex = zCounter;
     focusWindow(id);
 
-    windows[id] = { el, title, minimized: false, origStyle: null };
+    windows[id] = { el, title, icon: icon || '📦', minimized: false, origStyle: null, closeToTray };
 
     // taskbar button
     const tbItem = document.createElement('div');
@@ -661,8 +662,93 @@ const Desktop = (() => {
     }
   }
 
+  // ── System Tray ──────────────────────────────────────────────────────────
+  const _trayItems = {}; // id → { icon, title }
+
+  function _renderTray() {
+    const tray = document.getElementById('taskbar-tray');
+    if (!tray) return;
+    tray.innerHTML = '';
+    Object.entries(_trayItems).forEach(([id, item]) => {
+      const btn = document.createElement('button');
+      btn.className = 'tray-item';
+      btn.title = item.title;
+      btn.textContent = item.icon;
+      btn.dataset.winId = id;
+      btn.addEventListener('click', () => restoreFromTray(id));
+      btn.addEventListener('contextmenu', e => {
+        e.preventDefault();
+        document.querySelectorAll('.tray-ctx').forEach(m => m.remove());
+        const menu = document.createElement('div');
+        menu.className = 'tray-ctx';
+        menu.style.cssText = `position:fixed;left:${e.clientX}px;bottom:${window.innerHeight - e.clientY + 4}px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:4px 0;z-index:9999;min-width:130px;box-shadow:var(--shadow)`;
+        [
+          { label: item.title, action: () => restoreFromTray(id), style: 'font-weight:600' },
+          { label: '─────', disabled: true },
+          { label: '✕ ' + (window._t?.('tray_quit') || 'Quit'), action: () => _trayQuit(id), style: 'color:#ff5555' },
+        ].forEach(({ label, action, style, disabled }) => {
+          const it = document.createElement('div');
+          it.textContent = label;
+          it.style.cssText = `padding:6px 14px;font-size:.82rem;cursor:${disabled ? 'default' : 'pointer'};color:var(--text);${style || ''}`;
+          if (!disabled) {
+            it.onmouseenter = () => it.style.background = 'var(--surface3, rgba(255,255,255,.07))';
+            it.onmouseleave = () => it.style.background = '';
+            it.addEventListener('click', () => { menu.remove(); action(); });
+          }
+          menu.appendChild(it);
+        });
+        document.body.appendChild(menu);
+        setTimeout(() => document.addEventListener('click', () => menu.remove(), { once: true }), 0);
+      });
+      tray.appendChild(btn);
+    });
+  }
+
+  function sendToTray(id) {
+    if (!windows[id]) return;
+    const w = windows[id];
+    _trayItems[id] = { icon: w.icon || '📦', title: w.title };
+    w.el.style.display = 'none';
+    taskbarWindows.querySelector(`[data-win-id="${id}"]`)?.remove();
+    _renderTray();
+  }
+
+  function restoreFromTray(id) {
+    if (!_trayItems[id] || !windows[id]) return;
+    delete _trayItems[id];
+    _renderTray();
+    windows[id].el.style.display = '';
+    windows[id].minimized = false;
+    windows[id].el.classList.remove('minimized');
+    // re-add taskbar button
+    const existing = taskbarWindows.querySelector(`[data-win-id="${id}"]`);
+    if (!existing) {
+      const tbItem = document.createElement('div');
+      tbItem.className = 'taskbar-item active';
+      tbItem.dataset.winId = id;
+      tbItem.textContent = windows[id].title;
+      tbItem.addEventListener('click', () => {
+        if (windows[id].minimized) { toggleMinimize(id); focusWindow(id); }
+        else focusWindow(id);
+      });
+      taskbarWindows.appendChild(tbItem);
+    }
+    focusWindow(id);
+  }
+
+  function _trayQuit(id) {
+    delete _trayItems[id];
+    _renderTray();
+    if (windows[id]) {
+      windows[id].el.remove();
+      delete windows[id];
+    }
+  }
+
   function closeWindow(id) {
     if (!windows[id]) return;
+    // if window has close_to_tray active → send to tray instead
+    if (windows[id].closeToTray) { sendToTray(id); return; }
     windows[id].el.remove();
     taskbarWindows.querySelector(`[data-win-id="${id}"]`)?.remove();
     delete windows[id];
@@ -931,7 +1017,7 @@ const Desktop = (() => {
   let _editModeOn = false;
 
   document.getElementById('taskbar').addEventListener('contextmenu', e => {
-    if (e.target.closest('#taskbar-windows') || e.target.closest('#start-btn')) return;
+    if (e.target.closest('#taskbar-windows') || e.target.closest('#start-btn') || e.target.closest('#taskbar-tray')) return;
     e.preventDefault();
     e.stopPropagation();
     taskbarCtx.style.left = Math.min(e.clientX, window.innerWidth - 180) + 'px';
@@ -964,11 +1050,17 @@ const Desktop = (() => {
   // ── Switch User ──
   async function loadCurrentUser() {
     try {
-      const res = await fetch('/api/auth/whoami');
-      const d = await res.json();
-      window._effectiveUser = d.effective_user;
+      const [whoami, sysinfo] = await Promise.all([
+        fetch('/api/auth/whoami').then(r => r.json()),
+        fetch('/api/system/info').then(r => r.json()).catch(() => ({})),
+      ]);
+      window._effectiveUser = whoami.effective_user;
+      window._hostname = sysinfo.hostname || '';
       const el = document.getElementById('current-user-label');
-      if (el) el.textContent = d.effective_user;
+      if (el) el.textContent = whoami.effective_user;
+      if (whoami.effective_user || sysinfo.hostname) {
+        document.title = `mvmOS — ${whoami.effective_user}@${sysinfo.hostname || 'localhost'}`;
+      }
     } catch (_) {}
   }
 
@@ -1016,6 +1108,7 @@ const Desktop = (() => {
             msg.style.color = '#50fa7b'; msg.textContent = `✓ Switched to ${d.effective_user}`;
             window._effectiveUser = d.effective_user;
             document.getElementById('current-user-label').textContent = d.effective_user;
+            document.title = `mvmOS — ${d.effective_user}@${window._hostname || 'localhost'}`;
             setTimeout(() => closeWindow('switch-user'), 800);
           } else {
             const e = await r.json();
@@ -1187,5 +1280,9 @@ const Desktop = (() => {
     }, { passive: true });
   }
 
-  return { createWindow, closeWindow, focusWindow, initMobileSidebar: _initMobileSidebar };
+  function setWindowCloseToTray(id, val) {
+    if (windows[id]) windows[id].closeToTray = val;
+  }
+
+  return { createWindow, closeWindow, focusWindow, initMobileSidebar: _initMobileSidebar, sendToTray, restoreFromTray, setWindowCloseToTray };
 })();

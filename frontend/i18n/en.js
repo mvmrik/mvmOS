@@ -364,4 +364,8 @@ window._i18n = {
   'close':                        'Close',
   'back':                         '‹ Back',
   'no_results':                   'No results',
+  'tray_section':                 'System',
+  'tray_close_to_tray':          'Close to Tray',
+  'tray_close_to_tray_hint':     'When enabled, closing the window sends it to the system tray instead of quitting.',
+  'tray_quit':                    'Quit',
 };

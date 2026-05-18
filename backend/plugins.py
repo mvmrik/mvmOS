@@ -343,8 +343,8 @@ async def install_plugin(body: InstallRequest, session=Depends(get_current_sessi
                (id, name, icon, category, version, description, store_id, installed_at, open_count)
                VALUES (?, ?, ?, ?, ?, ?, ?, strftime('%s','now'), COALESCE(
                    (SELECT open_count FROM plugins WHERE id=?), 0))""",
-            (body.id, body.name, body.icon, body.category,
-             body.version, body.description, body.store_id or None, body.id),
+            (body.id, mf.get("name", body.name), mf.get("icon", body.icon), body.category,
+             mf.get("version", body.version), mf.get("description", body.description), body.store_id or None, body.id),
         )
     return JSONResponse({"ok": True, "entry": entry_path})
 
