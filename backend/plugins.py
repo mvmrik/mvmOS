@@ -18,6 +18,22 @@ _cache: dict = {}
 _CACHE_TTL = 120
 
 
+def _core_version() -> str:
+    try:
+        vf = os.path.join(os.path.dirname(__file__), "..", "version.txt")
+        return open(vf).read().strip()
+    except Exception:
+        return "0.0.0"
+
+def _version_tuple(v: str):
+    import re
+    nums = re.findall(r'\d+', v)
+    return tuple(int(x) for x in nums[:3]) if nums else (0, 0, 0)
+
+def _satisfies_min_version(min_ver: str) -> bool:
+    return _version_tuple(_core_version()) >= _version_tuple(min_ver)
+
+
 async def _fetch_json(url: str) -> dict:
     cached = _cache.get(url)
     if cached and time.time() - cached[1] < _CACHE_TTL:
@@ -280,6 +296,11 @@ async def install_plugin(body: InstallRequest, session=Depends(get_current_sessi
                 return JSONResponse({"error": f"Cannot fetch app manifest: {e}"}, status_code=502)
 
             entry = mf.get("entry", "main.js")
+
+            # check min_core_version requirement
+            min_ver = mf.get("min_core_version")
+            if min_ver and not _satisfies_min_version(min_ver):
+                return JSONResponse({"error": f"requires_core_{min_ver}", "min_core_version": min_ver, "current_core_version": _core_version()}, status_code=422)
 
             # check for backend.py BEFORE writing any files
             backend_url = body.base_url.rstrip("/") + "/backend.py"

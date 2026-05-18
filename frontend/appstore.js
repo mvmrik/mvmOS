@@ -622,6 +622,9 @@ const AppStore = (() => {
         } else if (result.ok) {
           mvmOS._loadPlugin(appData.id);
           body._as?.refreshCurrent?.();
+        } else if (result.min_core_version) {
+          btn.disabled = false; btn.textContent = btn.dataset.orig || t('appstore_install');
+          alert(t('appstore_requires_core').replace('{min}', result.min_core_version).replace('{cur}', result.current_core_version));
         } else {
           btn.disabled = false; btn.textContent = btn.dataset.orig || t('appstore_install');
           alert('Failed: ' + (result.error || 'unknown'));
@@ -1835,12 +1838,15 @@ const UpdateManager = (() => {
             </div>
             <div class="as-pkg-desc">${u.description || ''}</div>
             <div class="as-pkg-ver">${u.current_version} → <span style="color:var(--accent)">${u.new_version}</span></div>
+            ${!u.compatible && u.min_core_version ? `<div style="font-size:.7rem;color:#ffb86c;margin-top:2px">⚠ ${t('um_incompatible')}</div>` : ''}
           </div>
           <div class="as-pkg-actions">
-            <button class="s-btn s-btn-sm um-update-btn">${t('um_update_btn')}</button>
+            ${u.compatible !== false
+              ? `<button class="s-btn s-btn-sm um-update-btn">${t('um_update_btn')}</button>`
+              : `<span style="font-size:.72rem;color:#ffb86c" title="${t('appstore_requires_core').replace('{min}', u.min_core_version).replace('{cur}', '')}">⚠ ${t('um_incompatible')}</span>`}
           </div>
         `;
-        row.querySelector('.um-update-btn').addEventListener('click', async e => {
+        if (u.compatible !== false) row.querySelector('.um-update-btn').addEventListener('click', async e => {
           const btn = e.target; btn.disabled = true; btn.textContent = t('um_updating');
           await doMvmOSUpdate(u);
           mvmosUpdates = mvmosUpdates.filter(x => !(x.id === u.id && x.type === u.type));

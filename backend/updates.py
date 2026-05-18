@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 from .auth import get_current_session
 from .db import get_conn
+from .plugins import _satisfies_min_version, _core_version
 
 router = APIRouter(prefix="/api/updates", tags=["updates"])
 
@@ -98,6 +99,8 @@ async def get_updates(session=Depends(get_current_session)):
         for app in await _collect_store_apps(store["manifest_url"]):
             inst = installed_apps.get(app["id"])
             if inst and inst["version"] != app.get("version", ""):
+                min_ver = app.get("min_core_version")
+                compatible = _satisfies_min_version(min_ver) if min_ver else True
                 updates.append({
                     "type": "app",
                     "id": app["id"],
@@ -110,6 +113,8 @@ async def get_updates(session=Depends(get_current_session)):
                     "js_url": app.get("js_url", ""),
                     "category": app.get("category", ""),
                     "store_id": store["id"],
+                    "compatible": compatible,
+                    "min_core_version": min_ver,
                 })
 
     # Widgets

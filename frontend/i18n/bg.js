@@ -370,4 +370,6 @@ window._i18n = {
   'tray_close_to_tray':          'Затвори в трей',
   'tray_close_to_tray_hint':     'При активиране, затварянето на прозореца го изпраща в system tray вместо да го затвори.',
   'tray_quit':                    'Изход',
+  'appstore_requires_core':       'Изисква mvmOS {min} или по-нова (текуща: {cur})',
+  'um_incompatible':              'Изисква по-нова mvmOS',
 };

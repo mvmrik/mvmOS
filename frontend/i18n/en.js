@@ -368,4 +368,6 @@ window._i18n = {
   'tray_close_to_tray':          'Close to Tray',
   'tray_close_to_tray_hint':     'When enabled, closing the window sends it to the system tray instead of quitting.',
   'tray_quit':                    'Quit',
+  'appstore_requires_core':       'Requires mvmOS {min} or newer (current: {cur})',
+  'um_incompatible':              'Requires newer mvmOS',
 };
