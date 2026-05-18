@@ -177,7 +177,8 @@ def active_theme_css():
     if not os.path.isfile(css_path):
         css_path = os.path.join(THEMES_DIR, "default", "theme.css")
     if not os.path.isfile(css_path):
-        raise HTTPException(404, "Theme CSS not found")
+        from fastapi.responses import Response
+        return Response(content="", media_type="text/css")
     from fastapi.responses import Response
     with open(css_path) as f:
         css = f.read()
