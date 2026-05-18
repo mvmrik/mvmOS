@@ -1,7 +1,7 @@
 import asyncio
 import os
 import subprocess
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, BackgroundTasks
 from fastapi.responses import JSONResponse, StreamingResponse
 from .auth import get_current_session
 
@@ -163,6 +163,18 @@ def _restart():
     os.kill(os.getpid(), signal.SIGINT)
 
 
+@router.post("/power/restart")
+async def power_restart(bg: BackgroundTasks, session=Depends(get_current_session)):
+    bg.add_task(_restart)
+    return JSONResponse({"ok": True})
+
+
+@router.post("/power/stop")
+async def power_stop(bg: BackgroundTasks, session=Depends(get_current_session)):
+    bg.add_task(_restart)
+    return JSONResponse({"ok": True})
+
+
 # ── System hardware info ──────────────────────────────────────────────────────
 
 @router.get("/hardware")
@@ -296,12 +308,11 @@ async def get_hardware(session=Depends(get_current_session)):
 @router.get("/resources")
 async def get_resources(session=Depends(get_current_session)):
     # CPU
-    cpu_r = subprocess.run(["top", "-bn1"], capture_output=True, text=True)
+    cpu_r = subprocess.run(["top", "-bn2", "-d0.2"], capture_output=True, text=True)
     cpu_pct = 0.0
-    for line in cpu_r.stdout.splitlines():
+    import re
+    for line in reversed(cpu_r.stdout.splitlines()):
         if line.startswith("%Cpu") or line.startswith("Cpu"):
-            # extract idle and compute usage
-            import re
             idle = re.search(r'([\d.]+)\s*id', line)
             if idle:
                 cpu_pct = round(100 - float(idle.group(1)), 1)

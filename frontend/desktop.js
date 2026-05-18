@@ -885,7 +885,80 @@ const Desktop = (() => {
     });
   });
 
-    function _startMenuCtx(e, appId, label, emoji) {
+  // ── Power submenu ──
+  let _powerFlyout = null;
+  function _closePowerFlyout() {
+    if (_powerFlyout) { _powerFlyout.remove(); _powerFlyout = null; }
+  }
+  function _openPowerFlyout(anchorEl) {
+    _closePowerFlyout();
+    const items = [
+      { emoji: '🔄', labelKey: 'power_restart', action: 'restart' },
+      { emoji: '⏹', labelKey: 'power_stop',    action: 'stop' },
+    ];
+    if (window.innerWidth < 768) {
+      const sm = document.getElementById('start-menu');
+      const r = sm.getBoundingClientRect();
+      _powerFlyout = document.createElement('div');
+      _powerFlyout.style.cssText = `position:fixed;left:${r.left}px;top:${r.top}px;width:${r.width}px;height:${r.height}px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);display:flex;flex-direction:column;z-index:9600;overflow-y:auto;box-shadow:var(--shadow)`;
+      document.body.appendChild(_powerFlyout);
+      const back = document.createElement('div');
+      back.className = 'start-submenu-item start-submenu-back';
+      back.innerHTML = `<span class="emoji">‹</span> ${t('back')}`;
+      back.addEventListener('click', e => { e.stopPropagation(); _closePowerFlyout(); });
+      _powerFlyout.appendChild(back);
+      const sep = document.createElement('div');
+      sep.style.cssText = 'height:1px;background:var(--border);margin:2px 0';
+      _powerFlyout.appendChild(sep);
+    } else {
+      const rect = anchorEl.getBoundingClientRect();
+      _powerFlyout = document.createElement('div');
+      _powerFlyout.className = 'start-submenu open';
+      _powerFlyout.style.left   = rect.right + 4 + 'px';
+      _powerFlyout.style.bottom = window.innerHeight - rect.bottom + 'px';
+      document.body.appendChild(_powerFlyout);
+    }
+    items.forEach(it => {
+      const el = document.createElement('div');
+      el.className = 'start-submenu-item';
+      el.innerHTML = `<span class="emoji">${it.emoji}</span>${t(it.labelKey)}`;
+      el.addEventListener('click', async e => {
+        e.stopPropagation();
+        _closePowerFlyout();
+        startMenu.classList.remove('open');
+        await fetch(`/api/system/power/${it.action}`, { method: 'POST' }).catch(() => {});
+        {
+          const ov = document.createElement('div');
+          ov.style.cssText = 'position:fixed;inset:0;z-index:99999;background:#000;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2.5rem';
+          const _msg = it.action === 'restart' ? t('power_restarting') : t('power_stopped');
+          ov.innerHTML = `<img src="/logo.png" style="width:min(280px,55vw)"><div style="color:#aaa;font-size:.95rem;font-family:inherit">${_msg}</div>`;
+          document.body.appendChild(ov);
+          if (it.action === 'restart') {
+            let _wasDown = false;
+            const poll = setInterval(async () => {
+              try {
+                const r = await fetch('/api/auth/whoami', { cache: 'no-store' });
+                if (r.status === 502) { _wasDown = true; return; }
+                if (_wasDown) { clearInterval(poll); location.reload(); }
+              } catch { _wasDown = true; }
+            }, 1500);
+          }
+        }
+      });
+      _powerFlyout.appendChild(el);
+    });
+  }
+  document.getElementById('start-power-btn').addEventListener('click', e => {
+    e.stopPropagation();
+    _openPowerFlyout(e.currentTarget);
+  });
+  document.addEventListener('click', e => {
+    if (_powerFlyout && !e.target.closest('#start-power-btn') && !_powerFlyout.contains(e.target)) {
+      _closePowerFlyout();
+    }
+  });
+
+  function _startMenuCtx(e, appId, label, emoji) {
     e.preventDefault();
     e.stopPropagation();
     const isBuiltin = BUILTIN_ICONS().find(d => d.id === appId);
