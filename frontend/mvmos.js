@@ -359,10 +359,15 @@ var mvmOS = (() => {
   const WIDGET_SIZE_WIDTHS = { s: 180, m: 240, l: 340 };
 
   function _getWidgetSize(id, def) {
-    return localStorage.getItem(`widget-size-${id}`) || def.defaultSize || 'm';
+    return def._savedSize || localStorage.getItem(`widget-size-${id}`) || def.defaultSize || 'm';
   }
   function _setWidgetSize(id, size) {
     localStorage.setItem(`widget-size-${id}`, size);
+    fetch(`/api/widgets/${id}/size`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ size }),
+    }).catch(() => {});
   }
 
   // ── Desktop widgets ───────────────────────────────────────────────────────
@@ -377,6 +382,7 @@ var mvmOS = (() => {
       const list = await res.json();
       const saved = list.find(w => w.id === def.id);
       if (saved?.desktop_x != null) { x = saved.desktop_x; y = saved.desktop_y; }
+      if (saved?.size) def._savedSize = saved.size;
     } catch(_) {}
 
     const wrap = document.createElement('div');

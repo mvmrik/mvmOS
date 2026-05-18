@@ -280,6 +280,18 @@ async def save_position(widget_id: str, body: PositionRequest, session=Depends(g
     return JSONResponse({"ok": True})
 
 
+# ── Save widget size ──────────────────────────────────────────────────────────
+
+class SizeRequest(BaseModel):
+    size: str
+
+@router.post("/{widget_id}/size")
+async def save_size(widget_id: str, body: SizeRequest, session=Depends(get_current_session)):
+    with get_conn() as conn:
+        conn.execute("UPDATE widgets SET size=? WHERE id=?", (body.size, widget_id))
+    return JSONResponse({"ok": True})
+
+
 # ── Per-widget SQLite db ──────────────────────────────────────────────────────
 
 class DbRequest(BaseModel):

@@ -115,9 +115,15 @@ def init_db():
                 installed_at INTEGER DEFAULT (strftime('%s','now')),
                 taskbar_order INTEGER,
                 desktop_x INTEGER,
-                desktop_y INTEGER
+                desktop_y INTEGER,
+                size TEXT DEFAULT 'm'
             );
         """)
+        # migrations for existing DBs
+        try:
+            conn.execute("ALTER TABLE widgets ADD COLUMN size TEXT DEFAULT 'm'")
+        except Exception:
+            pass
         conn.execute(
             "INSERT OR IGNORE INTO stores (name, manifest_url, official) VALUES (?, ?, 1)",
             ("mvmOS Store", OFFICIAL_STORE_URL),
