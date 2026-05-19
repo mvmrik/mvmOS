@@ -1,8 +1,10 @@
 import httpx
+import io
 import json
 import os
 import shutil
 import time
+import zipfile
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
@@ -177,6 +179,7 @@ class InstallRequest(BaseModel):
     version: str = "1.0.0"
     description: str = ""
     widget_type: str = "taskbar"
+    zip_url: str = ""
     base_url: str = ""
     js_url: str = ""
     store_id: int = 0
@@ -187,7 +190,55 @@ async def install_widget(body: InstallRequest, session=Depends(get_current_sessi
     wdir = _widget_dir(body.id)
     os.makedirs(wdir, exist_ok=True)
 
-    async with httpx.AsyncClient(timeout=15) as client:
+    async with httpx.AsyncClient(timeout=30) as client:
+        if body.zip_url:
+            try:
+                r = await client.get(body.zip_url)
+                r.raise_for_status()
+            except Exception as e:
+                return JSONResponse({"error": f"Cannot fetch zip: {e}"}, status_code=502)
+            try:
+                with zipfile.ZipFile(io.BytesIO(r.content)) as zf:
+                    names = zf.namelist()
+                    prefix = ""
+                    if names and "/" in names[0]:
+                        candidate = names[0].split("/")[0] + "/"
+                        if all(n.startswith(candidate) for n in names):
+                            prefix = candidate
+                    mf = None
+                    for zname in names:
+                        rel = zname[len(prefix):]
+                        if not rel or rel.endswith("/"):
+                            continue
+                        data = zf.read(zname)
+                        dest = os.path.join(wdir, rel)
+                        os.makedirs(os.path.dirname(dest), exist_ok=True)
+                        open(dest, "wb").write(data)
+                        if rel == "manifest.json":
+                            mf = json.loads(data)
+                    if mf is None:
+                        return JSONResponse({"error": "manifest.json not found in zip"}, status_code=400)
+                    db_json = os.path.join(wdir, "db.json")
+                    if os.path.exists(db_json):
+                        try:
+                            _apply_schema(os.path.join(wdir, "data.db"), json.loads(open(db_json).read()))
+                        except Exception:
+                            pass
+            except Exception as e:
+                return JSONResponse({"error": str(e)}, status_code=400)
+
+            with get_conn() as conn:
+                max_order = conn.execute("SELECT COALESCE(MAX(taskbar_order),0) FROM widgets").fetchone()[0]
+                conn.execute(
+                    """INSERT OR REPLACE INTO widgets
+                       (id, name, icon, category, version, description, widget_type, store_id, installed_at, taskbar_order)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%s','now'), ?)""",
+                    (body.id, mf.get("name", body.name), mf.get("icon", body.icon),
+                     body.category, mf.get("version", body.version), mf.get("description", body.description),
+                     mf.get("widget_type", body.widget_type), body.store_id or None, max_order + 1),
+                )
+            return JSONResponse({"ok": True})
+
         if body.base_url:
             try:
                 mf_r = await client.get(body.base_url.rstrip("/") + "/manifest.json")

@@ -203,6 +203,28 @@ window._i18n = {
   'app_filemanager':              'File Manager',
   'app_appstore':                 'App Store',
   'app_settings':                 'Settings',
+  'app_sites':                    'Sites',
+  'app_msc':                      'mvmOS Studio Code',
+
+  // Sites / Projects
+  'sites_projects':               'Projects',
+  'sites_new_project':            'New Project',
+  'sites_project_name':           'Name',
+  'sites_project_name_ph':        'My Blog',
+  'sites_project_id':             'ID / Path',
+  'sites_domain':                 'Domain',
+  'sites_create':                 'Create',
+  'sites_build':                  'Build',
+  'sites_stop':                   'Stop',
+  'sites_watching':               'Watching',
+  'sites_empty':                  'No projects yet.',
+  'sites_confirm_delete':         'Delete this project and all its files?',
+  'sites_toggle':                 'Published (toggle to enable/disable)',
+  'sites_open_app':               'Open',
+  'sites_project_name_required':  'Enter a project name.',
+  'sites_project_id_required':    'Enter a project ID.',
+  'optional':                     'optional',
+  'cancel':                       'Cancel',
 
   // File Manager
   'fm_up':                        '↑ Up',
