@@ -178,7 +178,6 @@ const Desktop = (() => {
     { id: 'terminal', label: t('app_terminal'), emoji: '🖥️', app: 'terminal' },
     { id: 'files',    label: t('app_filemanager'), emoji: '🗂️', app: 'filemanager' },
     { id: 'settings', label: t('app_settings'), emoji: '⚙️', app: 'settings' },
-    { id: 'sites',    label: t('app_sites'), emoji: '🌐', app: 'sites' },
   ]; }
 
   // container for grid icons
@@ -547,7 +546,7 @@ const Desktop = (() => {
     if (app === 'filemanager') { FileManager.openWindow(); return; }
     if (app === 'settings') { Settings.openWindow(); return; }
     if (app === 'appstore') { AppStore.openWindow(); return; }
-    if (app === 'sites') { Sites.openWindow(); return; }
+    if (app === 'msc') { Sites.openWindow(); return; }
     // mvmOS plugin app
     const tryLaunch = (attempts) => {
       const pluginApp = window.mvmOS?._apps?.[app];
@@ -832,7 +831,7 @@ const Desktop = (() => {
       { id: 'filemanager', label: t('app_filemanager'),  emoji: '📁' },
       { id: 'settings',    label: t('app_settings'),     emoji: '⚙️' },
       { id: 'appstore',    label: t('app_appstore'),     emoji: '📦' },
-      { id: 'sites',       label: t('app_sites'),        emoji: '🌐' },
+      { id: 'msc',         label: t('app_msc'),          emoji: '🛠️' },
     ];
     Object.values(window.mvmOS?._apps || {}).forEach(a => {
       apps.push({ id: a.id, label: a.name, emoji: a.icon || '📦' });

@@ -11,7 +11,7 @@ const Sites = (() => {
     }
     _win = Desktop.createWindow({
       id: 'sites',
-      title: t('app_sites'),
+      title: t('app_msc'),
       icon: '🌐',
       width: 660,
       height: 520,

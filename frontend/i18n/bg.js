@@ -204,6 +204,7 @@ window._i18n = {
   'app_appstore':                 'Магазин за приложения',
   'app_settings':                 'Настройки',
   'app_sites':                    'Сайтове',
+  'app_msc':                      'mvmOS Studio Code',
 
   // Sites / Projects
   'sites_projects':               'Проекти',

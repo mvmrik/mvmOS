@@ -204,6 +204,7 @@ window._i18n = {
   'app_appstore':                 'App Store',
   'app_settings':                 'Settings',
   'app_sites':                    'Sites',
+  'app_msc':                      'mvmOS Studio Code',
 
   // Sites / Projects
   'sites_projects':               'Projects',

@@ -1,8 +1,11 @@
 import httpx
+import io
 import json
 import os
 import shutil
+import tempfile
 import time
+import zipfile
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -95,6 +98,96 @@ def _apply_schema(db_path: str, schema: dict):
         conn.close()
 
 
+def _install_from_zip(zip_bytes: bytes, plugin_id: str, install_backend: bool) -> dict:
+    """
+    Extract a zip and distribute files:
+      main.js, manifest.json, *.css, *.html  → apps/<id>/
+      backend/ folder                         → backend/apps/<id>/
+      public/ folder                          → backend/apps/<id>/public/
+    Returns the parsed manifest dict.
+    """
+    app_dir = _app_dir(plugin_id)
+    backend_app_dir = os.path.join(os.path.dirname(__file__), "apps", plugin_id)
+    os.makedirs(app_dir, exist_ok=True)
+
+    with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
+        names = zf.namelist()
+
+        # detect optional top-level prefix (e.g. "qbit-dashboard/")
+        prefix = ""
+        if names and "/" in names[0]:
+            candidate = names[0].split("/")[0] + "/"
+            if all(n.startswith(candidate) for n in names):
+                prefix = candidate
+
+        def _strip(name: str) -> str:
+            return name[len(prefix):]
+
+        mf_data = None
+        has_backend = False
+        be_code = None
+
+        for zname in names:
+            rel = _strip(zname)
+            if not rel or rel.endswith("/"):
+                continue
+
+            data = zf.read(zname)
+            parts = rel.split("/")
+
+            if rel == "manifest.json":
+                mf_data = json.loads(data)
+                dest = os.path.join(app_dir, "manifest.json")
+                open(dest, "wb").write(data)
+
+            elif parts[0] == "backend":
+                if not install_backend:
+                    has_backend = True
+                    if rel == "backend/backend.py":
+                        be_code = data.decode()
+                    continue
+                # install backend files
+                sub = "/".join(parts[1:])
+                dest = os.path.join(backend_app_dir, sub)
+                os.makedirs(os.path.dirname(dest), exist_ok=True)
+                open(dest, "wb").write(data)
+
+            elif parts[0] == "public":
+                sub = "/".join(parts[1:])
+                pub_dir = os.path.join(backend_app_dir, "public")
+                os.makedirs(pub_dir, exist_ok=True)
+                dest = os.path.join(pub_dir, sub)
+                os.makedirs(os.path.dirname(dest), exist_ok=True)
+                open(dest, "wb").write(data)
+
+            else:
+                # frontend files — main.js, css, html, etc.
+                dest = os.path.join(app_dir, rel)
+                os.makedirs(os.path.dirname(dest), exist_ok=True)
+                open(dest, "wb").write(data)
+
+        if mf_data is None:
+            raise ValueError("manifest.json not found in zip")
+
+        # apply db.json schema if present
+        db_json_path = os.path.join(app_dir, "db.json")
+        if os.path.exists(db_json_path):
+            try:
+                schema = json.loads(open(db_json_path).read())
+                db_path = os.path.join(app_dir, "data.db")
+                _apply_schema(db_path, schema)
+            except Exception:
+                pass
+
+        if has_backend and not install_backend:
+            return {"manifest": mf_data, "needs_backend_confirm": True, "be_code": be_code}
+
+        if install_backend and be_code:
+            app_backends.install(plugin_id, be_code)
+
+        return {"manifest": mf_data, "needs_backend_confirm": False}
+
+
 def _annotate(apps: list, installed: dict) -> list:
     result = []
     for app in apps:
@@ -145,8 +238,8 @@ async def add_store(body: StoreRequest, session=Depends(get_current_session)):
                 for field in ("id", "name", "version"):
                     if not app.get(field):
                         return JSONResponse({"error": f"App #{i+1} is missing required field '{field}'"}, status_code=400)
-                if not app.get("base_url") and not app.get("js_url"):
-                    return JSONResponse({"error": f"App '{app['id']}' is missing 'base_url' or 'js_url'"}, status_code=400)
+                if not app.get("zip_url") and not app.get("base_url") and not app.get("js_url"):
+                    return JSONResponse({"error": f"App '{app['id']}' is missing 'zip_url', 'base_url' or 'js_url'"}, status_code=400)
         else:
             return JSONResponse({"error": "Invalid manifest: must have 'categories' or 'apps' key"}, status_code=400)
     except JSONResponse:
@@ -306,7 +399,9 @@ class InstallRequest(BaseModel):
     category: str = "Utilities"
     version: str = "1.0.0"
     description: str = ""
-    # either a direct js_url (legacy single-file) or a base_url to fetch manifest.json from
+    # preferred: zip_url pointing to a .zip package
+    zip_url: str = ""
+    # legacy: a direct js_url (single-file) or a base_url to fetch manifest.json from
     js_url: str = ""
     base_url: str = ""
     store_id: int = 0
@@ -318,7 +413,42 @@ async def install_plugin(body: InstallRequest, session=Depends(get_current_sessi
     app_dir = _app_dir(body.id)
     os.makedirs(app_dir, exist_ok=True)
 
-    async with httpx.AsyncClient(timeout=15) as client:
+    async with httpx.AsyncClient(timeout=30) as client:
+        if body.zip_url:
+            # ── Zip-based install ──────────────────────────────────────────
+            try:
+                r = await client.get(body.zip_url)
+                r.raise_for_status()
+            except Exception as e:
+                return JSONResponse({"error": f"Cannot fetch zip: {e}"}, status_code=502)
+
+            try:
+                result = _install_from_zip(r.content, body.id, body.install_backend)
+            except Exception as e:
+                return JSONResponse({"error": str(e)}, status_code=400)
+
+            if result.get("needs_backend_confirm"):
+                return JSONResponse({"needs_backend_confirm": True, "entry": result["manifest"].get("entry", "main.js")})
+
+            mf = result["manifest"]
+
+            # check min_core_version
+            min_ver = mf.get("min_core_version")
+            if min_ver and not _satisfies_min_version(min_ver):
+                return JSONResponse({"error": f"requires_core_{min_ver}", "min_core_version": min_ver, "current_core_version": _core_version()}, status_code=422)
+
+            with get_conn() as conn:
+                conn.execute(
+                    """INSERT OR REPLACE INTO plugins
+                       (id, name, icon, category, version, description, store_id, installed_at, open_count)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, strftime('%s','now'), COALESCE(
+                           (SELECT open_count FROM plugins WHERE id=?), 0))""",
+                    (body.id, mf.get("name", body.name), mf.get("icon", body.icon), body.category,
+                     mf.get("version", body.version), mf.get("description", body.description),
+                     body.store_id or None, body.id),
+                )
+            return JSONResponse({"ok": True, "entry": mf.get("entry", "main.js")})
+
         if body.base_url:
             # fetch per-app manifest.json first
             try:
@@ -386,6 +516,32 @@ async def install_plugin(body: InstallRequest, session=Depends(get_current_sessi
 
             if body.install_backend and has_be and be_code:
                 app_backends.install(body.id, be_code)
+
+            # install public.py if present
+            pub_url = body.base_url.rstrip("/") + "/public.py"
+            try:
+                pub_r = await client.get(pub_url)
+                if pub_r.status_code == 200:
+                    from . import public_loader
+                    public_loader.install(app, body.id, pub_r.text)
+            except Exception:
+                pass
+
+            # install public/ static files declared in manifest
+            pub_files = mf.get("public_files", [])
+            if pub_files:
+                backend_pub_dir = os.path.join(os.path.dirname(__file__), "apps", body.id, "public")
+                os.makedirs(backend_pub_dir, exist_ok=True)
+                for rel_path in pub_files:
+                    try:
+                        f_r = await client.get(body.base_url.rstrip("/") + "/" + rel_path)
+                        if f_r.status_code == 200:
+                            dest = os.path.join(backend_pub_dir, os.path.basename(rel_path))
+                            os.makedirs(os.path.dirname(dest), exist_ok=True)
+                            with open(dest, "wb") as f:
+                                f.write(f_r.content)
+                    except Exception:
+                        pass
 
             entry_path = entry
         else:
