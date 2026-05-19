@@ -103,6 +103,14 @@ def init_db():
                 is_active INTEGER NOT NULL DEFAULT 0
             );
 
+            CREATE TABLE IF NOT EXISTS domains (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                domain TEXT UNIQUE,
+                path TEXT UNIQUE,
+                app_id TEXT NOT NULL REFERENCES plugins(id) ON DELETE CASCADE,
+                created_at INTEGER DEFAULT (strftime('%s','now'))
+            );
+
             CREATE TABLE IF NOT EXISTS widgets (
                 id TEXT PRIMARY KEY,
                 name TEXT NOT NULL,
@@ -122,6 +130,10 @@ def init_db():
         # migrations for existing DBs
         try:
             conn.execute("ALTER TABLE widgets ADD COLUMN size TEXT DEFAULT 'm'")
+        except Exception:
+            pass
+        try:
+            conn.execute("ALTER TABLE domains ADD COLUMN path TEXT")
         except Exception:
             pass
         conn.execute(

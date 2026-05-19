@@ -203,6 +203,27 @@ window._i18n = {
   'app_filemanager':              'Файлов мениджър',
   'app_appstore':                 'Магазин за приложения',
   'app_settings':                 'Настройки',
+  'app_sites':                    'Сайтове',
+
+  // Sites / Projects
+  'sites_projects':               'Проекти',
+  'sites_new_project':            'Нов проект',
+  'sites_project_name':           'Име',
+  'sites_project_name_ph':        'Моят блог',
+  'sites_project_id':             'ID / Адрес',
+  'sites_domain':                 'Домейн',
+  'sites_create':                 'Създай',
+  'sites_build':                  'Build',
+  'sites_stop':                   'Стоп',
+  'sites_watching':               'Следи',
+  'sites_empty':                  'Няма проекти.',
+  'sites_confirm_delete':         'Изтрий проекта и всичките му файлове?',
+  'sites_toggle':                 'Публикуван (включи/изключи)',
+  'sites_open_app':               'Отвори',
+  'sites_project_name_required':  'Въведи име на проекта.',
+  'sites_project_id_required':    'Въведи ID на проекта.',
+  'optional':                     'по избор',
+  'cancel':                       'Отказ',
 
   // File Manager
   'fm_up':                        '↑ Нагоре',
