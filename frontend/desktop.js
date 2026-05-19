@@ -1357,5 +1357,9 @@ const Desktop = (() => {
     if (windows[id]) windows[id].closeToTray = val;
   }
 
-  return { createWindow, closeWindow, focusWindow, initMobileSidebar: _initMobileSidebar, sendToTray, restoreFromTray, setWindowCloseToTray };
+  function removeApp(id) {
+    _trayQuit(id);
+  }
+
+  return { createWindow, closeWindow, focusWindow, initMobileSidebar: _initMobileSidebar, sendToTray, restoreFromTray, setWindowCloseToTray, removeApp };
 })();

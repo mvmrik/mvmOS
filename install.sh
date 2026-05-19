@@ -21,8 +21,8 @@ echo "  No separate username/password needed."
 echo ""
 
 # ── Port ──────────────────────────────────────────────────────────────────────
-read -rp "  Port [8080]: " PORT
-PORT="${PORT:-8080}"
+read -rp "  Port [2026]: " PORT
+PORT="${PORT:-2026}"
 
 # ── Python check ──────────────────────────────────────────────────────────────
 if ! command -v python3 &>/dev/null; then

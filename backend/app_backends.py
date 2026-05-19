@@ -45,9 +45,10 @@ def _load_one(app: FastAPI, app_id: str) -> bool:
         if router is None:
             print(f"[app-backends] {app_id}: no router found, skipping")
             return False
+        existing_paths = {id(r) for r in app.routes}
         app.include_router(router)
         for route in app.routes:
-            if not hasattr(route, "_app_backend"):
+            if id(route) not in existing_paths:
                 route._app_backend = app_id
         print(f"[app-backends] loaded backend: {app_id}")
         return True
@@ -68,10 +69,11 @@ def install(app_id: str, source_code: str) -> None:
 
 
 def uninstall(app_id: str) -> None:
-    """Remove backend.py. Router stays mounted until next restart (FastAPI limitation)."""
-    path = os.path.join(BACKENDS_DIR, app_id, "backend.py")
-    if os.path.isfile(path):
-        os.remove(path)
+    """Remove backend folder. Router stays mounted until next restart (FastAPI limitation)."""
+    import shutil
+    app_dir = os.path.join(BACKENDS_DIR, app_id)
+    if os.path.isdir(app_dir):
+        shutil.rmtree(app_dir)
     sys.modules.pop(f"app_backend_{app_id}", None)
     print(f"[app-backends] uninstalled backend: {app_id}")
 

@@ -452,7 +452,7 @@ const AppStore = (() => {
       : `store_id=${store.id}&category_id=${encodeURIComponent(cat.id)}`;
     const res = await fetch(`/api/plugins/category-apps?${params}`);
     const apps = await res.json();
-    if (apps.error) { list.innerHTML = `<div class="as-loading">Error: ${apps.error}</div>`; return; }
+    if (!Array.isArray(apps)) { list.innerHTML = `<div class="as-loading">Error: ${apps.error || 'Invalid response'}</div>`; return; }
 
     // back button
     const backBar = document.createElement('div');
@@ -653,6 +653,8 @@ const AppStore = (() => {
         btn.disabled = true; btn.textContent = t('um_removing');
         await fetch(`/api/plugins/${btn.dataset.id}`, { method: 'DELETE' });
         mvmOS._removeFromStartMenu(btn.dataset.id);
+        window._desktopRemoveApp?.(btn.dataset.id);
+        Desktop.removeApp?.(btn.dataset.id);
         body._as?.refreshCurrent?.();
       });
 
@@ -712,6 +714,7 @@ const AppStore = (() => {
     await db.run('CREATE TABLE IF NOT EXISTS cfg (key TEXT PRIMARY KEY, value TEXT)');
     const rows = await db.query('SELECT key, value FROM cfg');
     const saved = {};
+    settings.forEach(s => { if (s.default !== undefined) saved[s.key] = s.default; });
     rows.forEach(r => { try { saved[r.key] = JSON.parse(r.value); } catch(_) { saved[r.key] = r.value; } });
 
     const prev = main.innerHTML;
