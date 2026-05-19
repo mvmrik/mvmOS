@@ -1587,23 +1587,23 @@ const AppStore = (() => {
 
     const list = document.createElement('div');
     list.style.cssText = 'overflow-y:auto;flex:1;';
-    items.forEach(t => {
-      const inst = installedMap[t.id];
+    items.forEach(theme => {
+      const inst = installedMap[theme.id];
       const isActive = inst?.is_active;
       const row = document.createElement('div');
       row.className = 'as-pkg-row';
       row.innerHTML = `
-        <div style="font-size:1.4rem;width:28px;text-align:center;flex-shrink:0">${t.icon}</div>
+        <div style="font-size:1.4rem;width:28px;text-align:center;flex-shrink:0">${theme.icon}</div>
         <div class="as-pkg-info">
-          <div class="as-pkg-top"><span class="as-pkg-name">${t.name}</span></div>
-          <div class="as-pkg-desc">${t.description}</div>
-          <div class="as-pkg-ver">${t.version} · ${t.layout}</div>
+          <div class="as-pkg-top"><span class="as-pkg-name">${theme.name}</span></div>
+          <div class="as-pkg-desc">${theme.description}</div>
+          <div class="as-pkg-ver">${theme.version} · ${theme.layout}</div>
         </div>
         <div class="as-pkg-actions">
           ${isActive ? '<span class="as-installed-badge">✓ Active</span>' :
-            inst ? `<button class="s-btn s-btn-sm ts-activate" data-id="${t.id}">Activate</button>
-                    <button class="s-btn-sm s-btn-danger ts-remove" data-id="${t.id}">✕</button>` :
-            `<button class="s-btn ts-install" data-theme='${JSON.stringify({...t, store_id: storeId ?? null})}'>Install</button>`
+            inst ? `<button class="s-btn s-btn-sm ts-activate" data-id="${theme.id}">Activate</button>
+                    <button class="s-btn-sm s-btn-danger ts-remove" data-id="${theme.id}">✕</button>` :
+            `<button class="s-btn ts-install" data-theme='${JSON.stringify({...theme, store_id: storeId ?? null})}'>Install</button>`
           }
         </div>
       `;
