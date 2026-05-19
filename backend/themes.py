@@ -1,6 +1,8 @@
+import io
 import os
 import time
 import httpx
+import zipfile
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from .db import get_conn, THEMES_DIR
@@ -107,25 +109,49 @@ class InstallTheme(BaseModel):
     version: str = "1.0.0"
     description: str = ""
     layout: str = "macos"
-    base_url: str
+    zip_url: str = ""
+    base_url: str = ""
     store_id: int | None = None
 
 
 @router.post("/api/themes/install")
 async def install_theme(body: InstallTheme):
-    css_url = body.base_url.rstrip("/") + "/theme.css"
-    try:
-        async with httpx.AsyncClient(timeout=10) as client:
-            r = await client.get(css_url)
-            r.raise_for_status()
-            css = r.text
-    except Exception as e:
-        raise HTTPException(502, f"Failed to fetch theme CSS: {e}")
-
     theme_dir = os.path.join(THEMES_DIR, body.id)
     os.makedirs(theme_dir, exist_ok=True)
-    with open(os.path.join(theme_dir, "theme.css"), "w") as f:
-        f.write(css)
+
+    async with httpx.AsyncClient(timeout=30) as client:
+        if body.zip_url:
+            try:
+                r = await client.get(body.zip_url)
+                r.raise_for_status()
+            except Exception as e:
+                raise HTTPException(502, f"Failed to fetch theme zip: {e}")
+            try:
+                with zipfile.ZipFile(io.BytesIO(r.content)) as zf:
+                    names = zf.namelist()
+                    prefix = ""
+                    if names and "/" in names[0]:
+                        candidate = names[0].split("/")[0] + "/"
+                        if all(n.startswith(candidate) for n in names):
+                            prefix = candidate
+                    for zname in names:
+                        rel = zname[len(prefix):]
+                        if not rel or rel.endswith("/"):
+                            continue
+                        dest = os.path.join(theme_dir, rel)
+                        os.makedirs(os.path.dirname(dest), exist_ok=True)
+                        open(dest, "wb").write(zf.read(zname))
+            except Exception as e:
+                raise HTTPException(400, str(e))
+        else:
+            css_url = body.base_url.rstrip("/") + "/theme.css"
+            try:
+                r = await client.get(css_url)
+                r.raise_for_status()
+            except Exception as e:
+                raise HTTPException(502, f"Failed to fetch theme CSS: {e}")
+            with open(os.path.join(theme_dir, "theme.css"), "w") as f:
+                f.write(r.text)
 
     with get_conn() as conn:
         conn.execute(
