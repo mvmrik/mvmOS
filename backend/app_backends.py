@@ -1,8 +1,8 @@
 """
 Dynamic app backend loader.
 
-Each installed app that needs a server-side component places a Python file in
-backend/app-backends/<app-id>.py  The file must expose a FastAPI `router`
+Each installed app that needs a server-side component places a Python file at
+backend/apps/<app-id>/backend.py  The file must expose a FastAPI `router`
 object at module level.  This module discovers and mounts all such routers
 automatically at startup, and provides helpers for install/uninstall.
 """
@@ -12,29 +12,29 @@ import os
 import sys
 from fastapi import FastAPI
 
-BACKENDS_DIR = os.path.join(os.path.dirname(__file__), "app-backends")
+BACKENDS_DIR = os.path.join(os.path.dirname(__file__), "apps")
 
 # Set by load_all() so install() can mount without needing the app reference
 _app_ref: FastAPI | None = None
 
 
 def load_all(app: FastAPI) -> None:
-    """Load every *.py in app-backends/ and mount its router. Call once at startup."""
+    """Load every backend.py in apps/<id>/ and mount its router. Call once at startup."""
     global _app_ref
     _app_ref = app
     os.makedirs(BACKENDS_DIR, exist_ok=True)
-    for fname in sorted(os.listdir(BACKENDS_DIR)):
-        if fname.endswith(".py"):
-            _load_one(app, fname[:-3])
+    for app_id in sorted(os.listdir(BACKENDS_DIR)):
+        path = os.path.join(BACKENDS_DIR, app_id, "backend.py")
+        if os.path.isfile(path):
+            _load_one(app, app_id)
 
 
 def _load_one(app: FastAPI, app_id: str) -> bool:
-    path = os.path.join(BACKENDS_DIR, f"{app_id}.py")
+    path = os.path.join(BACKENDS_DIR, app_id, "backend.py")
     if not os.path.isfile(path):
         return False
     mod_name = f"app_backend_{app_id}"
     try:
-        # remove old routes from this backend before reloading
         app.routes[:] = [r for r in app.routes if not getattr(r, "_app_backend", None) == app_id]
 
         spec = importlib.util.spec_from_file_location(mod_name, path)
@@ -46,7 +46,6 @@ def _load_one(app: FastAPI, app_id: str) -> bool:
             print(f"[app-backends] {app_id}: no router found, skipping")
             return False
         app.include_router(router)
-        # tag newly added routes so we can remove them on reload
         for route in app.routes:
             if not hasattr(route, "_app_backend"):
                 route._app_backend = app_id
@@ -58,9 +57,10 @@ def _load_one(app: FastAPI, app_id: str) -> bool:
 
 
 def install(app_id: str, source_code: str) -> None:
-    """Write backend file and mount its router immediately (no restart needed)."""
-    os.makedirs(BACKENDS_DIR, exist_ok=True)
-    path = os.path.join(BACKENDS_DIR, f"{app_id}.py")
+    """Write backend.py and mount its router immediately (no restart needed)."""
+    app_dir = os.path.join(BACKENDS_DIR, app_id)
+    os.makedirs(app_dir, exist_ok=True)
+    path = os.path.join(app_dir, "backend.py")
     with open(path, "w") as f:
         f.write(source_code)
     if _app_ref is not None:
@@ -68,8 +68,8 @@ def install(app_id: str, source_code: str) -> None:
 
 
 def uninstall(app_id: str) -> None:
-    """Remove backend file. Router stays mounted until next restart (FastAPI limitation)."""
-    path = os.path.join(BACKENDS_DIR, f"{app_id}.py")
+    """Remove backend.py. Router stays mounted until next restart (FastAPI limitation)."""
+    path = os.path.join(BACKENDS_DIR, app_id, "backend.py")
     if os.path.isfile(path):
         os.remove(path)
     sys.modules.pop(f"app_backend_{app_id}", None)
@@ -77,4 +77,4 @@ def uninstall(app_id: str) -> None:
 
 
 def has_backend(app_id: str) -> bool:
-    return os.path.isfile(os.path.join(BACKENDS_DIR, f"{app_id}.py"))
+    return os.path.isfile(os.path.join(BACKENDS_DIR, app_id, "backend.py"))

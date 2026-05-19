@@ -61,6 +61,40 @@ def _app_dir(plugin_id: str) -> str:
     return os.path.join(APPS_DIR, plugin_id)
 
 
+def _apply_schema(db_path: str, schema: dict):
+    """Apply db.json schema to SQLite DB — create tables and add missing columns."""
+    import sqlite3
+    conn = sqlite3.connect(db_path)
+    try:
+        for table in schema.get("tables", []):
+            name = table["name"]
+            cols = table["columns"]
+            exists = conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name=?", (name,)
+            ).fetchone()
+            if not exists:
+                col_defs = []
+                for col in cols:
+                    defn = f"{col['name']} {col['type']}"
+                    if col.get("primary"):
+                        defn += " PRIMARY KEY"
+                    if col.get("default") is not None:
+                        defn += f" DEFAULT {col['default']!r}"
+                    col_defs.append(defn)
+                conn.execute(f"CREATE TABLE {name} ({', '.join(col_defs)})")
+            else:
+                existing_cols = {row[1] for row in conn.execute(f"PRAGMA table_info({name})")}
+                for col in cols:
+                    if col["name"] not in existing_cols:
+                        defn = f"{col['name']} {col['type']}"
+                        if col.get("default") is not None:
+                            defn += f" DEFAULT {col['default']!r}"
+                        conn.execute(f"ALTER TABLE {name} ADD COLUMN {defn}")
+        conn.commit()
+    finally:
+        conn.close()
+
+
 def _annotate(apps: list, installed: dict) -> list:
     result = []
     for app in apps:
@@ -337,6 +371,18 @@ async def install_plugin(body: InstallRequest, session=Depends(get_current_sessi
                             f.write(css_r.text)
                 except Exception:
                     pass
+
+            # fetch and apply db.json schema if present
+            try:
+                db_r = await client.get(body.base_url.rstrip("/") + "/db.json")
+                if db_r.status_code == 200:
+                    schema = db_r.json()
+                    db_path = os.path.join(app_dir, "data.db")
+                    _apply_schema(db_path, schema)
+                    with open(os.path.join(app_dir, "db.json"), "w") as f:
+                        f.write(db_r.text)
+            except Exception:
+                pass
 
             if body.install_backend and has_be and be_code:
                 app_backends.install(body.id, be_code)

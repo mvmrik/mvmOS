@@ -930,10 +930,102 @@ var mvmOS = (() => {
     link.href = `/api/themes/active/css?_=${Date.now()}`;
   }
 
+  // ── mvmOS SDK ─────────────────────────────────────────────────────────────
+  const _sdk = {
+    system: {
+      // Current CPU, memory, disk usage + hardware info
+      async resources() {
+        const [rRes, hRes] = await Promise.all([
+          fetch('/api/system/resources'),
+          fetch('/api/system/hardware'),
+        ]);
+        return { ...(await rRes.json()), ...(await hRes.json()) };
+      },
+      // List running processes
+      async processes() {
+        const r = await fetch('/api/system/processes');
+        return r.json();
+      },
+      // Kill a process by PID. signal: 'SIGTERM' | 'SIGKILL'
+      async kill(pid, signal = 'SIGTERM', sudo_password = '') {
+        const r = await fetch('/api/system/processes/kill', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pid, signal, sudo_password }),
+        });
+        return r.json();
+      },
+      // List systemd services
+      async services() {
+        const r = await fetch('/api/system/services');
+        return r.json();
+      },
+      // Control a systemd service. action: 'start' | 'stop' | 'restart' | 'enable' | 'disable'
+      async serviceAction(name, action, sudo_password = '') {
+        const r = await fetch('/api/system/services/action', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, action, sudo_password }),
+        });
+        return r.json();
+      },
+    },
+    fs: {
+      // List directory contents. Returns array of file/folder entries.
+      async list(path) {
+        const r = await fetch('/api/files/list?path=' + encodeURIComponent(path));
+        return r.json();
+      },
+      // Read a text file
+      async read(path) {
+        const r = await fetch('/api/files/read?path=' + encodeURIComponent(path));
+        return r.json();
+      },
+      // Write a text file
+      async write(path, content) {
+        const r = await fetch('/api/files/write', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ path, content }),
+        });
+        return r.json();
+      },
+      // Delete a file or folder
+      async delete(path) {
+        const r = await fetch('/api/files/delete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ path }),
+        });
+        return r.json();
+      },
+      // Create a folder
+      async mkdir(path) {
+        const r = await fetch('/api/files/mkdir', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ path }),
+        });
+        return r.json();
+      },
+      // Rename/move a file or folder
+      async rename(from, to) {
+        const r = await fetch('/api/files/rename', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ from, to }),
+        });
+        return r.json();
+      },
+    },
+  };
+
   const _api = {
     registerApp,
     registerWidget,
     onResources,
+    system: _sdk.system,
+    fs: _sdk.fs,
     createWindow: async (opts) => {
       let closeToTray = opts.closeToTray || false;
       const appDef = opts.id ? _apps[opts.id] : null;

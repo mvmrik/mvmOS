@@ -8,6 +8,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from .auth import get_current_session
 from .db import get_conn, WIDGETS_DIR
+from .plugins import _apply_schema
 
 router = APIRouter(prefix="/api/widgets", tags=["widgets"])
 
@@ -213,6 +214,15 @@ async def install_widget(body: InstallRequest, session=Depends(get_current_sessi
                             f.write(css_r.text)
                 except Exception:
                     pass
+            try:
+                db_r = await client.get(body.base_url.rstrip("/") + "/db.json")
+                if db_r.status_code == 200:
+                    schema = db_r.json()
+                    _apply_schema(os.path.join(wdir, "data.db"), schema)
+                    with open(os.path.join(wdir, "db.json"), "w") as f:
+                        f.write(db_r.text)
+            except Exception:
+                pass
         else:
             try:
                 js_r = await client.get(body.js_url)
