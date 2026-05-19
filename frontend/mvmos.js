@@ -18,7 +18,7 @@ var mvmOS = (() => {
   let _flyout = null;
 
   function _closeFlyout() {
-    if (_flyout) { _flyout.remove(); _flyout = null; }
+    if (_flyout) { _flyout.remove(); _flyout = null; document.getElementById('start-menu').style.visibility = ''; }
     document.querySelector('.start-submenu-inline')?.remove();
   }
 
@@ -28,6 +28,7 @@ var mvmOS = (() => {
       // on mobile: cover the start menu exactly
       const startMenu = document.getElementById('start-menu');
       const r = startMenu.getBoundingClientRect();
+      startMenu.style.visibility = 'hidden';
       _flyout = document.createElement('div');
       _flyout.className = 'start-submenu-inline';
       _flyout.style.cssText = `position:fixed;left:${r.left}px;top:${r.top}px;width:${r.width}px;height:${r.height}px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);display:flex;flex-direction:column;z-index:9600;overflow-y:auto;box-shadow:var(--shadow)`;
@@ -50,7 +51,7 @@ var mvmOS = (() => {
     if (window.innerWidth < 768) {
       const back = document.createElement('div');
       back.className = 'start-submenu-item start-submenu-back';
-      back.innerHTML = `<span class="emoji">‹</span> ${t('back')}`;
+      back.innerHTML = t('back');
       back.addEventListener('click', e => { e.stopPropagation(); _closeFlyout(); });
       _flyout.appendChild(back);
       const sep = document.createElement('div');
@@ -260,7 +261,9 @@ var mvmOS = (() => {
       el.id = 'taskbar-widgets';
       el.style.cssText = 'display:flex;align-items:center;height:100%';
       const notifBtn = document.getElementById('notif-btn');
+      const right = document.getElementById('taskbar-right');
       if (notifBtn) notifBtn.parentNode.insertBefore(el, notifBtn);
+      else if (right) right.prepend(el);
       else document.getElementById('taskbar')?.appendChild(el);
     }
     return el;

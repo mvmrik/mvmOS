@@ -25,13 +25,15 @@
 <div id="taskbar">
   <button id="start-btn">⊞</button>
   <div id="taskbar-windows"></div>
-  <div id="taskbar-tray"></div>
-  <div id="notif-btn" title="Notifications">
-    <span id="notif-icon">🔔</span>
-    <span id="notif-badge" style="display:none"></span>
+  <div id="taskbar-right">
+    <div id="taskbar-tray"></div>
+    <div id="notif-btn" title="Notifications">
+      <span id="notif-icon">🔔</span>
+      <span id="notif-badge" style="display:none"></span>
+    </div>
+    <div id="clock"></div>
   </div>
   <div id="notif-panel" style="display:none"></div>
-  <div id="clock"></div>
 </div>
 
 <!-- Start menu -->
@@ -48,15 +50,11 @@
   <div id="start-menu-apps-anchor"></div>
   <div class="start-menu-sep"></div>
   </div>
-  <div class="start-menu-item" id="switch-user-btn">
-    <span class="emoji">🔄</span> <span data-i18n="start_switch_user">Switch User</span>
-  </div>
-  <form method="POST" action="/logout" style="margin:0">
-    <button type="submit" class="start-menu-item start-menu-logout" style="width:100%;background:none;border:none;cursor:pointer;text-align:left">
-      <span class="emoji">🚪</span> <span data-i18n="start_logout">Log out</span>
-    </button>
-  </form>
   <div class="start-menu-sep"></div>
+  <div class="start-menu-item" id="start-user-btn">
+    <span class="emoji">👤</span> <span data-i18n="start_user">User</span>
+    <span class="start-menu-item-arrow">›</span>
+  </div>
   <div class="start-menu-item" id="start-power-btn">
     <span class="emoji">⏻</span> <span data-i18n="start_power">Power</span>
     <span class="start-menu-item-arrow">›</span>

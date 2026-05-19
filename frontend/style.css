@@ -111,6 +111,13 @@ html, body {
   overflow: hidden;
 }
 
+#taskbar-right {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+}
+
 .taskbar-item {
   background: var(--surface2);
   border: 1px solid var(--border);
@@ -1123,7 +1130,7 @@ html, body {
   #taskbar-windows { max-width: 40vw; overflow: hidden; }
   .taskbar-item { max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   #taskbar-widgets { display: none !important; }
-  #taskbar-windows { flex: 1; }
+  #taskbar-tray { border-right: none; padding: 0; }
 }
 
 /* ── Splash screen ────────────────────────────────────────────────────────── */

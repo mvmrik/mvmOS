@@ -888,8 +888,27 @@ const Desktop = (() => {
   // ── Power submenu ──
   let _powerFlyout = null;
   function _closePowerFlyout() {
-    if (_powerFlyout) { _powerFlyout.remove(); _powerFlyout = null; }
+    if (_powerFlyout) { _powerFlyout.remove(); _powerFlyout = null; document.getElementById('start-menu').style.visibility = ''; }
   }
+  function _showPowerOverlay(action) {
+    const ov = document.createElement('div');
+    ov.style.cssText = 'position:fixed;inset:0;z-index:99999;background:#000;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2.5rem';
+    const _msg = action === 'restart' ? t('power_restarting') : t('power_stopped');
+    ov.innerHTML = `<img src="/logo.png" style="width:min(280px,55vw)"><div style="color:#aaa;font-size:.95rem;font-family:inherit">${_msg}</div>`;
+    document.body.appendChild(ov);
+    if (action === 'restart') {
+      let _wasDown = false;
+      const poll = setInterval(async () => {
+        try {
+          const r = await fetch('/api/auth/whoami', { cache: 'no-store' });
+          if (r.status === 502) { _wasDown = true; return; }
+          if (_wasDown) { clearInterval(poll); location.reload(); }
+        } catch { _wasDown = true; }
+      }, 1500);
+    }
+  }
+  window._mvmosShowRestartOverlay = () => _showPowerOverlay('restart');
+
   function _openPowerFlyout(anchorEl) {
     _closePowerFlyout();
     const items = [
@@ -899,12 +918,13 @@ const Desktop = (() => {
     if (window.innerWidth < 768) {
       const sm = document.getElementById('start-menu');
       const r = sm.getBoundingClientRect();
+      sm.style.visibility = 'hidden';
       _powerFlyout = document.createElement('div');
       _powerFlyout.style.cssText = `position:fixed;left:${r.left}px;top:${r.top}px;width:${r.width}px;height:${r.height}px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);display:flex;flex-direction:column;z-index:9600;overflow-y:auto;box-shadow:var(--shadow)`;
       document.body.appendChild(_powerFlyout);
       const back = document.createElement('div');
       back.className = 'start-submenu-item start-submenu-back';
-      back.innerHTML = `<span class="emoji">‹</span> ${t('back')}`;
+      back.innerHTML = t('back');
       back.addEventListener('click', e => { e.stopPropagation(); _closePowerFlyout(); });
       _powerFlyout.appendChild(back);
       const sep = document.createElement('div');
@@ -927,34 +947,82 @@ const Desktop = (() => {
         _closePowerFlyout();
         startMenu.classList.remove('open');
         await fetch(`/api/system/power/${it.action}`, { method: 'POST' }).catch(() => {});
-        {
-          const ov = document.createElement('div');
-          ov.style.cssText = 'position:fixed;inset:0;z-index:99999;background:#000;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2.5rem';
-          const _msg = it.action === 'restart' ? t('power_restarting') : t('power_stopped');
-          ov.innerHTML = `<img src="/logo.png" style="width:min(280px,55vw)"><div style="color:#aaa;font-size:.95rem;font-family:inherit">${_msg}</div>`;
-          document.body.appendChild(ov);
-          if (it.action === 'restart') {
-            let _wasDown = false;
-            const poll = setInterval(async () => {
-              try {
-                const r = await fetch('/api/auth/whoami', { cache: 'no-store' });
-                if (r.status === 502) { _wasDown = true; return; }
-                if (_wasDown) { clearInterval(poll); location.reload(); }
-              } catch { _wasDown = true; }
-            }, 1500);
-          }
-        }
+        _showPowerOverlay(it.action);
       });
       _powerFlyout.appendChild(el);
     });
   }
   document.getElementById('start-power-btn').addEventListener('click', e => {
     e.stopPropagation();
+    _closeUserFlyout();
     _openPowerFlyout(e.currentTarget);
   });
   document.addEventListener('click', e => {
     if (_powerFlyout && !e.target.closest('#start-power-btn') && !_powerFlyout.contains(e.target)) {
       _closePowerFlyout();
+    }
+  });
+
+  let _userFlyout = null;
+  function _closeUserFlyout() {
+    if (_userFlyout) { _userFlyout.remove(); _userFlyout = null; document.getElementById('start-menu').style.visibility = ''; }
+  }
+  function _openUserFlyout(anchorEl) {
+    _closeUserFlyout();
+    const items = [
+      { emoji: '🔄', labelKey: 'start_switch_user', action: 'switch' },
+      { emoji: '🚪', labelKey: 'start_logout',       action: 'logout' },
+    ];
+    if (window.innerWidth < 768) {
+      const sm = document.getElementById('start-menu');
+      const r = sm.getBoundingClientRect();
+      sm.style.visibility = 'hidden';
+      _userFlyout = document.createElement('div');
+      _userFlyout.style.cssText = `position:fixed;left:${r.left}px;top:${r.top}px;width:${r.width}px;height:${r.height}px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);display:flex;flex-direction:column;z-index:9600;overflow-y:auto;box-shadow:var(--shadow)`;
+      document.body.appendChild(_userFlyout);
+      const back = document.createElement('div');
+      back.className = 'start-submenu-item start-submenu-back';
+      back.innerHTML = t('back');
+      back.addEventListener('click', e => { e.stopPropagation(); _closeUserFlyout(); });
+      _userFlyout.appendChild(back);
+      const sep = document.createElement('div');
+      sep.style.cssText = 'height:1px;background:var(--border);margin:2px 0';
+      _userFlyout.appendChild(sep);
+    } else {
+      const rect = anchorEl.getBoundingClientRect();
+      _userFlyout = document.createElement('div');
+      _userFlyout.className = 'start-submenu open';
+      _userFlyout.style.left   = rect.right + 4 + 'px';
+      _userFlyout.style.bottom = window.innerHeight - rect.bottom + 'px';
+      document.body.appendChild(_userFlyout);
+    }
+    items.forEach(it => {
+      const el = document.createElement('div');
+      el.className = 'start-submenu-item';
+      el.innerHTML = `<span class="emoji">${it.emoji}</span>${t(it.labelKey)}`;
+      el.addEventListener('click', e => {
+        e.stopPropagation();
+        _closeUserFlyout();
+        startMenu.classList.remove('open');
+        if (it.action === 'logout') {
+          const f = document.createElement('form');
+          f.method = 'POST'; f.action = '/logout';
+          document.body.appendChild(f); f.submit();
+        } else if (it.action === 'switch') {
+          openSwitchUser();
+        }
+      });
+      _userFlyout.appendChild(el);
+    });
+  }
+  document.getElementById('start-user-btn').addEventListener('click', e => {
+    e.stopPropagation();
+    _closePowerFlyout();
+    _openUserFlyout(e.currentTarget);
+  });
+  document.addEventListener('click', e => {
+    if (_userFlyout && !e.target.closest('#start-user-btn') && !_userFlyout.contains(e.target)) {
+      _closeUserFlyout();
     }
   });
 
@@ -1194,7 +1262,7 @@ const Desktop = (() => {
     });
   }
 
-  document.getElementById('switch-user-btn').addEventListener('click', openSwitchUser);
+  document.getElementById('switch-user-btn')?.addEventListener('click', openSwitchUser);
 
   // ── Init ──
   async function init() {
