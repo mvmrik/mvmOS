@@ -25,7 +25,7 @@ read -rp "  Port [2026]: " PORT
 PORT="${PORT:-2026}"
 
 # ── Python check ──────────────────────────────────────────────────────────────
-if ! command -v python3 &>/dev/null; then
+if ! command -v python3 >/dev/null 2>&1; then
     echo "  ERROR: python3 not found. Please install Python 3.10+."
     exit 1
 fi
@@ -40,9 +40,9 @@ echo "  Downloading mvmOS..."
 TMP_DIR=$(mktemp -d)
 trap 'rm -rf "$TMP_DIR"' EXIT
 
-if command -v curl &>/dev/null; then
+if command -v curl >/dev/null 2>&1; then
     curl -fsSL "$TARBALL_URL" -o "$TMP_DIR/mvmos.tar.gz"
-elif command -v wget &>/dev/null; then
+elif command -v wget >/dev/null 2>&1; then
     wget -q "$TARBALL_URL" -O "$TMP_DIR/mvmos.tar.gz"
 else
     echo "  ERROR: curl or wget required."
@@ -62,13 +62,13 @@ VENV_DIR="$SCRIPT_DIR/venv"
 # ── Ensure python3-venv is available ──────────────────────────────────────────
 echo "  Installing system dependencies..."
 PY_MINOR=$(python3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
-if command -v apt-get &>/dev/null; then
+if command -v apt-get >/dev/null 2>&1; then
     sudo apt-get install -y -q "python${PY_MINOR}-venv" python3-venv 2>/dev/null || true
-elif command -v dnf &>/dev/null; then
+elif command -v dnf >/dev/null 2>&1; then
     sudo dnf install -y -q python3-virtualenv 2>/dev/null || true
-elif command -v zypper &>/dev/null; then
+elif command -v zypper >/dev/null 2>&1; then
     sudo zypper install -y python3-virtualenv 2>/dev/null || true
-elif command -v pacman &>/dev/null; then
+elif command -v pacman >/dev/null 2>&1; then
     sudo pacman -Sy --noconfirm python 2>/dev/null || true
 fi
 
