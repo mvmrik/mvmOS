@@ -5,15 +5,9 @@ from fastapi.responses import RedirectResponse, HTMLResponse, FileResponse, Resp
 from fastapi.staticfiles import StaticFiles
 from starlette.responses import PlainTextResponse
 
-_MVMOS_HOST = os.environ.get("MVMOS_HOST", "mvmos.mvmrik.com")
-_IP_RE = re.compile(r"^\d{1,3}(\.\d{1,3}){3}$")
-
-def _is_local_host(host: str) -> bool:
-    return host in ("localhost", "127.0.0.1", "testserver") or bool(_IP_RE.match(host)) or (bool(_MVMOS_HOST) and host == _MVMOS_HOST)
-
 
 class _MvmStaticFiles(StaticFiles):
-    """Frontend static files — only served for the mvmOS host, not external domains."""
+    """Frontend static files — blocked for externally-mapped domains."""
     async def __call__(self, scope, receive, send):
         if scope["type"] == "http":
             host = ""
@@ -21,9 +15,13 @@ class _MvmStaticFiles(StaticFiles):
                 if name == b"host":
                     host = value.decode().split(":")[0].lower()
                     break
-            if host and not _is_local_host(host):
-                await PlainTextResponse("Not Found", status_code=404)(scope, receive, send)
-                return
+            if host:
+                from .db import get_conn as _get_conn
+                with _get_conn() as _conn:
+                    _row = _conn.execute("SELECT id FROM domains WHERE domain = ?", (host,)).fetchone()
+                if _row:
+                    await PlainTextResponse("Not Found", status_code=404)(scope, receive, send)
+                    return
         await super().__call__(scope, receive, send)
 from .db import init_db, get_conn
 from .auth import router as auth_router, get_current_session
@@ -75,9 +73,10 @@ FRONTEND_DIR = os.path.join(os.path.dirname(__file__), "..", "frontend")
 
 @app.middleware("http")
 async def auth_middleware(request: Request, call_next):
-    # External domain requests skip auth entirely — handled by domain_middleware
     host = request.headers.get("host", "").split(":")[0].lower()
-    if not _is_local_host(host):
+    with get_conn() as conn:
+        is_external = conn.execute("SELECT id FROM domains WHERE domain = ?", (host,)).fetchone()
+    if is_external:
         return await call_next(request)
 
     public = {"/login", "/favicon.ico", "/api/auth/login-users"}
@@ -105,30 +104,29 @@ async def auth_middleware(request: Request, call_next):
 @app.middleware("http")
 async def domain_middleware(request: Request, call_next):
     host = request.headers.get("host", "").split(":")[0].lower()
-    if _is_local_host(host):
-        # Check subpath-mapped sites for mvmOS host
-        req_path = request.url.path
-        if not req_path.endswith((".js", ".css", ".ico", ".png", ".svg", ".woff", ".woff2", ".json", ".html", ".txt", ".map")):
-            with get_conn() as conn:
-                rows = conn.execute(
-                    "SELECT app_id, path FROM domains WHERE path IS NOT NULL ORDER BY length(path) DESC"
-                ).fetchall()
-            for row in rows:
-                prefix = row["path"].rstrip("/")
-                if req_path == prefix or req_path.startswith(prefix + "/"):
-                    subpath = req_path[len(prefix):]
-                    return await _dispatch_public(row["app_id"], subpath, request)
+
+    # Check subpath-mapped sites first
+    req_path = request.url.path
+    if not req_path.endswith((".js", ".css", ".ico", ".png", ".svg", ".woff", ".woff2", ".json", ".html", ".txt", ".map")):
+        with get_conn() as conn:
+            rows = conn.execute(
+                "SELECT app_id, path FROM domains WHERE path IS NOT NULL ORDER BY length(path) DESC"
+            ).fetchall()
+        for row in rows:
+            prefix = row["path"].rstrip("/")
+            if req_path == prefix or req_path.startswith(prefix + "/"):
+                subpath = req_path[len(prefix):]
+                return await _dispatch_public(row["app_id"], subpath, request)
+
+    # Check external domain mapping
+    with get_conn() as conn:
+        row = conn.execute("SELECT app_id FROM domains WHERE domain = ?", (host,)).fetchone()
+    if not row:
         return await call_next(request)
 
     # Block .py files always
     if request.url.path.endswith(".py"):
         return Response(status_code=404)
-
-    # Look up domain mapping
-    with get_conn() as conn:
-        row = conn.execute("SELECT app_id FROM domains WHERE domain = ?", (host,)).fetchone()
-    if not row:
-        return Response("Domain not configured", status_code=404)
 
     app_id = row["app_id"]
     path = request.url.path.rstrip("/") or "/"
@@ -157,7 +155,9 @@ def _versioned_html():
 @app.get("/")
 async def serve_index(request: Request):
     host = request.headers.get("host", "").split(":")[0].lower()
-    if not _is_local_host(host):
+    with get_conn() as conn:
+        is_external = conn.execute("SELECT id FROM domains WHERE domain = ?", (host,)).fetchone()
+    if is_external:
         return Response(status_code=404)
     return HTMLResponse(_versioned_html())
 
