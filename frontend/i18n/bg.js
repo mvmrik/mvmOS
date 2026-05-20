@@ -405,7 +405,7 @@ window._i18n = {
   'appstore_requires_core':       'Изисква mvmOS {min} или по-нова (текуща: {cur})',
   'um_incompatible':              'Изисква по-нова mvmOS',
   'uninstall_title':              '⚠️ Деинсталиране на mvmOS',
-  'uninstall_desc':               'Това ще премахне mvmOS и всичките му файлове завинаги. Личните ти файлове няма да бъдат изтрити. Напиши „DELETE mvmOS" в полето по-долу за потвърждение.',
+  'uninstall_desc':               'Това ще премахне mvmOS и всичките му файлове завинаги. Личните ти файлове няма да бъдат изтрити.',
   'uninstall_confirm_ph':         'DELETE mvmOS',
   'uninstall_password_ph':        'Твоята парола',
   'uninstall_btn':                'Деинсталирай mvmOS',

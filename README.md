@@ -21,13 +21,21 @@ Anyone can create their own apps, widgets and themes. See the [mvmos-store devel
 
 ## Install
 
+**With git:**
 ```bash
-git clone <repo>
+git clone https://github.com/mvmrik/mvmOS.git
 cd mvmOS
 bash install.sh
 ```
 
-The installer will ask for a port (default `8080`) and admin username, generate a password, set up a Python virtualenv and create a systemd service.
+**Without git:**
+```bash
+curl -fsSL https://github.com/mvmrik/mvmOS/archive/refs/heads/main.tar.gz | tar -xz
+cd mvmOS-main
+bash install.sh
+```
+
+The installer will ask for a port (default `2026`), set up a Python virtualenv and create a systemd service.
 
 ## Requirements
 

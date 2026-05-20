@@ -170,27 +170,6 @@ async def power_restart(bg: BackgroundTasks, session=Depends(get_current_session
     return JSONResponse({"ok": True})
 
 
-class UninstallBody(BaseModel):
-    password: str
-
-
-@router.post("/uninstall")
-async def uninstall(body: UninstallBody, session=Depends(get_current_session)):
-    from .auth import verify_linux_password
-    username = session["effective_user"]
-    if not verify_linux_password(username, body.password):
-        raise HTTPException(403, "Wrong password")
-    install_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-    cmd = (
-        f"sudo systemctl disable --now mvmos ; "
-        f"sudo rm -f /etc/systemd/system/mvmos.service ; "
-        f"sudo systemctl daemon-reload ; "
-        f"sudo rm -f /etc/sudoers.d/mvmos ; "
-        f"sudo userdel mvmos ; "
-        f"sudo groupdel mvmos ; "
-        f"sudo rm -rf {install_dir}"
-    )
-    return JSONResponse({"ok": True, "cmd": cmd})
 
 
 @router.post("/power/stop")

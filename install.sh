@@ -97,8 +97,6 @@ EOF
 echo "  [3/4] Setting up mvmos user..."
 sudo groupadd -f mvmos
 sudo useradd -r -s /usr/sbin/nologin -g mvmos -M mvmos 2>/dev/null || true
-# Add installing user to mvmos group
-sudo usermod -aG mvmos "$(whoami)"
 # Set ownership of install dir to mvmos
 sudo chown -R mvmos:mvmos "$SCRIPT_DIR"
 sudo chmod 755 "$SCRIPT_DIR"
