@@ -37,6 +37,14 @@ bash install.sh
 
 The installer will ask for a port (default `2026`), set up a Python virtualenv and create a systemd service.
 
+## Uninstall
+
+```bash
+sudo systemctl stop mvmos && sudo systemctl disable mvmos && sudo rm -f /etc/systemd/system/mvmos.service && sudo systemctl daemon-reload && sudo rm -rf /opt/mvmos && sudo userdel mvmos && sudo rm -f /etc/sudoers.d/mvmos
+```
+
+> **Note:** This removes everything including installed apps, desktop configuration and all user data. Your Linux system users are not affected.
+
 ## Requirements
 
 - Python 3.10+
