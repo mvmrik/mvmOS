@@ -19,15 +19,15 @@ import shutil
 import threading
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
 from .db import get_conn, APPS_DIR
+from .auth import get_current_session
 from . import app_backends, public_loader
 
 router = APIRouter(prefix="/api/projects", tags=["projects"])
 
-PROJECTS_DIR = os.path.expanduser("~/mvmos_projects")
 BACKENDS_DIR = os.path.join(os.path.dirname(__file__), "apps")
 
 # active watchers: project_id -> Observer
@@ -40,34 +40,38 @@ _app_ref = None
 def init(app):
     global _app_ref
     _app_ref = app
-    os.makedirs(PROJECTS_DIR, exist_ok=True)
+
+
+def _user_projects_dir(username: str) -> str:
+    home = os.path.expanduser(f"~{username}")
+    return os.path.join(home, "mvmos_projects")
 
 
 # ── helpers ──────────────────────────────────────────────────────────────────
 
-def _project_dir(project_id: str) -> str:
-    return os.path.join(PROJECTS_DIR, project_id)
+def _project_dir(project_id: str, username: str) -> str:
+    return os.path.join(_user_projects_dir(username), project_id)
 
 
-def _meta_path(project_id: str) -> str:
-    return os.path.join(_project_dir(project_id), "mvmos_project.json")
+def _meta_path(project_id: str, username: str) -> str:
+    return os.path.join(_project_dir(project_id, username), "mvmos_project.json")
 
 
-def _read_meta(project_id: str) -> dict:
+def _read_meta(project_id: str, username: str) -> dict:
     try:
-        return json.loads(open(_meta_path(project_id)).read())
+        return json.loads(open(_meta_path(project_id, username)).read())
     except Exception:
         return {}
 
 
-def _write_meta(project_id: str, meta: dict):
-    with open(_meta_path(project_id), "w") as f:
+def _write_meta(project_id: str, username: str, meta: dict):
+    with open(_meta_path(project_id, username), "w") as f:
         json.dump(meta, f, indent=2)
 
 
-def _deploy(project_id: str):
+def _deploy(project_id: str, username: str):
     """Copy project files to the correct app/backend locations."""
-    src = _project_dir(project_id)
+    src = _project_dir(project_id, username)
     app_dst = os.path.join(APPS_DIR, project_id)
     backend_dst = os.path.join(BACKENDS_DIR, project_id)
     os.makedirs(app_dst, exist_ok=True)
@@ -98,20 +102,20 @@ def _deploy(project_id: str):
             public_loader._load_one(_app_ref, project_id)
 
 
-def _start_watcher(project_id: str):
+def _start_watcher(project_id: str, username: str):
     from watchdog.observers import Observer
     from watchdog.events import FileSystemEventHandler
 
     class Handler(FileSystemEventHandler):
         def on_modified(self, event):
             if not event.is_directory and not os.path.basename(event.src_path).startswith("."):
-                _deploy(project_id)
+                _deploy(project_id, username)
 
         def on_created(self, event):
             self.on_modified(event)
 
     observer = Observer()
-    observer.schedule(Handler(), _project_dir(project_id), recursive=True)
+    observer.schedule(Handler(), _project_dir(project_id, username), recursive=True)
     observer.start()
     _watchers[project_id] = observer
     print(f"[projects] watching: {project_id}")
@@ -134,14 +138,17 @@ class NewProjectBody(BaseModel):
 
 
 @router.get("")
-def list_projects():
-    os.makedirs(PROJECTS_DIR, exist_ok=True)
+def list_projects(session=Depends(get_current_session)):
+    username = session["effective_user"]
+    projects_dir = _user_projects_dir(username)
+    if not os.path.isdir(projects_dir):
+        return []
     result = []
-    for pid in sorted(os.listdir(PROJECTS_DIR)):
-        pdir = _project_dir(pid)
+    for pid in sorted(os.listdir(projects_dir)):
+        pdir = _project_dir(pid, username)
         if not os.path.isdir(pdir):
             continue
-        meta = _read_meta(pid)
+        meta = _read_meta(pid, username)
         with get_conn() as conn:
             rows = conn.execute(
                 "SELECT domain, path FROM domains WHERE app_id = ?", (pid,)
@@ -165,12 +172,13 @@ def list_projects():
 
 
 @router.post("")
-def create_project(body: NewProjectBody):
+def create_project(body: NewProjectBody, session=Depends(get_current_session)):
+    username = session["effective_user"]
     pid = body.id.strip().lower().replace(" ", "-")
     if not pid or "/" in pid or ".." in pid:
         raise HTTPException(400, "Invalid project id")
 
-    pdir = _project_dir(pid)
+    pdir = _project_dir(pid, username)
     if os.path.exists(pdir):
         raise HTTPException(409, "Project already exists")
 
@@ -187,9 +195,8 @@ def create_project(body: NewProjectBody):
         json.dumps({"id": pid, "name": body.name, "icon": "🌐", "version": "1.0.0"}, indent=2)
     )
 
-    _write_meta(pid, {"name": body.name, "domain": body.domain})
+    _write_meta(pid, username, {"name": body.name, "domain": body.domain})
 
-    # register domain/path
     with get_conn() as conn:
         conn.execute("INSERT OR IGNORE INTO plugins (id, name, icon) VALUES (?, ?, '🌐')", (pid, body.name))
         conn.execute("INSERT OR IGNORE INTO domains (app_id, path) VALUES (?, ?)", (pid, f"/{pid}"))
@@ -201,10 +208,11 @@ def create_project(body: NewProjectBody):
 
 
 @router.post("/{project_id}/publish")
-def publish_project(project_id: str):
-    if not os.path.isdir(_project_dir(project_id)):
+def publish_project(project_id: str, session=Depends(get_current_session)):
+    username = session["effective_user"]
+    if not os.path.isdir(_project_dir(project_id, username)):
         raise HTTPException(404, "Project not found")
-    meta = _read_meta(project_id)
+    meta = _read_meta(project_id, username)
     with get_conn() as conn:
         conn.execute("INSERT OR IGNORE INTO plugins (id, name, icon) VALUES (?, ?, '🌐')", (project_id, meta.get("name", project_id)))
         conn.execute("INSERT OR IGNORE INTO domains (app_id, path) VALUES (?, ?)", (project_id, f"/{project_id}"))
@@ -214,7 +222,7 @@ def publish_project(project_id: str):
 
 
 @router.post("/{project_id}/unpublish")
-def unpublish_project(project_id: str):
+def unpublish_project(project_id: str, session=Depends(get_current_session)):
     _stop_watcher(project_id)
     with get_conn() as conn:
         conn.execute("DELETE FROM domains WHERE app_id = ?", (project_id,))
@@ -222,25 +230,27 @@ def unpublish_project(project_id: str):
 
 
 @router.post("/{project_id}/build")
-def start_build(project_id: str):
-    if not os.path.isdir(_project_dir(project_id)):
+def start_build(project_id: str, session=Depends(get_current_session)):
+    username = session["effective_user"]
+    if not os.path.isdir(_project_dir(project_id, username)):
         raise HTTPException(404, "Project not found")
-    _deploy(project_id)
+    _deploy(project_id, username)
     if project_id not in _watchers:
-        _start_watcher(project_id)
+        _start_watcher(project_id, username)
     return {"ok": True, "watching": True}
 
 
 @router.post("/{project_id}/stop")
-def stop_build(project_id: str):
+def stop_build(project_id: str, session=Depends(get_current_session)):
     _stop_watcher(project_id)
     return {"ok": True, "watching": False}
 
 
 @router.delete("/{project_id}")
-def delete_project(project_id: str):
+def delete_project(project_id: str, session=Depends(get_current_session)):
+    username = session["effective_user"]
     _stop_watcher(project_id)
-    pdir = _project_dir(project_id)
+    pdir = _project_dir(project_id, username)
     if os.path.isdir(pdir):
         shutil.rmtree(pdir)
     with get_conn() as conn:
