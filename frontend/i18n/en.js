@@ -402,4 +402,12 @@ window._i18n = {
   'tray_quit':                    'Quit',
   'appstore_requires_core':       'Requires mvmOS {min} or newer (current: {cur})',
   'um_incompatible':              'Requires newer mvmOS',
+  'uninstall_title':              '⚠️ Uninstall mvmOS',
+  'uninstall_desc':               'This will permanently remove mvmOS and all its files. Your personal files will not be deleted.',
+  'uninstall_confirm_ph':         'Type "DELETE mvmOS" to confirm',
+  'uninstall_password_ph':        'Your password',
+  'uninstall_btn':                'Uninstall mvmOS',
+  'uninstall_progress':           'mvmOS is being uninstalled…',
+  'uninstall_wrong_password':     'Wrong password',
+  'uninstall_error':              'Error',
 };

@@ -688,6 +688,17 @@ const Settings = (() => {
           <button class="s-btn" id="about-update-terminal-btn" style="margin-top:6px;margin-left:6px;font-size:.75rem">${t('about_open_terminal')}</button>
         </div>
       </div>
+
+      <div class="settings-section" style="margin-top:16px;border-top:1px solid var(--border);padding-top:16px">
+        <div class="settings-section-title" style="color:#e05555">${t('uninstall_title')}</div>
+        <div style="font-size:.82rem;color:var(--text-dim);margin-bottom:12px">${t('uninstall_desc')}</div>
+        <div style="display:flex;flex-direction:column;gap:8px;max-width:340px">
+          <input id="uninstall-confirm-text" class="s-input" type="text" placeholder="${t('uninstall_confirm_ph')}" autocomplete="off">
+          <input id="uninstall-password" class="s-input" type="password" placeholder="${t('uninstall_password_ph')}">
+          <button id="uninstall-btn" class="s-btn s-btn-danger" disabled>${t('uninstall_btn')}</button>
+          <span id="uninstall-status" style="font-size:.8rem;color:#e05555;display:none"></span>
+        </div>
+      </div>
     `;
 
     const checkBtn  = wrap.querySelector('#about-check-btn');
@@ -773,6 +784,45 @@ const Settings = (() => {
             outputEl.scrollTop = outputEl.scrollHeight;
           }
         }
+      }
+    });
+
+    const uninstallConfirm = wrap.querySelector('#uninstall-confirm-text');
+    const uninstallPw      = wrap.querySelector('#uninstall-password');
+    const uninstallBtn     = wrap.querySelector('#uninstall-btn');
+    const uninstallStatus  = wrap.querySelector('#uninstall-status');
+
+    function checkUninstallReady() {
+      uninstallBtn.disabled = !(uninstallConfirm.value === 'DELETE mvmOS' && uninstallPw.value.length > 0);
+    }
+    uninstallConfirm.addEventListener('input', checkUninstallReady);
+    uninstallPw.addEventListener('input', checkUninstallReady);
+
+    uninstallBtn.addEventListener('click', async () => {
+      uninstallBtn.disabled = true;
+      uninstallStatus.style.display = 'none';
+      try {
+        const r = await fetch('/api/system/uninstall', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password: uninstallPw.value }),
+        });
+        if (r.ok) {
+          uninstallStatus.style.color = '#50fa7b';
+          uninstallStatus.textContent = t('uninstall_progress');
+          uninstallStatus.style.display = '';
+        } else {
+          const d = await r.json();
+          uninstallStatus.style.color = '#e05555';
+          uninstallStatus.textContent = d.detail || t('uninstall_wrong_password');
+          uninstallStatus.style.display = '';
+          uninstallBtn.disabled = false;
+        }
+      } catch (_) {
+        uninstallStatus.style.color = '#e05555';
+        uninstallStatus.textContent = t('uninstall_error');
+        uninstallStatus.style.display = '';
+        uninstallBtn.disabled = false;
       }
     });
   }

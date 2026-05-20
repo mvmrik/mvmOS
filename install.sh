@@ -96,9 +96,7 @@ EOF
 # ── mvmos system user & group ─────────────────────────────────────────────────
 echo "  [3/4] Setting up mvmos user..."
 sudo groupadd -f mvmos
-sudo useradd -r -s /bin/bash -g mvmos -m mvmos 2>/dev/null || true
-sudo mkdir -p /home/mvmos/mvmos_projects
-sudo chown -R mvmos:mvmos /home/mvmos
+sudo useradd -r -s /usr/sbin/nologin -g mvmos -M mvmos 2>/dev/null || true
 # Add installing user to mvmos group
 sudo usermod -aG mvmos "$(whoami)"
 # Set ownership of install dir to mvmos

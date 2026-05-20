@@ -169,6 +169,35 @@ async def power_restart(bg: BackgroundTasks, session=Depends(get_current_session
     return JSONResponse({"ok": True})
 
 
+class UninstallBody(BaseModel):
+    password: str
+
+
+@router.post("/uninstall")
+async def uninstall(body: UninstallBody, bg: BackgroundTasks, session=Depends(get_current_session)):
+    from .auth import verify_linux_password
+    from pydantic import BaseModel as _BM
+    username = session["effective_user"]
+    if not verify_linux_password(username, body.password):
+        from fastapi import HTTPException
+        raise HTTPException(403, "Wrong password")
+
+    def _do_uninstall():
+        import time, shutil, signal
+        install_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+        subprocess.run(["systemctl", "disable", "--now", "mvmos"], capture_output=True)
+        subprocess.run(["rm", "-f", "/etc/systemd/system/mvmos.service"], capture_output=True)
+        subprocess.run(["systemctl", "daemon-reload"], capture_output=True)
+        subprocess.run(["rm", "-f", "/etc/sudoers.d/mvmos"], capture_output=True)
+        subprocess.run(["userdel", "mvmos"], capture_output=True)
+        subprocess.run(["groupdel", "mvmos"], capture_output=True)
+        time.sleep(1)
+        shutil.rmtree(install_dir, ignore_errors=True)
+
+    bg.add_task(_do_uninstall)
+    return JSONResponse({"ok": True})
+
+
 @router.post("/power/stop")
 async def power_stop(bg: BackgroundTasks, session=Depends(get_current_session)):
     bg.add_task(_restart)

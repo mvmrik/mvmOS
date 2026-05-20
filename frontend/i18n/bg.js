@@ -404,4 +404,12 @@ window._i18n = {
   'tray_quit':                    'Изход',
   'appstore_requires_core':       'Изисква mvmOS {min} или по-нова (текуща: {cur})',
   'um_incompatible':              'Изисква по-нова mvmOS',
+  'uninstall_title':              '⚠️ Деинсталиране на mvmOS',
+  'uninstall_desc':               'Това ще премахне mvmOS и всичките му файлове завинаги. Личните ти файлове няма да бъдат изтрити.',
+  'uninstall_confirm_ph':         'Напиши "DELETE mvmOS" за потвърждение',
+  'uninstall_password_ph':        'Твоята парола',
+  'uninstall_btn':                'Деинсталирай mvmOS',
+  'uninstall_progress':           'mvmOS се деинсталира…',
+  'uninstall_wrong_password':     'Грешна парола',
+  'uninstall_error':              'Грешка',
 };
