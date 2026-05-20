@@ -175,36 +175,22 @@ class UninstallBody(BaseModel):
 
 
 @router.post("/uninstall")
-async def uninstall(body: UninstallBody, bg: BackgroundTasks, session=Depends(get_current_session)):
+async def uninstall(body: UninstallBody, session=Depends(get_current_session)):
     from .auth import verify_linux_password
     username = session["effective_user"]
     if not verify_linux_password(username, body.password):
         raise HTTPException(403, "Wrong password")
-
-    def _do_uninstall():
-        import time
-        install_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-        script = f"""#!/bin/bash
-sleep 2
-systemctl disable --now mvmos 2>/dev/null || true
-rm -f /etc/systemd/system/mvmos.service
-systemctl daemon-reload
-rm -f /etc/sudoers.d/mvmos
-userdel mvmos 2>/dev/null || true
-groupdel mvmos 2>/dev/null || true
-rm -rf {install_dir}
-rm -f /tmp/mvmos_uninstall.sh
-"""
-        with open("/tmp/mvmos_uninstall.sh", "w") as f:
-            f.write(script)
-        os.chmod("/tmp/mvmos_uninstall.sh", 0o755)
-        subprocess.Popen(["sudo", "bash", "/tmp/mvmos_uninstall.sh"],
-                         start_new_session=True,
-                         stdout=subprocess.DEVNULL,
-                         stderr=subprocess.DEVNULL)
-
-    bg.add_task(_do_uninstall)
-    return JSONResponse({"ok": True})
+    install_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+    cmd = (
+        f"sudo systemctl disable --now mvmos ; "
+        f"sudo rm -f /etc/systemd/system/mvmos.service ; "
+        f"sudo systemctl daemon-reload ; "
+        f"sudo rm -f /etc/sudoers.d/mvmos ; "
+        f"sudo userdel mvmos ; "
+        f"sudo groupdel mvmos ; "
+        f"sudo rm -rf {install_dir}"
+    )
+    return JSONResponse({"ok": True, "cmd": cmd})
 
 
 @router.post("/power/stop")

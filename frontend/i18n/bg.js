@@ -410,6 +410,7 @@ window._i18n = {
   'uninstall_password_ph':        'Твоята парола',
   'uninstall_btn':                'Деинсталирай mvmOS',
   'uninstall_progress':           'mvmOS се деинсталира…',
+  'uninstall_run_cmd':            'Изпълни тази команда в терминала за деинсталиране на mvmOS:',
   'uninstall_wrong_password':     'Грешна парола',
   'uninstall_error':              'Грешка',
 };

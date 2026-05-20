@@ -408,6 +408,7 @@ window._i18n = {
   'uninstall_password_ph':        'Your password',
   'uninstall_btn':                'Uninstall mvmOS',
   'uninstall_progress':           'mvmOS is being uninstalled…',
+  'uninstall_run_cmd':            'Run this command in a terminal to uninstall mvmOS:',
   'uninstall_wrong_password':     'Wrong password',
   'uninstall_error':              'Error',
 };

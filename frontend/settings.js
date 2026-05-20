@@ -808,9 +808,16 @@ const Settings = (() => {
           body: JSON.stringify({ password: uninstallPw.value }),
         });
         if (r.ok) {
-          uninstallStatus.style.color = '#50fa7b';
-          uninstallStatus.textContent = t('uninstall_progress');
+          const d = await r.json();
           uninstallStatus.style.display = '';
+          uninstallStatus.innerHTML = `${t('uninstall_run_cmd')}<br>
+            <code style="display:block;margin-top:6px;padding:8px;background:var(--surface);border-radius:4px;font-size:.75rem;word-break:break-all;color:var(--text)">${d.cmd}</code>
+            <button id="uninstall-copy-btn" class="s-btn" style="margin-top:6px;font-size:.75rem">${t('about_copy_cmd')}</button>`;
+          uninstallStatus.querySelector('#uninstall-copy-btn').addEventListener('click', () => {
+            navigator.clipboard.writeText(d.cmd).then(() => {
+              uninstallStatus.querySelector('#uninstall-copy-btn').textContent = t('about_copied');
+            });
+          });
         } else {
           const d = await r.json();
           uninstallStatus.style.color = '#e05555';
