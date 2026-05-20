@@ -182,16 +182,26 @@ async def uninstall(body: UninstallBody, bg: BackgroundTasks, session=Depends(ge
         raise HTTPException(403, "Wrong password")
 
     def _do_uninstall():
-        import time, shutil, signal
+        import time
         install_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-        subprocess.run(["systemctl", "disable", "--now", "mvmos"], capture_output=True)
-        subprocess.run(["rm", "-f", "/etc/systemd/system/mvmos.service"], capture_output=True)
-        subprocess.run(["systemctl", "daemon-reload"], capture_output=True)
-        subprocess.run(["rm", "-f", "/etc/sudoers.d/mvmos"], capture_output=True)
-        subprocess.run(["userdel", "mvmos"], capture_output=True)
-        subprocess.run(["groupdel", "mvmos"], capture_output=True)
-        time.sleep(1)
-        shutil.rmtree(install_dir, ignore_errors=True)
+        script = f"""#!/bin/bash
+sleep 2
+systemctl disable --now mvmos 2>/dev/null || true
+rm -f /etc/systemd/system/mvmos.service
+systemctl daemon-reload
+rm -f /etc/sudoers.d/mvmos
+userdel mvmos 2>/dev/null || true
+groupdel mvmos 2>/dev/null || true
+rm -rf {install_dir}
+rm -f /tmp/mvmos_uninstall.sh
+"""
+        with open("/tmp/mvmos_uninstall.sh", "w") as f:
+            f.write(script)
+        os.chmod("/tmp/mvmos_uninstall.sh", 0o755)
+        subprocess.Popen(["sudo", "bash", "/tmp/mvmos_uninstall.sh"],
+                         start_new_session=True,
+                         stdout=subprocess.DEVNULL,
+                         stderr=subprocess.DEVNULL)
 
     bg.add_task(_do_uninstall)
     return JSONResponse({"ok": True})

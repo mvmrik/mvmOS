@@ -110,6 +110,7 @@ sudo chmod 755 "$SCRIPT_DIR/bin/mvmos-auth"
 sudo tee /etc/sudoers.d/mvmos > /dev/null <<EOF
 mvmos ALL=(root) NOPASSWD: $SCRIPT_DIR/bin/mvmos-auth
 mvmos ALL=(ALL)  NOPASSWD: /usr/sbin/runuser
+mvmos ALL=(root) NOPASSWD: /bin/bash /tmp/mvmos_uninstall.sh
 EOF
 sudo chmod 440 /etc/sudoers.d/mvmos
 
