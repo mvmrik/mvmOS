@@ -97,30 +97,27 @@ const Sites = (() => {
         const domainUrl = p.domain ? `https://${p.domain}` : null;
         return `
           <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:10px 14px;">
-            <div style="display:flex;align-items:center;gap:10px;">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
               <label style="display:flex;align-items:center;cursor:pointer;flex-shrink:0" title="${t('sites_toggle')}">
                 <input type="checkbox" class="sites-toggle" data-id="${p.id}" ${p.watching || p.published ? 'checked' : ''} style="width:16px;height:16px;cursor:pointer;accent-color:var(--accent)">
               </label>
-              <span style="font-size:1.2rem">🌐</span>
-              <div style="flex:1;min-width:0;">
-                <div style="font-size:.9rem;font-weight:600">${p.name}</div>
-                <div style="display:flex;gap:10px;margin-top:2px;flex-wrap:wrap;">
-                  <a href="${url}" target="_blank" style="font-size:.75rem;color:var(--accent);text-decoration:none">${url}</a>
-                  ${domainUrl ? `<a href="${domainUrl}" target="_blank" style="font-size:.75rem;color:var(--accent);text-decoration:none">${domainUrl}</a>` : ''}
-                </div>
-              </div>
-              <div style="display:flex;gap:6px;align-items:center;flex-shrink:0">
-                ${p.has_app ? `<button class="s-btn sites-open-app" data-id="${p.id}" style="padding:3px 10px;font-size:.78rem">▶ ${t('sites_open_app')}</button>` : ''}
-                ${watching
-                  ? `<span style="font-size:.72rem;color:#50fa7b;background:rgba(80,250,123,.1);border:1px solid rgba(80,250,123,.3);border-radius:4px;padding:2px 7px">● ${t('sites_watching')}</span>
-                     <button class="s-btn sites-stop" data-id="${p.id}" style="padding:3px 10px;font-size:.78rem">${t('sites_stop')}</button>`
-                  : `<button class="s-btn sites-build" data-id="${p.id}" style="background:var(--accent);color:#fff;border-color:var(--accent);padding:3px 10px;font-size:.78rem">${t('sites_build')}</button>`
-                }
-                <button class="s-btn sites-del" data-id="${p.id}" style="color:#ff5555;border-color:#ff5555;padding:3px 8px;font-size:.78rem">✕</button>
-              </div>
+              <span style="font-size:1.1rem">🌐</span>
+              <span style="font-size:.9rem;font-weight:600">${p.name}</span>
             </div>
-            <div style="font-size:.75rem;color:var(--text-dim);margin-top:6px;padding-top:6px;border-top:1px solid var(--border);cursor:pointer;" class="sites-open-dir" data-path="${p.project_dir}">
-              📂 ${p.project_dir}
+            <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:6px;">
+              ${p.has_app ? `<button class="s-btn sites-open-app" data-id="${p.id}" style="padding:3px 10px;font-size:.78rem">▶ ${t('sites_open_app')}</button>` : ''}
+              ${watching
+                ? `<span style="font-size:.72rem;color:#50fa7b;background:rgba(80,250,123,.1);border:1px solid rgba(80,250,123,.3);border-radius:4px;padding:2px 7px">● ${t('sites_watching')}</span>
+                   <button class="s-btn sites-stop" data-id="${p.id}" style="padding:3px 10px;font-size:.78rem">${t('sites_stop')}</button>`
+                : `<button class="s-btn sites-build" data-id="${p.id}" style="background:var(--accent);color:#fff;border-color:var(--accent);padding:3px 10px;font-size:.78rem">${t('sites_build')}</button>`
+              }
+              <button class="s-btn sites-edit" data-id="${p.id}" data-dir="${p.project_dir}" style="padding:3px 10px;font-size:.78rem">✏️ ${t('sites_edit')}</button>
+              <button class="s-btn sites-del" data-id="${p.id}" style="color:#ff5555;border-color:#ff5555;padding:3px 8px;font-size:.78rem">✕</button>
+            </div>
+            <div style="font-size:.75rem;color:var(--text-dim);margin-top:6px;padding-top:6px;border-top:1px solid var(--border);display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+              <a href="${url}" target="_blank" style="color:var(--accent);text-decoration:none">🔗 ${url}</a>
+              ${domainUrl ? `<a href="${domainUrl}" target="_blank" style="color:var(--accent);text-decoration:none">🔗 ${domainUrl}</a>` : ''}
+              <span class="sites-open-dir" data-path="${p.project_dir}" style="cursor:pointer;color:var(--text-dim)">📂 ${p.project_dir}</span>
             </div>
           </div>`;
       }).join('');
@@ -142,6 +139,9 @@ const Sites = (() => {
       });
       list.querySelectorAll('.sites-open-dir').forEach(el => {
         el.addEventListener('click', () => FileManager.openWindow(el.dataset.path));
+      });
+      list.querySelectorAll('.sites-edit').forEach(btn => {
+        btn.addEventListener('click', () => CodeEditor.openWindow(btn.dataset.id, btn.dataset.dir));
       });
       list.querySelectorAll('.sites-build').forEach(btn => {
         btn.addEventListener('click', async () => {

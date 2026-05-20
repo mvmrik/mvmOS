@@ -214,6 +214,7 @@ window._i18n = {
   'sites_project_id':             'ID / Адрес',
   'sites_domain':                 'Домейн',
   'sites_create':                 'Създай',
+  'sites_edit':                   'Редактирай',
   'sites_build':                  'Build',
   'sites_stop':                   'Стоп',
   'sites_watching':               'Следи',

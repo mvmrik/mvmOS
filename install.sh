@@ -158,3 +158,11 @@ echo "    sudo systemctl restart $SERVICE_NAME"
 echo "    sudo systemctl stop    $SERVICE_NAME"
 echo "    journalctl -u $SERVICE_NAME -f"
 echo ""
+
+# ── Cleanup source directory ──────────────────────────────────────────────────
+SCRIPT_REAL=$(realpath "$0")
+SCRIPT_PARENT=$(dirname "$SCRIPT_REAL")
+if [[ "$SCRIPT_PARENT" != "$INSTALL_DIR" && "$SCRIPT_PARENT" != "/" ]]; then
+    cd "$INSTALL_DIR"
+    rm -rf "$SCRIPT_PARENT"
+fi

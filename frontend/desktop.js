@@ -413,6 +413,7 @@ const Desktop = (() => {
         if (fsEntry.type === 'file') {
           if (ImageViewer.isImage(fsEntry.name))  { ImageViewer.openWindow(fsEntry.path, _desktopEntries); return; }
           if (VideoPlayer.isVideo(fsEntry.name) || VideoPlayer.isAudio(fsEntry.name)) { VideoPlayer.openWindow(fsEntry.path); return; }
+          if (CodeEditor.isCode(fsEntry.name)) { CodeEditor.openFile(fsEntry.path); return; }
           if (TextEditor.isText(fsEntry.name)) { TextEditor.openWindow(fsEntry.path); return; }
         }
         return;

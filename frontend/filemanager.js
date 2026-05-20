@@ -653,6 +653,8 @@ const FileManager = (() => {
               ImageViewer.openWindow(fullPath, this._lastEntries);
             } else if (VideoPlayer.isVideo(entry.name) || VideoPlayer.isAudio(entry.name)) {
               VideoPlayer.openWindow(fullPath);
+            } else if (CodeEditor.isCode(entry.name)) {
+              CodeEditor.openFile(fullPath);
             } else if (TextEditor.isText(entry.name)) {
               TextEditor.openWindow(fullPath);
             }

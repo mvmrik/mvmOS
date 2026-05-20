@@ -214,6 +214,7 @@ window._i18n = {
   'sites_project_id':             'ID / Path',
   'sites_domain':                 'Domain',
   'sites_create':                 'Create',
+  'sites_edit':                   'Edit',
   'sites_build':                  'Build',
   'sites_stop':                   'Stop',
   'sites_watching':               'Watching',

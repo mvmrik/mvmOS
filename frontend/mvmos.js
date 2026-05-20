@@ -641,6 +641,7 @@ var mvmOS = (() => {
 
   // ── Plugin loader (from /apps/{id}/main.js file) ──────────────────────────
   async function _loadPlugin(id) {
+    if (_projectNoApp.has(id)) return;
     try {
       const base = `/apps/${id}`;
       let entry = 'main.js';
@@ -651,6 +652,7 @@ var mvmOS = (() => {
       } catch (_) {}
       const res = await fetch(`${base}/${entry}?_=${Date.now()}`);
       if (!res.ok) {
+        if (_projectIds.has(id)) return;
         _pushNotif(
           `App needs reinstall: ${id}`,
           'The app files are missing. Please reinstall it from the App Store.',
@@ -672,7 +674,18 @@ var mvmOS = (() => {
     } catch (e) { console.error('mvmOS: failed to load plugin', id, e); }
   }
 
+  let _projectIds = new Set();
+  let _projectNoApp = new Set();
+
   async function _loadAllPlugins() {
+    try {
+      const pres = await fetch('/api/projects');
+      if (pres.ok) {
+        const ps = await pres.json();
+        _projectIds = new Set(ps.map(p => p.id));
+        _projectNoApp = new Set(ps.filter(p => !p.has_app).map(p => p.id));
+      }
+    } catch (_) {}
     try {
       const res = await fetch('/api/plugins');
       const plugins = await res.json();
