@@ -24,6 +24,24 @@ echo ""
 read -rp "  Port [2026]: " PORT
 PORT="${PORT:-2026}"
 
+# ── Fresh install check ───────────────────────────────────────────────────────
+RESET_DATA=false
+if [[ -f "$INSTALL_DIR/data.db" ]]; then
+    echo ""
+    echo "  ⚠️  Existing mvmOS installation detected."
+    echo "  Do you want to reset all data (installed apps, desktop, settings)?"
+    echo "  User accounts are stored in the OS and will NOT be affected."
+    echo ""
+    read -rp "  Reset data? [y/N]: " RESET_CONFIRM
+    if [[ "${RESET_CONFIRM,,}" == "y" ]]; then
+        RESET_DATA=true
+        echo "  → Data will be reset after install."
+    else
+        echo "  → Keeping existing data."
+    fi
+    echo ""
+fi
+
 # ── Python check ──────────────────────────────────────────────────────────────
 if ! command -v python3 >/dev/null 2>&1; then
     echo "  ERROR: python3 not found. Please install Python 3.10+."
@@ -58,6 +76,15 @@ sudo cp -r "$EXTRACTED"/. "$INSTALL_DIR/"
 
 SCRIPT_DIR="$INSTALL_DIR"
 VENV_DIR="$SCRIPT_DIR/venv"
+
+# ── Reset data if requested ───────────────────────────────────────────────────
+if [[ "$RESET_DATA" == "true" ]]; then
+    sudo rm -f "$SCRIPT_DIR/data.db"
+    sudo rm -rf "$SCRIPT_DIR/apps"
+    sudo rm -rf "$SCRIPT_DIR/widgets"
+    sudo rm -rf "$SCRIPT_DIR/themes/installed"
+    echo "  ✓ Data reset complete."
+fi
 
 # ── Ensure python3-venv is available ──────────────────────────────────────────
 echo "  Installing system dependencies..."
