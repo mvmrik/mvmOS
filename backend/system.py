@@ -1,7 +1,8 @@
 import asyncio
 import os
 import subprocess
-from fastapi import APIRouter, Depends, BackgroundTasks
+from fastapi import APIRouter, Depends, BackgroundTasks, HTTPException
+from pydantic import BaseModel
 from fastapi.responses import JSONResponse, StreamingResponse
 from .auth import get_current_session
 
@@ -176,10 +177,8 @@ class UninstallBody(BaseModel):
 @router.post("/uninstall")
 async def uninstall(body: UninstallBody, bg: BackgroundTasks, session=Depends(get_current_session)):
     from .auth import verify_linux_password
-    from pydantic import BaseModel as _BM
     username = session["effective_user"]
     if not verify_linux_password(username, body.password):
-        from fastapi import HTTPException
         raise HTTPException(403, "Wrong password")
 
     def _do_uninstall():
