@@ -583,10 +583,11 @@ const FileManager = (() => {
         const size = entry.type === 'dir' ? '—' : this.formatSize(entry.size);
         const date = entry.modified ? entry.modified.slice(0, 16).replace('T', ' ') : '';
 
+        const isRoot = window._effectiveUser === 'root';
         const permsHtml = prefs.showPerms
-          ? `<span class="fm-perms fm-editable" title="${t('fm_perms_title')}">${entry.permissions || ''}</span>` : '';
+          ? `<span class="fm-perms${isRoot ? ' fm-editable' : ''}" title="${isRoot ? t('fm_perms_title') : ''}">${entry.permissions || ''}</span>` : '';
         const ownerHtml = prefs.showOwner
-          ? `<span class="fm-owner fm-editable" title="Click to change">${entry.owner || ''}${entry.group ? ':'+entry.group : ''}</span>` : '';
+          ? `<span class="fm-owner${isRoot ? ' fm-editable' : ''}" title="${isRoot ? 'Click to change' : ''}">${entry.owner || ''}${entry.group ? ':'+entry.group : ''}</span>` : '';
 
         row.innerHTML = `
           <span class="fm-icon">${icon}</span>
@@ -661,7 +662,7 @@ const FileManager = (() => {
           });
         }
 
-        if (prefs.showPerms) {
+        if (prefs.showPerms && isRoot) {
           row.querySelector('.fm-perms').addEventListener('click', e => {
             e.stopPropagation();
             this.inlineEdit(e.target, entry.permissions, async val => {
@@ -676,7 +677,7 @@ const FileManager = (() => {
           });
         }
 
-        if (prefs.showOwner) {
+        if (prefs.showOwner && isRoot) {
           row.querySelector('.fm-owner').addEventListener('click', e => {
             e.stopPropagation();
             const current = entry.owner + (entry.group ? ':' + entry.group : '');
@@ -744,8 +745,6 @@ const FileManager = (() => {
         items.push({ label: `🗑️ Delete${names.length > 1 ? ' ('+names.length+')' : ''}`, action: () => this.deleteEntries(names), danger: true });
         items.push({ label: `⬇️ Download${names.length > 1 ? ' ('+names.length+')' : ''}`, action: () => this.download(names) });
         if (names.length === 1) items.push({ label: 'ℹ️ Info', action: () => this.showInfo(this._lastEntries.find(e => e.name === name)) });
-        if (names.length === 1 && this._lastEntries.find(e => e.name === name)?.type === 'dir')
-          items.push({ label: t('fm_open_as_root'), action: () => this.navigateAsRoot(this.joinPath(this.currentPath, name)) });
       } else {
         if (window._fmClipboard) {
           items.push({ label: '📋 Paste', action: () => this.paste() });

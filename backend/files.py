@@ -17,7 +17,7 @@ BASE_DIR = "/"
 
 def run_as(user: str, cmd: list, input_data: str = None):
     """Run a command as the given user."""
-    if user and user != "root":
+    if user:
         prefix = [] if os.geteuid() == 0 else ["sudo"]
         cmd = prefix + ["runuser", "-u", user, "--"] + cmd
     r = subprocess.run(cmd, capture_output=True, text=True, input=input_data)
@@ -258,6 +258,8 @@ class ChmodRequest(BaseModel):
 @router.post("/chmod")
 async def chmod(body: ChmodRequest, session=Depends(get_current_session)):
     eu = session["effective_user"]
+    if eu != "root":
+        raise HTTPException(status_code=403, detail="Permission denied")
     real = safe_path(body.path)
     r = run_as(eu, ["chmod", body.mode, real])
     if r.returncode != 0:
