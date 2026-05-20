@@ -5,6 +5,12 @@ from fastapi.responses import RedirectResponse, HTMLResponse, FileResponse, Resp
 from fastapi.staticfiles import StaticFiles
 from starlette.responses import PlainTextResponse
 
+_MVMOS_HOST = os.environ.get("MVMOS_HOST", "mvmos.mvmrik.com")
+_IP_RE = re.compile(r"^\d{1,3}(\.\d{1,3}){3}$")
+
+def _is_local_host(host: str) -> bool:
+    return host in ("localhost", "127.0.0.1", "testserver") or bool(_IP_RE.match(host)) or (bool(_MVMOS_HOST) and host == _MVMOS_HOST)
+
 
 class _MvmStaticFiles(StaticFiles):
     """Frontend static files — only served for the mvmOS host, not external domains."""
@@ -15,8 +21,7 @@ class _MvmStaticFiles(StaticFiles):
                 if name == b"host":
                     host = value.decode().split(":")[0].lower()
                     break
-            mvmos_host = os.environ.get("MVMOS_HOST", "mvmos.mvmrik.com")
-            if host not in (mvmos_host, "localhost", "127.0.0.1", ""):
+            if host and not _is_local_host(host):
                 await PlainTextResponse("Not Found", status_code=404)(scope, receive, send)
                 return
         await super().__call__(scope, receive, send)
@@ -66,14 +71,13 @@ projects.init(app)
 FRONTEND_DIR = os.path.join(os.path.dirname(__file__), "..", "frontend")
 
 
-MVMOS_HOST = os.environ.get("MVMOS_HOST", "mvmos.mvmrik.com")
 
 
 @app.middleware("http")
 async def auth_middleware(request: Request, call_next):
     # External domain requests skip auth entirely — handled by domain_middleware
     host = request.headers.get("host", "").split(":")[0].lower()
-    if host not in (MVMOS_HOST, "localhost", "127.0.0.1", "testserver"):
+    if not _is_local_host(host):
         return await call_next(request)
 
     public = {"/login", "/favicon.ico", "/api/auth/login-users"}
@@ -101,7 +105,7 @@ async def auth_middleware(request: Request, call_next):
 @app.middleware("http")
 async def domain_middleware(request: Request, call_next):
     host = request.headers.get("host", "").split(":")[0].lower()
-    if host in (MVMOS_HOST, "localhost", "127.0.0.1", "testserver"):
+    if _is_local_host(host):
         # Check subpath-mapped sites for mvmOS host
         req_path = request.url.path
         if not req_path.endswith((".js", ".css", ".ico", ".png", ".svg", ".woff", ".woff2", ".json", ".html", ".txt", ".map")):
@@ -153,8 +157,7 @@ def _versioned_html():
 @app.get("/")
 async def serve_index(request: Request):
     host = request.headers.get("host", "").split(":")[0].lower()
-    mvmos_host = os.environ.get("MVMOS_HOST", "mvmos.mvmrik.com")
-    if host not in (mvmos_host, "localhost", "127.0.0.1"):
+    if not _is_local_host(host):
         return Response(status_code=404)
     return HTMLResponse(_versioned_html())
 
