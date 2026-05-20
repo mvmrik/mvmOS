@@ -84,7 +84,8 @@ sudo "$VENV_DIR/bin/pip" install --quiet \
     "uvicorn[standard]>=0.29.0" \
     "ptyprocess>=0.7.0" \
     "python-multipart>=0.0.9" \
-    "httpx>=0.27.0"
+    "httpx>=0.27.0" \
+    "watchdog>=4.0.0"
 
 # ── config.ini ────────────────────────────────────────────────────────────────
 sudo tee "$SCRIPT_DIR/config.ini" > /dev/null <<EOF
@@ -95,7 +96,9 @@ EOF
 # ── mvmos system user & group ─────────────────────────────────────────────────
 echo "  [3/4] Setting up mvmos user..."
 sudo groupadd -f mvmos
-sudo useradd -r -s /sbin/nologin -g mvmos -M mvmos 2>/dev/null || true
+sudo useradd -r -s /bin/bash -g mvmos -m mvmos 2>/dev/null || true
+sudo mkdir -p /home/mvmos/mvmos_projects
+sudo chown -R mvmos:mvmos /home/mvmos
 # Add installing user to mvmos group
 sudo usermod -aG mvmos "$(whoami)"
 # Set ownership of install dir to mvmos
