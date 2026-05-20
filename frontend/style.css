@@ -863,8 +863,9 @@ html, body {
   transition: background .15s;
 }
 .s-btn-sm:hover { background: var(--surface2); }
-.s-btn-danger { color: #e05555; border-color: #e05555; }
-.s-btn-danger:hover { background: rgba(224,85,85,.12); }
+.s-btn-danger { color: #fff; background: #e05555; border-color: #e05555; }
+.s-btn-danger:hover { background: #c73f3f; border-color: #c73f3f; }
+.s-btn-danger:disabled { background: #a04040; border-color: #a04040; color: rgba(255,255,255,.5); }
 
 /* ── Settings panel ── */
 .settings-wrap {
