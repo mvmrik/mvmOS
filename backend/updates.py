@@ -109,6 +109,7 @@ async def get_updates(session=Depends(get_current_session)):
                     "current_version": inst["version"],
                     "new_version": app.get("version", ""),
                     "description": app.get("description", ""),
+                    "zip_url": app.get("zip_url", ""),
                     "base_url": app.get("base_url", ""),
                     "js_url": app.get("js_url", ""),
                     "category": app.get("category", ""),

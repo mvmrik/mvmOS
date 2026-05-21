@@ -1979,8 +1979,8 @@ const UpdateManager = (() => {
   async function doMvmOSUpdate(u) {
     if (u.type === 'app') {
       const payload = { id: u.id, name: u.name, icon: u.icon, category: u.category,
-        version: u.new_version, description: u.description, base_url: u.base_url,
-        js_url: u.js_url, store_id: u.store_id };
+        version: u.new_version, description: u.description, zip_url: u.zip_url || '',
+        base_url: u.base_url, js_url: u.js_url, store_id: u.store_id };
       const res = await fetch('/api/plugins/install', { method: 'POST', headers: {'Content-Type':'application/json'},
         body: JSON.stringify(payload) });
       const result = await res.json();
