@@ -900,7 +900,7 @@ const Desktop = (() => {
     ov.innerHTML = `<img src="/logo.png" style="width:min(280px,55vw)"><div style="color:#aaa;font-size:.95rem;font-family:inherit">${_msg}</div>`;
     document.body.appendChild(ov);
     if (action === 'restart') {
-      setTimeout(() => location.reload(), 3000);
+      setTimeout(() => location.reload(), 5000);
     }
   }
   window._mvmosShowRestartOverlay = () => _showPowerOverlay('restart');
