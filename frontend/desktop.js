@@ -901,6 +901,8 @@ const Desktop = (() => {
     document.body.appendChild(ov);
     if (action === 'restart') {
       let _wasDown = false;
+      // force _wasDown after 2s — by then the restart command has been sent
+      setTimeout(() => { _wasDown = true; }, 2000);
       const poll = setInterval(async () => {
         try {
           const r = await fetch('/api/auth/whoami', { cache: 'no-store' });

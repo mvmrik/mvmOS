@@ -814,18 +814,20 @@ const Settings = (() => {
     const msg = ov.querySelector('#ov-msg');
     const sub = ov.querySelector('#ov-sub');
     let dots = 0;
+    let _wasDown = false;
+    setTimeout(() => { _wasDown = true; }, 2000);
     const tick = setInterval(() => { dots = (dots + 1) % 4; sub.textContent = '.'.repeat(dots + 1); }, 500);
     const poll = setInterval(async () => {
       try {
-        const r = await fetch('/api/auth/me', { cache: 'no-store' });
-        if (r.ok || r.status === 401) {
-          clearInterval(poll);
-          clearInterval(tick);
+        const r = await fetch('/api/auth/whoami', { cache: 'no-store' });
+        if (r.status === 502) { _wasDown = true; return; }
+        if (_wasDown) {
+          clearInterval(poll); clearInterval(tick);
           msg.textContent = t('about_update_applied');
           sub.textContent = '';
           setTimeout(() => location.reload(), 800);
         }
-      } catch {}
+      } catch { _wasDown = true; }
     }, 1500);
   }
 
