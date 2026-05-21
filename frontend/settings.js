@@ -769,7 +769,7 @@ const Settings = (() => {
             outputEl.textContent += '\n' + t('about_restarting');
             statusEl.style.color = '#50fa7b';
             statusEl.textContent = t('about_update_applied');
-            setTimeout(() => location.reload(), 3000);
+            _showRestartingOverlay();
           } else if (text.startsWith('__EXIT_')) {
             statusEl.style.color = '#f38ba8';
             statusEl.textContent = t('about_update_failed');
@@ -800,6 +800,33 @@ const Settings = (() => {
         });
       });
     });
+  }
+
+  function _showRestartingOverlay() {
+    const ov = document.createElement('div');
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:99999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;color:#fff;font-family:inherit';
+    ov.innerHTML = `
+      <div style="font-size:2rem">⟳</div>
+      <div style="font-size:1.1rem;font-weight:600" id="ov-msg">${t('about_restarting')}</div>
+      <div style="font-size:.85rem;color:#aaa" id="ov-sub">...</div>
+    `;
+    document.body.appendChild(ov);
+    const msg = ov.querySelector('#ov-msg');
+    const sub = ov.querySelector('#ov-sub');
+    let dots = 0;
+    const tick = setInterval(() => { dots = (dots + 1) % 4; sub.textContent = '.'.repeat(dots + 1); }, 500);
+    const poll = setInterval(async () => {
+      try {
+        const r = await fetch('/api/auth/me', { cache: 'no-store' });
+        if (r.ok || r.status === 401) {
+          clearInterval(poll);
+          clearInterval(tick);
+          msg.textContent = t('about_update_applied');
+          sub.textContent = '';
+          setTimeout(() => location.reload(), 800);
+        }
+      } catch {}
+    }, 1500);
   }
 
   async function renderThemePicker(body) {
