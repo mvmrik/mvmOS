@@ -509,3 +509,434 @@ async def service_action(body: ServiceRequest, session=Depends(get_current_sessi
 
     status = _service_status(body.name)
     return JSONResponse({"ok": True, "status": status})
+
+
+# ── PHP ini config ─────────────────────────────────────────────────────────────
+
+PHP_INI_KEYS = [
+    "memory_limit", "max_execution_time", "max_input_time", "max_input_vars",
+    "upload_max_filesize", "post_max_size", "file_uploads",
+    "display_errors", "error_reporting",
+    "default_charset", "date.timezone",
+    "session.gc_maxlifetime", "opcache.enable",
+]
+
+def _find_php_ini() -> str | None:
+    """Find the active FPM php.ini path."""
+    for pattern in ["/etc/php/*/fpm/php.ini"]:
+        import glob
+        matches = sorted(glob.glob(pattern), reverse=True)
+        if matches:
+            return matches[0]
+    return None
+
+def _read_php_ini(path: str) -> dict:
+    values = {}
+    with open(path, "r") as f:
+        for line in f:
+            stripped = line.strip()
+            if stripped.startswith(";") or "=" not in stripped:
+                continue
+            key, _, val = stripped.partition("=")
+            key = key.strip()
+            if key in PHP_INI_KEYS:
+                values[key] = val.strip()
+    return values
+
+def _write_php_ini_key(path: str, key: str, value: str, sudo_password: str = "") -> bool:
+    import re, tempfile, shutil
+    with open(path, "r") as f:
+        content = f.read()
+    # replace existing key (commented or not)
+    pattern = re.compile(r"^[;\s]*" + re.escape(key) + r"\s*=.*$", re.MULTILINE)
+    replacement = f"{key} = {value}"
+    if pattern.search(content):
+        new_content = pattern.sub(replacement, content, count=1)
+    else:
+        new_content = content + f"\n{replacement}\n"
+
+    with tempfile.NamedTemporaryFile("w", suffix=".ini", delete=False) as tmp:
+        tmp.write(new_content)
+        tmp_path = tmp.name
+
+    if sudo_password:
+        proc = subprocess.run(
+            ["sudo", "-S", "cp", tmp_path, path],
+            input=sudo_password + "\n", capture_output=True, text=True
+        )
+    else:
+        try:
+            shutil.copy(tmp_path, path)
+            proc = type("P", (), {"returncode": 0})()
+        except PermissionError:
+            proc = type("P", (), {"returncode": 1, "stderr": "Permission denied"})()
+    os.unlink(tmp_path)
+    return proc.returncode == 0
+
+
+@router.get("/php-ini")
+async def get_php_ini(session=Depends(get_current_session)):
+    path = _find_php_ini()
+    if not path:
+        raise HTTPException(status_code=404, detail="php.ini not found")
+    try:
+        values = _read_php_ini(path)
+        return JSONResponse({"path": path, "values": values})
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class PhpIniSaveRequest(BaseModel):
+    values: dict
+    sudo_password: str = ""
+
+@router.post("/php-ini")
+async def save_php_ini(body: PhpIniSaveRequest, session=Depends(get_current_session)):
+    path = _find_php_ini()
+    if not path:
+        raise HTTPException(status_code=404, detail="php.ini not found")
+    for key, value in body.values.items():
+        if key not in PHP_INI_KEYS:
+            continue
+        ok = _write_php_ini_key(path, key, str(value), body.sudo_password)
+        if not ok:
+            return JSONResponse({"error": "permission_denied"}, status_code=403)
+    return JSONResponse({"ok": True, "path": path})
+
+
+# ── MySQL config ───────────────────────────────────────────────────────────────
+
+MYSQL_CNF_KEYS = [
+    "max_connections", "bind-address", "max_allowed_packet",
+    "innodb_buffer_pool_size", "key_buffer_size", "tmp_table_size",
+    "innodb_flush_log_at_trx_commit", "slow_query_log", "long_query_time",
+    "character-set-server", "collation-server",
+]
+
+def _find_mysql_cnf() -> str | None:
+    for path in ["/etc/mysql/mysql.conf.d/mysqld.cnf", "/etc/mysql/my.cnf"]:
+        if os.path.exists(path):
+            return path
+    return None
+
+def _read_mysql_cnf(path: str) -> dict:
+    values = {}
+    in_mysqld = False
+    with open(path, "r") as f:
+        for line in f:
+            stripped = line.strip()
+            if stripped.startswith("["):
+                in_mysqld = stripped == "[mysqld]"
+                continue
+            if not in_mysqld:
+                continue
+            if stripped.startswith("#") or "=" not in stripped and "\t" not in stripped:
+                continue
+            # support both = and \t as separator
+            if "=" in stripped:
+                key, _, val = stripped.partition("=")
+            else:
+                parts = stripped.split()
+                key, val = parts[0], parts[1] if len(parts) > 1 else ""
+            key = key.strip()
+            if key in MYSQL_CNF_KEYS:
+                values[key] = val.strip()
+    return values
+
+def _write_mysql_cnf_key(path: str, key: str, value: str, sudo_password: str = "") -> bool:
+    import re, tempfile
+    with open(path, "r") as f:
+        content = f.read()
+    pattern = re.compile(r"^[#\s]*" + re.escape(key) + r"[\s\t]*[=\t].*$", re.MULTILINE)
+    replacement = f"{key}\t\t= {value}"
+    if pattern.search(content):
+        new_content = pattern.sub(replacement, content, count=1)
+    else:
+        # add under [mysqld] section
+        new_content = re.sub(r"(\[mysqld\])", r"\1\n" + replacement, content, count=1)
+
+    with tempfile.NamedTemporaryFile("w", suffix=".cnf", delete=False) as tmp:
+        tmp.write(new_content)
+        tmp_path = tmp.name
+
+    if sudo_password:
+        proc = subprocess.run(
+            ["sudo", "-S", "cp", tmp_path, path],
+            input=sudo_password + "\n", capture_output=True, text=True
+        )
+    else:
+        try:
+            import shutil
+            shutil.copy(tmp_path, path)
+            proc = type("P", (), {"returncode": 0})()
+        except PermissionError:
+            proc = type("P", (), {"returncode": 1})()
+    os.unlink(tmp_path)
+    return proc.returncode == 0
+
+
+@router.get("/mysql-cnf")
+async def get_mysql_cnf(session=Depends(get_current_session)):
+    path = _find_mysql_cnf()
+    if not path:
+        raise HTTPException(status_code=404, detail="MySQL config not found")
+    try:
+        values = _read_mysql_cnf(path)
+        return JSONResponse({"path": path, "values": values})
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class MysqlCnfSaveRequest(BaseModel):
+    values: dict
+    sudo_password: str = ""
+
+@router.post("/mysql-cnf")
+async def save_mysql_cnf(body: MysqlCnfSaveRequest, session=Depends(get_current_session)):
+    path = _find_mysql_cnf()
+    if not path:
+        raise HTTPException(status_code=404, detail="MySQL config not found")
+    for key, value in body.values.items():
+        if key not in MYSQL_CNF_KEYS:
+            continue
+        ok = _write_mysql_cnf_key(path, key, str(value), body.sudo_password)
+        if not ok:
+            return JSONResponse({"error": "permission_denied"}, status_code=403)
+    return JSONResponse({"ok": True, "path": path})
+
+
+# ── Nginx config ───────────────────────────────────────────────────────────────
+
+NGINX_KEYS = [
+    "worker_processes", "worker_connections", "keepalive_timeout",
+    "client_max_body_size", "gzip", "gzip_comp_level",
+    "sendfile", "tcp_nopush", "access_log", "error_log",
+]
+
+NGINX_CONF_PATH = "/etc/nginx/nginx.conf"
+
+def _read_nginx_conf(path: str) -> dict:
+    import re
+    values = {}
+    with open(path, "r") as f:
+        content = f.read()
+    for key in NGINX_KEYS:
+        m = re.search(r'^\s*' + re.escape(key) + r'\s+([^;]+);', content, re.MULTILINE)
+        if m:
+            values[key] = m.group(1).strip()
+    return values
+
+def _write_nginx_conf_key(path: str, key: str, value: str, sudo_password: str = "") -> bool:
+    import re, tempfile, shutil
+    with open(path, "r") as f:
+        content = f.read()
+    pattern = re.compile(r'^(\s*)' + re.escape(key) + r'\s+[^;]+;', re.MULTILINE)
+    replacement = lambda m: f"{m.group(1)}{key} {value};"
+    if pattern.search(content):
+        new_content = pattern.sub(replacement, content, count=1)
+    else:
+        new_content = content
+
+    with tempfile.NamedTemporaryFile("w", suffix=".conf", delete=False) as tmp:
+        tmp.write(new_content)
+        tmp_path = tmp.name
+
+    if sudo_password:
+        proc = subprocess.run(
+            ["sudo", "-S", "cp", tmp_path, path],
+            input=sudo_password + "\n", capture_output=True, text=True
+        )
+    else:
+        try:
+            shutil.copy(tmp_path, path)
+            proc = type("P", (), {"returncode": 0})()
+        except PermissionError:
+            proc = type("P", (), {"returncode": 1})()
+    os.unlink(tmp_path)
+    return proc.returncode == 0
+
+
+@router.get("/nginx-conf")
+async def get_nginx_conf(session=Depends(get_current_session)):
+    if not os.path.exists(NGINX_CONF_PATH):
+        raise HTTPException(status_code=404, detail="nginx.conf not found")
+    try:
+        values = _read_nginx_conf(NGINX_CONF_PATH)
+        return JSONResponse({"path": NGINX_CONF_PATH, "values": values})
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class NginxConfSaveRequest(BaseModel):
+    values: dict
+    sudo_password: str = ""
+
+@router.post("/nginx-conf")
+async def save_nginx_conf(body: NginxConfSaveRequest, session=Depends(get_current_session)):
+    if not os.path.exists(NGINX_CONF_PATH):
+        raise HTTPException(status_code=404, detail="nginx.conf not found")
+    for key, value in body.values.items():
+        if key not in NGINX_KEYS:
+            continue
+        ok = _write_nginx_conf_key(NGINX_CONF_PATH, key, str(value), body.sudo_password)
+        if not ok:
+            return JSONResponse({"error": "permission_denied"}, status_code=403)
+    return JSONResponse({"ok": True, "path": NGINX_CONF_PATH})
+
+
+@router.post("/nginx-test")
+async def nginx_test(session=Depends(get_current_session)):
+    proc = subprocess.run(["sudo", "nginx", "-t"], capture_output=True, text=True)
+    ok = proc.returncode == 0
+    output = (proc.stderr or proc.stdout).strip()
+    return JSONResponse({"ok": ok, "output": output})
+
+
+# ── SSH ──────────────────────────────────────────────────────────────────────
+
+SSH_KEYS = [
+    "Port", "PermitRootLogin", "PasswordAuthentication",
+    "PubkeyAuthentication", "MaxAuthTries", "LoginGraceTime",
+    "AllowUsers", "AllowGroups", "X11Forwarding", "UsePAM",
+]
+
+SSH_CONF_PATH = "/etc/ssh/sshd_config"
+
+def _read_sshd_conf(path: str) -> dict:
+    import re
+    values = {}
+    with open(path, "r") as f:
+        content = f.read()
+    for key in SSH_KEYS:
+        m = re.search(r'^\s*#?\s*' + re.escape(key) + r'\s+(.+)', content, re.MULTILINE | re.IGNORECASE)
+        if m:
+            values[key] = m.group(1).strip()
+    return values
+
+def _write_sshd_conf_key(path: str, key: str, value: str) -> bool:
+    import re, tempfile, shutil
+    with open(path, "r") as f:
+        lines = f.readlines()
+
+    pattern = re.compile(r'^\s*#?\s*' + re.escape(key) + r'\s+', re.IGNORECASE)
+    replaced = False
+    new_lines = []
+    for line in lines:
+        if pattern.match(line) and not replaced:
+            new_lines.append(f"{key} {value}\n")
+            replaced = True
+        else:
+            new_lines.append(line)
+    if not replaced:
+        new_lines.append(f"{key} {value}\n")
+
+    with tempfile.NamedTemporaryFile("w", suffix=".conf", delete=False) as tmp:
+        tmp.writelines(new_lines)
+        tmp_path = tmp.name
+
+    try:
+        proc = subprocess.run(["sudo", "cp", tmp_path, path], capture_output=True, text=True)
+    except Exception:
+        proc = type("P", (), {"returncode": 1})()
+    os.unlink(tmp_path)
+    return proc.returncode == 0
+
+
+@router.get("/sshd-conf")
+async def get_sshd_conf(session=Depends(get_current_session)):
+    if not os.path.exists(SSH_CONF_PATH):
+        raise HTTPException(status_code=404, detail="sshd_config not found")
+    try:
+        values = _read_sshd_conf(SSH_CONF_PATH)
+        return JSONResponse({"path": SSH_CONF_PATH, "values": values})
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class SshdConfSaveRequest(BaseModel):
+    values: dict
+
+@router.post("/sshd-conf")
+async def save_sshd_conf(body: SshdConfSaveRequest, session=Depends(get_current_session)):
+    if not os.path.exists(SSH_CONF_PATH):
+        raise HTTPException(status_code=404, detail="sshd_config not found")
+    for key, value in body.values.items():
+        if key not in SSH_KEYS:
+            continue
+        ok = _write_sshd_conf_key(SSH_CONF_PATH, key, str(value))
+        if not ok:
+            return JSONResponse({"error": "permission_denied"}, status_code=403)
+    return JSONResponse({"ok": True, "path": SSH_CONF_PATH})
+
+
+@router.post("/sshd-test")
+async def sshd_test(session=Depends(get_current_session)):
+    proc = subprocess.run(["sudo", "sshd", "-t"], capture_output=True, text=True)
+    ok = proc.returncode == 0
+    output = (proc.stderr or proc.stdout).strip()
+    return JSONResponse({"ok": ok, "output": output})
+
+
+# ── UFW ──────────────────────────────────────────────────────────────────────
+
+@router.get("/ufw-status")
+async def ufw_status(session=Depends(get_current_session)):
+    import re
+    proc = subprocess.run(["sudo", "ufw", "status", "numbered"], capture_output=True, text=True)
+    output = proc.stdout.strip()
+    enabled = "Status: active" in output
+    rules = []
+    if enabled:
+        for line in output.splitlines():
+            m = re.match(r'^\[\s*(\d+)\]\s+(.+?)\s{2,}(.+?)\s{2,}(.+)$', line)
+            if m:
+                rules.append({"num": int(m.group(1)), "to": m.group(2).strip(), "action": m.group(3).strip(), "from": m.group(4).strip()})
+    else:
+        # show pending rules even when inactive
+        added = subprocess.run(["sudo", "ufw", "show", "added"], capture_output=True, text=True)
+        for i, line in enumerate(added.stdout.splitlines(), 1):
+            m = re.match(r'^ufw\s+(\S+)\s+(.+)$', line.strip())
+            if m:
+                rules.append({"num": i, "to": m.group(2).strip(), "action": m.group(1).upper(), "from": "Anywhere"})
+    return JSONResponse({"enabled": enabled, "rules": rules})
+
+
+@router.post("/ufw-toggle")
+async def ufw_toggle(session=Depends(get_current_session)):
+    proc = subprocess.run(["sudo", "ufw", "status"], capture_output=True, text=True)
+    enabled = "Status: active" in proc.stdout
+    cmd = ["sudo", "ufw", "disable"] if enabled else ["sudo", "ufw", "--force", "enable"]
+    r = subprocess.run(cmd, capture_output=True, text=True)
+    if r.returncode != 0:
+        return JSONResponse({"error": r.stderr.strip()}, status_code=500)
+    return JSONResponse({"enabled": not enabled})
+
+
+class UfwRuleRequest(BaseModel):
+    rule: str  # e.g. "22/tcp", "80", "from 192.168.1.0/24 to any port 22"
+
+@router.post("/ufw-allow")
+async def ufw_allow(body: UfwRuleRequest, session=Depends(get_current_session)):
+    r = subprocess.run(["sudo", "ufw", "allow"] + body.rule.split(), capture_output=True, text=True)
+    if r.returncode != 0:
+        return JSONResponse({"error": r.stderr.strip() or r.stdout.strip()}, status_code=500)
+    return JSONResponse({"ok": True})
+
+
+class UfwDeleteRequest(BaseModel):
+    num: int = 0
+    rule: str = ""  # used when UFW is inactive
+
+@router.post("/ufw-delete")
+async def ufw_delete(body: UfwDeleteRequest, session=Depends(get_current_session)):
+    proc = subprocess.run(["sudo", "ufw", "status"], capture_output=True, text=True)
+    enabled = "Status: active" in proc.stdout
+    if enabled and body.num:
+        r = subprocess.run(["sudo", "ufw", "--force", "delete", str(body.num)], capture_output=True, text=True)
+    elif body.rule:
+        r = subprocess.run(["sudo", "ufw", "--force", "delete", "allow"] + body.rule.split(), capture_output=True, text=True)
+    else:
+        return JSONResponse({"error": "no rule specified"}, status_code=400)
+    if r.returncode != 0:
+        return JSONResponse({"error": r.stderr.strip() or r.stdout.strip()}, status_code=500)
+    return JSONResponse({"ok": True})

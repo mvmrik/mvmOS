@@ -97,6 +97,21 @@ mvmOS.notify('Update', 'v2.0 available', () => openUpdate(), 'Install');
 | `system.services()` | List systemd services |
 | `system.serviceAction(name, action, sudo?)` | start/stop/restart/enable/disable |
 
+### Direct system config endpoints (backend/system.py)
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET/POST /api/system/php-ini` | Read/write PHP FPM php.ini (whitelisted keys) |
+| `GET/POST /api/system/mysql-cnf` | Read/write MySQL my.cnf (whitelisted keys) |
+| `GET/POST /api/system/nginx-conf` | Read/write /etc/nginx/nginx.conf (whitelisted keys) |
+| `POST /api/system/nginx-test` | Validate nginx config via `nginx -t` |
+| `GET/POST /api/system/sshd-conf` | Read/write /etc/ssh/sshd_config (whitelisted keys) |
+| `POST /api/system/sshd-test` | Validate sshd config via `sshd -t` |
+| `GET /api/system/ufw-status` | UFW status and numbered rules list |
+| `POST /api/system/ufw-toggle` | Enable/disable UFW |
+| `POST /api/system/ufw-allow` | Add allow rule (`{ rule: "22/tcp" }`) |
+| `POST /api/system/ufw-delete` | Delete rule by number (`{ num: 1 }`) |
+
 ### mvmOS.fs
 
 | Method | Description |

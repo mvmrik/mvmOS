@@ -103,6 +103,92 @@ var CodeEditor = (() => {
       desc: 'mvmOS version, update channel',
       snippet: "const info = await fetch('/api/system/info').then(r => r.json());\nconsole.log(info.version);",
     },
+    {
+      group: 'System API',
+      name: 'GET /api/system/php-ini',
+      desc: 'Read PHP FPM php.ini settings',
+      snippet: "const res = await fetch('/api/system/php-ini').then(r => r.json());\nconsole.log(res.path);    // e.g. /etc/php/8.3/fpm/php.ini\nconsole.log(res.values);  // { memory_limit: '256M', ... }",
+    },
+    {
+      group: 'System API',
+      name: 'POST /api/system/php-ini',
+      desc: 'Save PHP FPM php.ini settings (requires root)',
+      snippet: "await fetch('/api/system/php-ini', {\n  method: 'POST',\n  headers: { 'Content-Type': 'application/json' },\n  body: JSON.stringify({\n    values: { memory_limit: '512M', upload_max_filesize: '128M' },\n    sudo_password: 'yourpassword'\n  })\n});",
+    },
+
+    {
+      group: 'System API',
+      name: 'GET /api/system/mysql-cnf',
+      desc: 'Read MySQL my.cnf settings',
+      snippet: "const res = await fetch('/api/system/mysql-cnf').then(r => r.json());\nconsole.log(res.path);    // e.g. /etc/mysql/my.cnf\nconsole.log(res.values);  // { max_connections: '151', ... }",
+    },
+    {
+      group: 'System API',
+      name: 'POST /api/system/mysql-cnf',
+      desc: 'Save MySQL my.cnf settings',
+      snippet: "await fetch('/api/system/mysql-cnf', {\n  method: 'POST',\n  headers: { 'Content-Type': 'application/json' },\n  body: JSON.stringify({ values: { max_connections: '200' } })\n});",
+    },
+    {
+      group: 'System API',
+      name: 'GET /api/system/nginx-conf',
+      desc: 'Read nginx.conf settings',
+      snippet: "const res = await fetch('/api/system/nginx-conf').then(r => r.json());\nconsole.log(res.path);    // /etc/nginx/nginx.conf\nconsole.log(res.values);  // { worker_processes: 'auto', ... }",
+    },
+    {
+      group: 'System API',
+      name: 'POST /api/system/nginx-conf',
+      desc: 'Save nginx.conf settings',
+      snippet: "await fetch('/api/system/nginx-conf', {\n  method: 'POST',\n  headers: { 'Content-Type': 'application/json' },\n  body: JSON.stringify({ values: { worker_processes: '4', gzip: 'on' } })\n});",
+    },
+    {
+      group: 'System API',
+      name: 'POST /api/system/nginx-test',
+      desc: 'Validate nginx config with nginx -t',
+      snippet: "const r = await fetch('/api/system/nginx-test', { method: 'POST' }).then(r => r.json());\nif (!r.ok) console.error(r.output); // nginx -t error output",
+    },
+    {
+      group: 'System API',
+      name: 'GET /api/system/sshd-conf',
+      desc: 'Read sshd_config settings',
+      snippet: "const res = await fetch('/api/system/sshd-conf').then(r => r.json());\nconsole.log(res.path);    // /etc/ssh/sshd_config\nconsole.log(res.values);  // { Port: '22', PermitRootLogin: 'no', ... }",
+    },
+    {
+      group: 'System API',
+      name: 'POST /api/system/sshd-conf',
+      desc: 'Save sshd_config settings',
+      snippet: "await fetch('/api/system/sshd-conf', {\n  method: 'POST',\n  headers: { 'Content-Type': 'application/json' },\n  body: JSON.stringify({ values: { PasswordAuthentication: 'no', MaxAuthTries: '3' } })\n});",
+    },
+    {
+      group: 'System API',
+      name: 'POST /api/system/sshd-test',
+      desc: 'Validate sshd config with sshd -t',
+      snippet: "const r = await fetch('/api/system/sshd-test', { method: 'POST' }).then(r => r.json());\nif (!r.ok) console.error(r.output); // sshd -t error output",
+    },
+
+    {
+      group: 'System API',
+      name: 'GET /api/system/ufw-status',
+      desc: 'Get UFW firewall status and rules',
+      snippet: "const r = await fetch('/api/system/ufw-status').then(r => r.json());\n// { enabled: true, rules: [{num, to, action, from}] }",
+    },
+    {
+      group: 'System API',
+      name: 'POST /api/system/ufw-toggle',
+      desc: 'Toggle UFW on/off',
+      snippet: "const r = await fetch('/api/system/ufw-toggle', { method: 'POST' }).then(r => r.json());\n// { enabled: true|false }",
+    },
+    {
+      group: 'System API',
+      name: 'POST /api/system/ufw-allow',
+      desc: 'Add UFW allow rule',
+      snippet: "await fetch('/api/system/ufw-allow', {\n  method: 'POST',\n  headers: { 'Content-Type': 'application/json' },\n  body: JSON.stringify({ rule: '22/tcp' })\n});",
+    },
+    {
+      group: 'System API',
+      name: 'POST /api/system/ufw-delete',
+      desc: 'Delete UFW rule by number',
+      snippet: "await fetch('/api/system/ufw-delete', {\n  method: 'POST',\n  headers: { 'Content-Type': 'application/json' },\n  body: JSON.stringify({ num: 1 })\n});",
+    },
 
     // ── Files API ────────────────────────────────────────────────────────────
     {
@@ -216,10 +302,14 @@ var CodeEditor = (() => {
     // derive projectDir as parent directory
     const dir = filepath.substring(0, filepath.lastIndexOf('/'));
     const projectId = dir.split('/').pop();
-    if (_win && _projectDir === dir) {
+    if (_win && document.body.contains(_win) && _projectDir === dir) {
       // editor already open for this dir — just switch file
       await _openFile(filepath, filename);
       return;
+    }
+    if (!_win || !document.body.contains(_win)) {
+      _win = null;
+      _editor = null;
     }
     await openWindow(projectId, dir);
     // wait for editor to mount then open the file
