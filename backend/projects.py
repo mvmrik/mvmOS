@@ -135,6 +135,22 @@ class NewProjectBody(BaseModel):
     id: str
     name: str
     domain: Optional[str] = None
+    use_domain: bool = False  # True = domain mode, False = path mode
+
+
+@router.get("/webserver/status")
+def webserver_status_early(session=Depends(get_current_session)):
+    import subprocess, re
+    r = subprocess.run(["systemctl", "is-active", "mvmos-public"], capture_output=True, text=True)
+    active = r.stdout.strip() == "active"
+    port = 80
+    svc_path = "/etc/systemd/system/mvmos-public.service"
+    if os.path.exists(svc_path):
+        content = open(svc_path).read()
+        m = re.search(r'--port (\d+)', content)
+        if m:
+            port = int(m.group(1))
+    return {"active": active, "port": port}
 
 
 @router.get("")
@@ -159,8 +175,8 @@ def list_projects(session=Depends(get_current_session)):
         result.append({
             "id": pid,
             "name": meta.get("name", pid),
-            "domain": meta.get("domain"),
-            "path": f"/{pid}",
+            "domain": next((r["domain"] for r in rows if r["domain"]), None),
+            "path": next((r["path"] for r in rows if r["path"]), f"/{pid}"),
             "watching": pid in _watchers,
             "published": len(rows) > 0,
             "built": built,
@@ -169,6 +185,40 @@ def list_projects(session=Depends(get_current_session)):
             "project_dir": pdir,
         })
     return result
+
+
+class WebServerBody(BaseModel):
+    port: int = 80
+
+@router.post("/webserver/start")
+def webserver_start_early(body: WebServerBody, session=Depends(get_current_session)):
+    import subprocess
+    r = subprocess.run(["ss", "-tlnp"], capture_output=True, text=True)
+    if f":{body.port} " in r.stdout or f":{body.port}\n" in r.stdout:
+        raise HTTPException(409, f"Port {body.port} is already in use")
+    svc_path = f"/etc/systemd/system/{SERVICE_NAME}.service"
+    content = SERVICE_TEMPLATE.format(
+        work_dir=os.path.abspath(WORK_DIR),
+        uvicorn=os.path.abspath(UVICORN_BIN),
+        port=body.port,
+    )
+    with open(svc_path, "w") as f:
+        f.write(content)
+    subprocess.run(["systemctl", "daemon-reload"], capture_output=True)
+    subprocess.run(["systemctl", "enable", SERVICE_NAME], capture_output=True)
+    r = subprocess.run(["systemctl", "start", SERVICE_NAME], capture_output=True, text=True)
+    if r.returncode != 0:
+        raise HTTPException(500, r.stderr.strip() or r.stdout.strip())
+    return {"ok": True, "port": body.port}
+
+@router.post("/webserver/stop")
+def webserver_stop_early(session=Depends(get_current_session)):
+    import subprocess
+    subprocess.run(["systemctl", "disable", SERVICE_NAME], capture_output=True)
+    r = subprocess.run(["systemctl", "stop", SERVICE_NAME], capture_output=True, text=True)
+    if r.returncode != 0:
+        raise HTTPException(500, r.stderr.strip())
+    return {"ok": True}
 
 
 @router.post("")
@@ -199,10 +249,11 @@ def create_project(body: NewProjectBody, session=Depends(get_current_session)):
 
     with get_conn() as conn:
         conn.execute("INSERT OR IGNORE INTO plugins (id, name, icon) VALUES (?, ?, '🌐')", (pid, body.name))
-        conn.execute("INSERT OR IGNORE INTO domains (app_id, path) VALUES (?, ?)", (pid, f"/{pid}"))
-        if body.domain:
+        if body.use_domain and body.domain:
             d = body.domain.strip().lower().removeprefix("https://").removeprefix("http://").rstrip("/")
             conn.execute("INSERT OR IGNORE INTO domains (app_id, domain) VALUES (?, ?)", (pid, d))
+        else:
+            conn.execute("INSERT OR IGNORE INTO domains (app_id, path) VALUES (?, ?)", (pid, f"/{pid}"))
 
     return {"ok": True, "id": pid, "project_dir": pdir}
 
@@ -244,6 +295,59 @@ def start_build(project_id: str, session=Depends(get_current_session)):
 def stop_build(project_id: str, session=Depends(get_current_session)):
     _stop_watcher(project_id)
     return {"ok": True, "watching": False}
+
+
+class SiteAddressBody(BaseModel):
+    use_domain: bool = False
+    domain: str | None = None
+    path: str | None = None
+
+@router.post("/{project_id}/address")
+def set_project_address(project_id: str, body: SiteAddressBody, session=Depends(get_current_session)):
+    with get_conn() as conn:
+        row = conn.execute("SELECT id FROM plugins WHERE id = ?", (project_id,)).fetchone()
+        if not row:
+            raise HTTPException(404, "Project not found")
+        conn.execute("DELETE FROM domains WHERE app_id = ?", (project_id,))
+        if body.use_domain and body.domain:
+            domain = body.domain.strip().lower().removeprefix("https://").removeprefix("http://").rstrip("/")
+            conflict = conn.execute("SELECT id FROM domains WHERE domain = ?", (domain,)).fetchone()
+            if conflict:
+                raise HTTPException(409, "Domain already in use")
+            conn.execute("INSERT INTO domains (app_id, domain, path) VALUES (?, ?, NULL)", (project_id, domain))
+        else:
+            path = ("/" + body.path.strip().strip("/")) if body.path else f"/{project_id}"
+            conflict = conn.execute("SELECT id FROM domains WHERE path = ? AND app_id != ?", (path, project_id)).fetchone()
+            if conflict:
+                raise HTTPException(409, "Path already in use")
+            conn.execute("INSERT INTO domains (app_id, path, domain) VALUES (?, ?, NULL)", (project_id, path))
+    return {"ok": True}
+
+
+SERVICE_NAME = "mvmos-public"
+SERVICE_TEMPLATE = """[Unit]
+Description=mvmOS Public Web Server
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory={work_dir}
+ExecStart={uvicorn} backend.main:app --host 0.0.0.0 --port {port} --timeout-graceful-shutdown 3
+Restart=always
+RestartSec=2
+Environment=PYTHONUNBUFFERED=1
+Environment=MVMOS_PUBLIC=1
+
+[Install]
+WantedBy=multi-user.target
+"""
+
+WORK_DIR = os.path.join(os.path.dirname(__file__), "..")
+UVICORN_BIN = os.path.join(WORK_DIR, "venv", "bin", "uvicorn")
+
+class WebServerBody(BaseModel):
+    port: int = 80
 
 
 @router.delete("/{project_id}")

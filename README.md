@@ -40,7 +40,7 @@ The installer will ask for a port (default `2026`), set up a Python virtualenv a
 ## Uninstall
 
 ```bash
-sudo systemctl stop mvmos && sudo systemctl disable mvmos && sudo rm -f /etc/systemd/system/mvmos.service && sudo systemctl daemon-reload && sudo rm -rf /opt/mvmos && sudo userdel mvmos && sudo rm -f /etc/sudoers.d/mvmos
+sudo systemctl disable --now mvmos mvmos-public ; sudo rm -f /etc/systemd/system/mvmos.service /etc/systemd/system/mvmos-public.service ; sudo systemctl daemon-reload ; sudo rm -f /etc/sudoers.d/mvmos ; sudo userdel mvmos ; sudo groupdel mvmos ; sudo rm -rf /opt/mvmos
 ```
 
 > **Note:** This removes everything including installed apps, desktop configuration and all user data. Your Linux system users are not affected.

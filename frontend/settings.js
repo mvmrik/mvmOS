@@ -788,7 +788,7 @@ const Settings = (() => {
     const uninstallBtn    = wrap.querySelector('#uninstall-btn');
     const uninstallStatus = wrap.querySelector('#uninstall-status');
 
-    const uninstallCmd = 'sudo systemctl disable --now mvmos ; sudo rm -f /etc/systemd/system/mvmos.service ; sudo systemctl daemon-reload ; sudo rm -f /etc/sudoers.d/mvmos ; sudo userdel mvmos ; sudo groupdel mvmos ; sudo rm -rf /opt/mvmos';
+    const uninstallCmd = 'sudo systemctl disable --now mvmos mvmos-public ; sudo rm -f /etc/systemd/system/mvmos.service /etc/systemd/system/mvmos-public.service ; sudo systemctl daemon-reload ; sudo rm -f /etc/sudoers.d/mvmos ; sudo userdel mvmos ; sudo groupdel mvmos ; sudo rm -rf /opt/mvmos';
     uninstallBtn.addEventListener('click', () => {
       uninstallStatus.style.display = '';
       uninstallStatus.innerHTML = `${t('uninstall_run_cmd')}<br>
