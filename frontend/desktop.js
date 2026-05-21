@@ -900,15 +900,7 @@ const Desktop = (() => {
     ov.innerHTML = `<img src="/logo.png" style="width:min(280px,55vw)"><div style="color:#aaa;font-size:.95rem;font-family:inherit">${_msg}</div>`;
     document.body.appendChild(ov);
     if (action === 'restart') {
-      let _wasDown = false;
-      const poll = setInterval(async () => {
-        try {
-          const r = await fetch('/api/auth/whoami', { cache: 'no-store' });
-          if (r.status === 502) { _wasDown = true; return; }
-          if (_wasDown) { clearInterval(poll); location.reload(); return; }
-          // server still up — keep polling, mark down on next failure
-        } catch { _wasDown = true; }
-      }, 500);
+      setTimeout(() => location.reload(), 3000);
     }
   }
   window._mvmosShowRestartOverlay = () => _showPowerOverlay('restart');
