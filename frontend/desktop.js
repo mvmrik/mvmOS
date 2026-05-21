@@ -900,18 +900,15 @@ const Desktop = (() => {
     ov.innerHTML = `<img src="/logo.png" style="width:min(280px,55vw)"><div style="color:#aaa;font-size:.95rem;font-family:inherit">${_msg}</div>`;
     document.body.appendChild(ov);
     if (action === 'restart') {
-      // wait 4s (enough for uvicorn to restart), then poll until server responds
-      setTimeout(() => {
-        const poll = setInterval(async () => {
-          try {
-            const r = await fetch('/api/auth/whoami', { cache: 'no-store' });
-            if (r.ok || r.status === 401 || r.status === 403) {
-              clearInterval(poll);
-              location.reload();
-            }
-          } catch {}
-        }, 1000);
-      }, 4000);
+      let _wasDown = false;
+      const poll = setInterval(async () => {
+        try {
+          const r = await fetch('/api/auth/whoami', { cache: 'no-store' });
+          if (r.status === 502) { _wasDown = true; return; }
+          if (_wasDown) { clearInterval(poll); location.reload(); return; }
+          // server still up — keep polling, mark down on next failure
+        } catch { _wasDown = true; }
+      }, 500);
     }
   }
   window._mvmosShowRestartOverlay = () => _showPowerOverlay('restart');

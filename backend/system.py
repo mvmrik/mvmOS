@@ -166,7 +166,10 @@ def _restart():
 
 @router.post("/power/restart")
 async def power_restart(bg: BackgroundTasks, session=Depends(get_current_session)):
-    bg.add_task(_restart)
+    async def _delayed_restart():
+        await asyncio.sleep(1.5)
+        _restart()
+    bg.add_task(_delayed_restart)
     return JSONResponse({"ok": True})
 
 
