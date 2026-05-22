@@ -112,7 +112,13 @@ const ScreenSaver = (() => {
 
   function _startWidget(overlay, def) {
     const wrap = document.createElement('div');
-    wrap.style.cssText = 'position:absolute;z-index:2;border-radius:var(--radius);overflow:hidden;min-width:120px;';
+    wrap.style.cssText = 'position:absolute;z-index:2;border-radius:var(--radius);overflow:hidden;min-width:120px;animation:ss-pulse 4s ease-in-out infinite;transform-origin:center;';
+    if (!document.getElementById('ss-pulse-style')) {
+      const s = document.createElement('style');
+      s.id = 'ss-pulse-style';
+      s.textContent = '@keyframes ss-pulse{0%,100%{transform:scale(1)}50%{transform:scale(2)}}';
+      document.head.appendChild(s);
+    }
     overlay.appendChild(wrap);
 
     const body = document.createElement('div');
