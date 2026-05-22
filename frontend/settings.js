@@ -1005,6 +1005,7 @@ const Settings = (() => {
     if (previewBtn) previewBtn.addEventListener('click', () => ScreenSaver.activate());
 
     // ── Screensaver type accordion ──────────────────────────────────────────
+    accordion.innerHTML = '';
     const activeType = localStorage.getItem('ss_type') || 'logo';
 
     const types = [
