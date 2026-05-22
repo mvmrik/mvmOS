@@ -399,6 +399,9 @@ window._i18n = {
   'ss_select':                      'Select',
   'ss_photos_folder':               'Subfolder in home',
   'ss_photos_period':               'Change photo every',
+  'ss_type_widget':                 'Widget',
+  'ss_widget_choose':               'Widget',
+  'ss_widget_none':                 'No widgets installed on desktop',
 
   // ── General ───────────────────────────────────────────────────────────────
   'loading':                      'Loading…',

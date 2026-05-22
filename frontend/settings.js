@@ -1011,6 +1011,7 @@ const Settings = (() => {
     const types = [
       { id: 'logo',   label: t('ss_type_logo'),   icon: '🖥' },
       { id: 'photos', label: t('ss_type_photos'),  icon: '🖼' },
+      { id: 'widget', label: t('ss_type_widget'),  icon: '🔲' },
     ];
 
     types.forEach(tp => {
@@ -1023,7 +1024,7 @@ const Settings = (() => {
           <span style="flex:1;font-size:.9rem;font-weight:500">${tp.label}</span>
           ${isActive ? `<span style="font-size:.75rem;color:var(--accent);font-weight:600">${t('ss_active')}</span>` : `<button class="s-btn s-btn-sm ss-select-btn">${t('ss_select')}</button>`}
         </div>
-        <div class="ss-acc-body" style="display:${tp.id === 'photos' && isActive ? 'block' : (tp.id === 'logo' ? 'none' : 'none')};padding:10px 14px;border-top:1px solid var(--border);background:var(--bg)"></div>
+        <div class="ss-acc-body" style="display:${(tp.id === 'photos' || tp.id === 'widget') && isActive ? 'block' : 'none'};padding:10px 14px;border-top:1px solid var(--border);background:var(--bg)"></div>
       `;
 
       const header = item.querySelector('.ss-acc-header');
@@ -1032,6 +1033,8 @@ const Settings = (() => {
 
       if (tp.id === 'photos') {
         _buildPhotosSettings(bodyEl);
+      } else if (tp.id === 'widget') {
+        _buildWidgetSettings(bodyEl);
       }
 
       if (selectBtn) {
@@ -1042,7 +1045,7 @@ const Settings = (() => {
         });
       }
 
-      if (tp.id === 'photos' && isActive) {
+      if ((tp.id === 'photos' || tp.id === 'widget') && isActive) {
         header.addEventListener('click', () => {
           bodyEl.style.display = bodyEl.style.display === 'none' ? 'block' : 'none';
         });
@@ -1097,6 +1100,30 @@ const Settings = (() => {
     });
     container.querySelector('#ss-photos-period').addEventListener('change', e => {
       localStorage.setItem('ss_photos_period', e.target.value);
+    });
+  }
+
+  function _buildWidgetSettings(container) {
+    const savedId = localStorage.getItem('ss_widget_id') || '';
+    const widgets = Object.values(window.mvmOS?._widgets || {});
+
+    if (!widgets.length) {
+      container.innerHTML = `<div style="font-size:.85rem;color:var(--text-dim)">${t('ss_widget_none')}</div>`;
+      return;
+    }
+
+    container.innerHTML = `
+      <div class="settings-row">
+        <span style="font-size:.85rem">${t('ss_widget_choose')}</span>
+        <select id="ss-widget-select" class="s-input" style="width:160px;font-size:.82rem">
+          ${widgets.map(w => `<option value="${w.id}" ${w.id === savedId ? 'selected' : ''}>${w.icon || '🔲'} ${w.name || w.id}</option>`).join('')}
+        </select>
+      </div>
+    `;
+    if (!savedId && widgets.length) localStorage.setItem('ss_widget_id', widgets[0].id);
+
+    container.querySelector('#ss-widget-select').addEventListener('change', e => {
+      localStorage.setItem('ss_widget_id', e.target.value);
     });
   }
 

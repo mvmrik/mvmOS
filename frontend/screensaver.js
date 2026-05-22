@@ -99,6 +99,57 @@ const ScreenSaver = (() => {
     wrap.addEventListener('touchstart', e => e.stopPropagation());
   }
 
+  function _showLogo(overlay) {
+    const img = document.createElement('img');
+    img.src = '/logo.png';
+    img.alt = 'mvmOS';
+    img.id = 'ss-logo';
+    overlay.appendChild(img);
+    document.body.appendChild(overlay);
+    requestAnimationFrame(() => overlay.classList.add('visible'));
+    _startFloat(img);
+  }
+
+  function _startWidget(overlay, def) {
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'position:absolute;z-index:2;border-radius:var(--radius);overflow:hidden;min-width:120px;';
+    overlay.appendChild(wrap);
+
+    const body = document.createElement('div');
+    body.className = 'widget-body';
+    wrap.appendChild(body);
+
+    try { def.init(body); } catch(e) { console.error('ss widget init', e); }
+
+    // start floating after widget renders
+    requestAnimationFrame(() => {
+      const w = wrap.offsetWidth || 200;
+      const h = wrap.offsetHeight || 150;
+      let x = Math.random() * (window.innerWidth - w);
+      let y = Math.random() * (window.innerHeight - h);
+      let vx = (Math.random() > 0.5 ? 1 : -1) * 0.4;
+      let vy = (Math.random() > 0.5 ? 1 : -1) * 0.3;
+
+      function step() {
+        const maxX = window.innerWidth - wrap.offsetWidth;
+        const maxY = window.innerHeight - wrap.offsetHeight;
+        x += vx; y += vy;
+        if (x <= 0 || x >= maxX) { vx = -vx; x = Math.max(0, Math.min(x, maxX)); }
+        if (y <= 0 || y >= maxY) { vy = -vy; y = Math.max(0, Math.min(y, maxY)); }
+        wrap.style.left = x + 'px';
+        wrap.style.top  = y + 'px';
+        _animFrame = requestAnimationFrame(step);
+      }
+      _animFrame = requestAnimationFrame(step);
+    });
+
+    // refresh widget every 3s
+    const refreshSec = Math.max(1, parseInt(window._vosSettings?.widget_refresh) || 3);
+    _photoTimer = setInterval(() => {
+      try { if (def.refresh) def.refresh(body); else { body.innerHTML = ''; def.init(body); } } catch(e) {}
+    }, refreshSec * 1000);
+  }
+
   async function _startPhotos(overlay) {
     const folder = localStorage.getItem('ss_photos_folder') || '';
     const periodMin = parseInt(localStorage.getItem('ss_photos_period') || '5');
@@ -170,15 +221,18 @@ const ScreenSaver = (() => {
       document.body.appendChild(_overlay);
       requestAnimationFrame(() => _overlay.classList.add('visible'));
       _startPhotos(_overlay);
+    } else if (ssType === 'widget') {
+      const widgetId = localStorage.getItem('ss_widget_id');
+      const def = widgetId && window.mvmOS?._widgets?.[widgetId];
+      if (def) {
+        document.body.appendChild(_overlay);
+        requestAnimationFrame(() => _overlay.classList.add('visible'));
+        _startWidget(_overlay, def);
+      } else {
+        _showLogo(_overlay);
+      }
     } else {
-      const img = document.createElement('img');
-      img.src = '/logo.png';
-      img.alt = 'mvmOS';
-      img.id = 'ss-logo';
-      _overlay.appendChild(img);
-      document.body.appendChild(_overlay);
-      requestAnimationFrame(() => _overlay.classList.add('visible'));
-      _startFloat(img);
+      _showLogo(_overlay);
     }
 
     function onActivity() {

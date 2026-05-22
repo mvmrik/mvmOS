@@ -401,6 +401,9 @@ window._i18n = {
   'ss_select':                      'Избери',
   'ss_photos_folder':               'Подпапка в home',
   'ss_photos_period':               'Смени снимката след',
+  'ss_type_widget':                 'Уиджет',
+  'ss_widget_choose':               'Уиджет',
+  'ss_widget_none':                 'Няма инсталирани уиджети на десктопа',
 
   // ── General ───────────────────────────────────────────────────────────────
   'loading':                      'Зареждане…',
