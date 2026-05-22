@@ -112,11 +112,13 @@ const ScreenSaver = (() => {
 
   function _startWidget(overlay, def) {
     const wrap = document.createElement('div');
-    wrap.style.cssText = 'position:absolute;z-index:2;border-radius:var(--radius);overflow:hidden;min-width:120px;animation:ss-pulse 4s ease-in-out infinite;transform-origin:center;';
+    wrap.style.cssText = 'position:absolute;z-index:2;border-radius:var(--radius);overflow:hidden;min-width:120px;animation:ss-pulse 20s ease-in-out infinite;';
+    wrap.dataset.ssWidget = '1';
     if (!document.getElementById('ss-pulse-style')) {
       const s = document.createElement('style');
       s.id = 'ss-pulse-style';
-      s.textContent = '@keyframes ss-pulse{0%,100%{transform:scale(1)}50%{transform:scale(2)}}';
+      s.textContent = '@keyframes ss-pulse{0%,100%{transform:scale(1)}50%{transform:scale(2)}}'
+        + '#screensaver [data-ss-widget]{transition:transform-origin 0s}';
       document.head.appendChild(s);
     }
     overlay.appendChild(wrap);
@@ -137,13 +139,18 @@ const ScreenSaver = (() => {
       let vy = (Math.random() > 0.5 ? 1 : -1) * 0.3;
 
       function step() {
-        const maxX = window.innerWidth - wrap.offsetWidth;
-        const maxY = window.innerHeight - wrap.offsetHeight;
+        const w = wrap.offsetWidth, h = wrap.offsetHeight;
+        const maxX = window.innerWidth - w;
+        const maxY = window.innerHeight - h;
         x += vx; y += vy;
         if (x <= 0 || x >= maxX) { vx = -vx; x = Math.max(0, Math.min(x, maxX)); }
         if (y <= 0 || y >= maxY) { vy = -vy; y = Math.max(0, Math.min(y, maxY)); }
         wrap.style.left = x + 'px';
         wrap.style.top  = y + 'px';
+        // transform-origin keeps scale within viewport
+        const ox = x < window.innerWidth / 2 ? 'left' : 'right';
+        const oy = y < window.innerHeight / 2 ? 'top' : 'bottom';
+        wrap.style.transformOrigin = `${ox} ${oy}`;
         _animFrame = requestAnimationFrame(step);
       }
       _animFrame = requestAnimationFrame(step);
