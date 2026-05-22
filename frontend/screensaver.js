@@ -108,18 +108,20 @@ const ScreenSaver = (() => {
     try {
       const r = await fetch('/api/auth/whoami');
       const d = await r.json();
-      basePath = `/home/${d.effective_user}`;
-    } catch { basePath = '~'; }
+      const u = d.effective_user;
+      basePath = u === 'root' ? '/root' : `/home/${u}`;
+    } catch { basePath = '/root'; }
     const dirPath = folder ? `${basePath}/${folder}` : basePath;
+    const isRoot = basePath === '/root';
 
     const IMAGE_EXT = new Set(['jpg','jpeg','png','gif','webp','bmp','svg']);
     let photos = [];
     try {
-      const r = await fetch(`/api/files/list?path=${encodeURIComponent(dirPath)}`);
+      const r = await fetch(`/api/files?path=${encodeURIComponent(dirPath)}${isRoot ? '&as_root=true' : ''}`);
       const d = await r.json();
       photos = (d.entries || [])
-        .filter(e => !e.is_dir && IMAGE_EXT.has(e.name.split('.').pop().toLowerCase()))
-        .map(e => `/api/files/download?path=${encodeURIComponent(dirPath + '/' + e.name)}`);
+        .filter(e => (e.type === 'file' || !e.is_dir) && IMAGE_EXT.has(e.name.split('.').pop().toLowerCase()))
+        .map(e => `/api/files/raw?path=${encodeURIComponent(dirPath + '/' + e.name)}`);
     } catch {}
 
     if (!photos.length) {
