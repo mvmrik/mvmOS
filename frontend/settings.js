@@ -1058,7 +1058,10 @@ const Settings = (() => {
     container.innerHTML = `
       <div class="settings-row" style="margin-bottom:8px">
         <span style="font-size:.85rem">${t('ss_photos_folder')}</span>
-        <input id="ss-photos-folder" type="text" class="s-input" style="width:160px;font-size:.82rem" placeholder="Pictures" value="${folder}">
+        <div style="display:flex;gap:6px;flex:1;justify-content:flex-end">
+          <input id="ss-photos-folder" type="text" class="s-input" style="width:130px;font-size:.82rem" placeholder="Pictures" value="${folder}" readonly>
+          <button class="s-btn s-btn-sm" id="ss-folder-browse">…</button>
+        </div>
       </div>
       <div class="settings-row">
         <span style="font-size:.85rem">${t('ss_photos_period')}</span>
@@ -1075,6 +1078,21 @@ const Settings = (() => {
 
     container.querySelector('#ss-photos-folder').addEventListener('change', e => {
       localStorage.setItem('ss_photos_folder', e.target.value.trim());
+    });
+    container.querySelector('#ss-folder-browse').addEventListener('click', async () => {
+      const input = container.querySelector('#ss-photos-folder');
+      const r = await fetch('/api/auth/whoami');
+      const me = await r.json();
+      const home = me.effective_user === 'root' ? '/root' : `/home/${me.effective_user}`;
+      FolderPicker.open({
+        root: home,
+        onSelect: path => {
+          // store relative to home
+          const rel = path.startsWith(home + '/') ? path.slice(home.length + 1) : path;
+          input.value = rel;
+          localStorage.setItem('ss_photos_folder', rel);
+        }
+      });
     });
     container.querySelector('#ss-photos-period').addEventListener('change', e => {
       localStorage.setItem('ss_photos_period', e.target.value);
