@@ -1086,6 +1086,7 @@ const Settings = (() => {
       const home = me.effective_user === 'root' ? '/root' : `/home/${me.effective_user}`;
       FolderPicker.open({
         root: home,
+        asRoot: me.effective_user === 'root',
         onSelect: path => {
           // store relative to home
           const rel = path.startsWith(home + '/') ? path.slice(home.length + 1) : path;

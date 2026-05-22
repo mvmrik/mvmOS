@@ -9,11 +9,11 @@ const FolderPicker = (() => {
       const r = await fetch(url);
       if (!r.ok) return [];
       const d = await r.json();
-      return (d.entries || []).filter(e => e.is_dir && !e.name.startsWith('.')).map(e => e.name).sort();
+      return (d.entries || []).filter(e => (e.is_dir || e.type === 'dir') && !e.name.startsWith('.')).map(e => e.name).sort();
     } catch { return []; }
   }
 
-  function open({ root, onSelect, title }) {
+  function open({ root, onSelect, title, asRoot }) {
     const existing = document.getElementById('fp-overlay');
     if (existing) existing.remove();
 
@@ -40,7 +40,7 @@ const FolderPicker = (() => {
     }
 
     async function _render() {
-      const folders = await _listFolders(currentPath);
+      const folders = await _listFolders(currentPath, asRoot);
       const crumbs = _pathParts(currentPath);
 
       modal.innerHTML = `
