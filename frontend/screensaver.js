@@ -133,15 +133,16 @@ const ScreenSaver = (() => {
     requestAnimationFrame(() => {
       const w = wrap.offsetWidth || 200;
       const h = wrap.offsetHeight || 150;
-      let x = Math.random() * (window.innerWidth - w);
-      let y = Math.random() * (window.innerHeight - h);
+      let x = w + Math.random() * Math.max(0, window.innerWidth - w * 3);
+      let y = h + Math.random() * Math.max(0, window.innerHeight - h * 3);
       let vx = (Math.random() > 0.5 ? 1 : -1) * 0.4;
       let vy = (Math.random() > 0.5 ? 1 : -1) * 0.3;
 
       function step() {
         const w = wrap.offsetWidth, h = wrap.offsetHeight;
-        const maxX = window.innerWidth - w;
-        const maxY = window.innerHeight - h;
+        // reserve half the widget size as margin so 2x scale stays in viewport
+        const maxX = window.innerWidth - w * 2;
+        const maxY = window.innerHeight - h * 2;
         x += vx; y += vy;
         if (x <= 0 || x >= maxX) { vx = -vx; x = Math.max(0, Math.min(x, maxX)); }
         if (y <= 0 || y >= maxY) { vy = -vy; y = Math.max(0, Math.min(y, maxY)); }
