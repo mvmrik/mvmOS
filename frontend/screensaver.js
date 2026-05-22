@@ -4,6 +4,7 @@ const ScreenSaver = (() => {
   let _animFrame = null;
   let _overlay = null;
   let _timeoutMin = 0;
+  let _photoTimer = null;
 
   const ACTIVITY_EVENTS = ['mousemove', 'mousedown', 'keydown', 'touchstart', 'wheel'];
 
@@ -98,6 +99,61 @@ const ScreenSaver = (() => {
     wrap.addEventListener('touchstart', e => e.stopPropagation());
   }
 
+  async function _startPhotos(overlay) {
+    const folder = localStorage.getItem('ss_photos_folder') || '';
+    const periodMin = parseInt(localStorage.getItem('ss_photos_period') || '5');
+
+    // fetch user home
+    let basePath = '';
+    try {
+      const r = await fetch('/api/auth/whoami');
+      const d = await r.json();
+      basePath = `/home/${d.effective_user}`;
+    } catch { basePath = '~'; }
+    const dirPath = folder ? `${basePath}/${folder}` : basePath;
+
+    const IMAGE_EXT = new Set(['jpg','jpeg','png','gif','webp','bmp','svg']);
+    let photos = [];
+    try {
+      const r = await fetch(`/api/files/list?path=${encodeURIComponent(dirPath)}`);
+      const d = await r.json();
+      photos = (d.entries || [])
+        .filter(e => !e.is_dir && IMAGE_EXT.has(e.name.split('.').pop().toLowerCase()))
+        .map(e => `/api/files/download?path=${encodeURIComponent(dirPath + '/' + e.name)}`);
+    } catch {}
+
+    if (!photos.length) {
+      // fallback to logo if no photos
+      const img = document.createElement('img');
+      img.src = '/logo.png'; img.alt = 'mvmOS'; img.id = 'ss-logo';
+      overlay.appendChild(img);
+      _startFloat(img);
+      return;
+    }
+
+    // shuffle
+    for (let i = photos.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [photos[i], photos[j]] = [photos[j], photos[i]];
+    }
+
+    let idx = 0;
+    const bg = document.createElement('div');
+    bg.style.cssText = 'position:absolute;inset:0;background-size:cover;background-position:center;background-repeat:no-repeat;transition:opacity 1s ease';
+    overlay.appendChild(bg);
+
+    function showPhoto() {
+      bg.style.opacity = '0';
+      setTimeout(() => {
+        bg.style.backgroundImage = `url('${photos[idx]}')`;
+        bg.style.opacity = '1';
+        idx = (idx + 1) % photos.length;
+      }, 1000);
+    }
+    showPhoto();
+    _photoTimer = setInterval(showPhoto, periodMin * 60 * 1000);
+  }
+
   function activate() {
     if (_active) return;
     _active = true;
@@ -106,15 +162,22 @@ const ScreenSaver = (() => {
     _overlay = document.createElement('div');
     _overlay.id = 'screensaver';
 
-    const img = document.createElement('img');
-    img.src = '/logo.png';
-    img.alt = 'mvmOS';
-    img.id = 'ss-logo';
-    _overlay.appendChild(img);
+    const ssType = localStorage.getItem('ss_type') || 'logo';
 
-    document.body.appendChild(_overlay);
-    requestAnimationFrame(() => _overlay.classList.add('visible'));
-    _startFloat(img);
+    if (ssType === 'photos') {
+      document.body.appendChild(_overlay);
+      requestAnimationFrame(() => _overlay.classList.add('visible'));
+      _startPhotos(_overlay);
+    } else {
+      const img = document.createElement('img');
+      img.src = '/logo.png';
+      img.alt = 'mvmOS';
+      img.id = 'ss-logo';
+      _overlay.appendChild(img);
+      document.body.appendChild(_overlay);
+      requestAnimationFrame(() => _overlay.classList.add('visible'));
+      _startFloat(img);
+    }
 
     function onActivity() {
       if (!_active) return;
@@ -135,6 +198,7 @@ const ScreenSaver = (() => {
     _active = false;
     _resumePollers();
     cancelAnimationFrame(_animFrame);
+    clearInterval(_photoTimer); _photoTimer = null;
     if (_overlay) {
       _overlay.classList.remove('visible');
       setTimeout(() => { _overlay?.remove(); _overlay = null; }, 500);

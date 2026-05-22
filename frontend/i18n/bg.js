@@ -391,6 +391,13 @@ window._i18n = {
   'ss_password_ph':                 'Парола',
   'ss_unlock':                      'Отключи',
   'ss_wrong_password':              'Грешна парола. Опитай пак.',
+  'ss_type':                        'Тип',
+  'ss_type_logo':                   'mvmOS Лого',
+  'ss_type_photos':                 'Фото Галерия',
+  'ss_active':                      '✓ Активен',
+  'ss_select':                      'Избери',
+  'ss_photos_folder':               'Подпапка в home',
+  'ss_photos_period':               'Смени снимката след',
 
   // ── General ───────────────────────────────────────────────────────────────
   'loading':                      'Зареждане…',

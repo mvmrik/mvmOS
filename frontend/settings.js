@@ -353,9 +353,13 @@ const Settings = (() => {
                 <span>${t('ss_require_password')}</span>
                 <label class="toggle"><input type="checkbox" id="ss-password"><span class="toggle-slider"></span></label>
               </div>
-              <div style="margin-top:8px">
-                <button class="settings-btn" id="ss-preview">${t('ss_preview')}</button>
-              </div>
+            </div>
+            <div class="settings-section">
+              <div class="settings-section-title">${t('ss_type')}</div>
+              <div id="ss-accordion" style="display:flex;flex-direction:column;gap:6px"></div>
+            </div>
+            <div style="margin-top:4px;padding:0 2px">
+              <button class="settings-btn" id="ss-preview">${t('ss_preview')}</button>
             </div>
           </div>
 
@@ -815,7 +819,7 @@ const Settings = (() => {
     const sub = ov.querySelector('#ov-sub');
     let dots = 0;
     const tick = setInterval(() => { dots = (dots + 1) % 4; sub.textContent = '.'.repeat(dots + 1); }, 500);
-    setTimeout(() => { clearInterval(tick); location.reload(); }, 5000);
+    setTimeout(() => { clearInterval(tick); location.reload(); }, 10000);
   }
 
   async function renderThemePicker(body) {
@@ -986,7 +990,9 @@ const Settings = (() => {
     const timeoutSel = body.querySelector('#ss-timeout');
     const passwordChk = body.querySelector('#ss-password');
     const previewBtn = body.querySelector('#ss-preview');
+    const accordion = body.querySelector('#ss-accordion');
     if (!timeoutSel) return;
+
     timeoutSel.value = localStorage.getItem('ss_timeout') ?? '5';
     passwordChk.checked = localStorage.getItem('ss_password') === '1';
     timeoutSel.addEventListener('change', () => {
@@ -997,6 +1003,95 @@ const Settings = (() => {
       localStorage.setItem('ss_password', passwordChk.checked ? '1' : '0');
     });
     if (previewBtn) previewBtn.addEventListener('click', () => ScreenSaver.activate());
+
+    // ── Screensaver type accordion ──────────────────────────────────────────
+    const activeType = localStorage.getItem('ss_type') || 'logo';
+
+    const types = [
+      { id: 'logo',   label: t('ss_type_logo'),   icon: '🖥' },
+      { id: 'photos', label: t('ss_type_photos'),  icon: '🖼' },
+    ];
+
+    types.forEach(tp => {
+      const isActive = activeType === tp.id;
+      const item = document.createElement('div');
+      item.style.cssText = 'border:1px solid var(--border);border-radius:var(--radius);overflow:hidden';
+      item.innerHTML = `
+        <div class="ss-acc-header" style="display:flex;align-items:center;gap:10px;padding:10px 14px;cursor:pointer;background:${isActive ? 'var(--accent-dim, rgba(99,102,241,.12))' : 'var(--surface)'}">
+          <span style="font-size:1.1rem">${tp.icon}</span>
+          <span style="flex:1;font-size:.9rem;font-weight:500">${tp.label}</span>
+          ${isActive ? `<span style="font-size:.75rem;color:var(--accent);font-weight:600">${t('ss_active')}</span>` : `<button class="s-btn s-btn-sm ss-select-btn">${t('ss_select')}</button>`}
+        </div>
+        <div class="ss-acc-body" style="display:${tp.id === 'photos' && isActive ? 'block' : (tp.id === 'logo' ? 'none' : 'none')};padding:10px 14px;border-top:1px solid var(--border);background:var(--bg)"></div>
+      `;
+
+      const header = item.querySelector('.ss-acc-header');
+      const bodyEl = item.querySelector('.ss-acc-body');
+      const selectBtn = item.querySelector('.ss-select-btn');
+
+      if (tp.id === 'photos') {
+        _buildPhotosSettings(bodyEl);
+      }
+
+      if (selectBtn) {
+        selectBtn.addEventListener('click', e => {
+          e.stopPropagation();
+          localStorage.setItem('ss_type', tp.id);
+          initScreenSaver(body); // re-render
+        });
+      }
+
+      if (tp.id === 'photos' && isActive) {
+        header.addEventListener('click', () => {
+          bodyEl.style.display = bodyEl.style.display === 'none' ? 'block' : 'none';
+        });
+      }
+
+      accordion.appendChild(item);
+    });
+  }
+
+  function _buildPhotosSettings(container) {
+    const folder = localStorage.getItem('ss_photos_folder') || '';
+    const period = localStorage.getItem('ss_photos_period') || '5';
+    container.innerHTML = `
+      <div class="settings-row" style="margin-bottom:8px">
+        <span style="font-size:.85rem">${t('ss_photos_folder')}</span>
+        <div style="display:flex;gap:6px;flex:1;justify-content:flex-end">
+          <input id="ss-photos-folder" type="text" class="s-input" style="width:160px;font-size:.82rem" placeholder="Pictures" value="${folder}">
+          <button class="s-btn s-btn-sm" id="ss-folder-browse">…</button>
+        </div>
+      </div>
+      <div class="settings-row">
+        <span style="font-size:.85rem">${t('ss_photos_period')}</span>
+        <select id="ss-photos-period" class="s-input" style="width:100px;font-size:.82rem">
+          <option value="1">1 ${t('ss_min')}</option>
+          <option value="2">2 ${t('ss_min')}</option>
+          <option value="5">5 ${t('ss_min')}</option>
+          <option value="10">10 ${t('ss_min')}</option>
+          <option value="30">30 ${t('ss_min')}</option>
+        </select>
+      </div>
+    `;
+    container.querySelector('#ss-photos-period').value = period;
+
+    container.querySelector('#ss-photos-folder').addEventListener('change', e => {
+      localStorage.setItem('ss_photos_folder', e.target.value.trim());
+    });
+    container.querySelector('#ss-photos-period').addEventListener('change', e => {
+      localStorage.setItem('ss_photos_period', e.target.value);
+    });
+    container.querySelector('#ss-folder-browse').addEventListener('click', async () => {
+      const input = container.querySelector('#ss-photos-folder');
+      const res = await fetch('/api/auth/whoami');
+      const me = await res.json();
+      const home = `/home/${me.effective_user}`;
+      const path = prompt(t('ss_photos_folder_prompt') || 'Subfolder in your home directory (e.g. Pictures):', input.value || '');
+      if (path !== null) {
+        input.value = path.trim();
+        localStorage.setItem('ss_photos_folder', path.trim());
+      }
+    });
   }
 
   return { openWindow, get, initDisplay, loadFMPrefs, loadStartMenuPrefs, defaultStartMenuPrefs, initScreenSaver };

@@ -389,6 +389,13 @@ window._i18n = {
   'ss_password_ph':                 'Password',
   'ss_unlock':                      'Unlock',
   'ss_wrong_password':              'Wrong password. Try again.',
+  'ss_type':                        'Type',
+  'ss_type_logo':                   'mvmOS Logo',
+  'ss_type_photos':                 'Photo Gallery',
+  'ss_active':                      '✓ Active',
+  'ss_select':                      'Select',
+  'ss_photos_folder':               'Subfolder in home',
+  'ss_photos_period':               'Change photo every',
 
   // ── General ───────────────────────────────────────────────────────────────
   'loading':                      'Loading…',
