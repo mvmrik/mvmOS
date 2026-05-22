@@ -1058,10 +1058,7 @@ const Settings = (() => {
     container.innerHTML = `
       <div class="settings-row" style="margin-bottom:8px">
         <span style="font-size:.85rem">${t('ss_photos_folder')}</span>
-        <div style="display:flex;gap:6px;flex:1;justify-content:flex-end">
-          <input id="ss-photos-folder" type="text" class="s-input" style="width:160px;font-size:.82rem" placeholder="Pictures" value="${folder}">
-          <button class="s-btn s-btn-sm" id="ss-folder-browse">…</button>
-        </div>
+        <input id="ss-photos-folder" type="text" class="s-input" style="width:160px;font-size:.82rem" placeholder="Pictures" value="${folder}">
       </div>
       <div class="settings-row">
         <span style="font-size:.85rem">${t('ss_photos_period')}</span>
@@ -1081,17 +1078,6 @@ const Settings = (() => {
     });
     container.querySelector('#ss-photos-period').addEventListener('change', e => {
       localStorage.setItem('ss_photos_period', e.target.value);
-    });
-    container.querySelector('#ss-folder-browse').addEventListener('click', async () => {
-      const input = container.querySelector('#ss-photos-folder');
-      const res = await fetch('/api/auth/whoami');
-      const me = await res.json();
-      const home = `/home/${me.effective_user}`;
-      const path = prompt(t('ss_photos_folder_prompt') || 'Subfolder in your home directory (e.g. Pictures):', input.value || '');
-      if (path !== null) {
-        input.value = path.trim();
-        localStorage.setItem('ss_photos_folder', path.trim());
-      }
     });
   }
 
