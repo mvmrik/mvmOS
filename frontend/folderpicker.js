@@ -5,7 +5,7 @@ const FolderPicker = (() => {
 
   async function _listFolders(path) {
     try {
-      const r = await fetch(`/api/files/list?path=${encodeURIComponent(path)}`);
+      const r = await fetch(`/api/files/list?path=${encodeURIComponent(path)}&as_root=true`);
       if (!r.ok) return [];
       const d = await r.json();
       return (d.entries || []).filter(e => e.is_dir && !e.name.startsWith('.')).map(e => e.name).sort();
