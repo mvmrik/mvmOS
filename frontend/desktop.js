@@ -1388,7 +1388,7 @@ const Desktop = (() => {
   // load error reporter after page is ready
   window.addEventListener('load', function() {
     var s = document.createElement('script');
-    s.src = '/frontend/errorreporter.js';
+    s.src = '/errorreporter.js';
     s.onload = function() { if (window.ErrorReporter) ErrorReporter.init(); };
     document.head.appendChild(s);
   });

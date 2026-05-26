@@ -458,7 +458,7 @@ var CodeEditor = (() => {
         _win = body.closest('.window');
 
         body.innerHTML = `
-          <div class="ce-body" style="display:flex;height:100%;overflow:hidden;position:relative">
+          <div class="ce-body" style="display:flex;flex:1;min-height:0;overflow:hidden;position:relative">
             <div class="ce-sidebar as-sidebar" style="width:200px;min-width:140px;border-right:1px solid var(--border);overflow-y:auto;background:var(--surface2);padding:6px 0;flex-shrink:0"></div>
             <div class="ce-editor-wrap" style="flex:1;overflow:hidden;display:flex;flex-direction:column"></div>
           </div>
