@@ -822,11 +822,16 @@ const FileManager = (() => {
       }
       if (choice === 'trash') {
         const paths = names.map(n => this.joinPath(this.currentPath, n));
-        await fetch('/api/files/trash/move', {
+        const r = await fetch('/api/files/trash/move', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ paths }),
         });
+        if (!r.ok) {
+          const err = await r.json().catch(() => ({}));
+          this.showError(err.detail || 'Could not move to trash');
+          return;
+        }
       } else {
         for (const name of names) {
           await fetch('/api/files/delete', {
