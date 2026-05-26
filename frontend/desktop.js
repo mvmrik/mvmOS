@@ -1385,6 +1385,14 @@ const Desktop = (() => {
   _initMobilePages();
   _initLongPress();
 
+  // load error reporter after page is ready
+  window.addEventListener('load', function() {
+    var s = document.createElement('script');
+    s.src = '/frontend/errorreporter.js';
+    s.onload = function() { if (window.ErrorReporter) ErrorReporter.init(); };
+    document.head.appendChild(s);
+  });
+
   function _initLongPress() {
     if (!('ontouchstart' in window) && navigator.maxTouchPoints === 0) return;
     let _lpTimer = null;

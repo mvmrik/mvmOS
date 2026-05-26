@@ -153,6 +153,7 @@ const Settings = (() => {
           <div class="settings-tab ${activeTab==='users'?'active':''}" data-tab="users">${t('settings_users')}</div>
           <div class="settings-tab ${activeTab==='updates'?'active':''}" data-tab="updates">${t('settings_updates')}</div>
           <div class="settings-tab ${activeTab==='startmenu'?'active':''}" data-tab="startmenu">${t('settings_startmenu')}</div>
+          <div class="settings-tab ${activeTab==='system'?'active':''}" data-tab="system">System</div>
           <div class="settings-tab ${activeTab==='about'?'active':''}" data-tab="about" style="margin-top:auto">${t('settings_about')}</div>
         </nav>
 
@@ -335,6 +336,20 @@ const Settings = (() => {
           <!-- Start Menu panel -->
           <div class="settings-panel ${activeTab==='startmenu'?'active':''}" id="sp-startmenu"></div>
 
+          <!-- System panel -->
+          <div class="settings-panel ${activeTab==='system'?'active':''}" id="sp-system">
+            <div class="settings-section">
+              <div class="settings-section-title">Error Reporting</div>
+              <div class="settings-row">
+                <div>
+                  <div style="font-weight:500">Send error reports</div>
+                  <div style="font-size:.8rem;color:var(--text-dim);margin-top:2px">When an error occurs, you'll be asked whether to send a report to the developer. Disable to never be asked.</div>
+                </div>
+                <label class="toggle"><input type="checkbox" id="s-error-reporting"><span class="toggle-slider"></span></label>
+              </div>
+            </div>
+          </div>
+
           <!-- Screen Saver panel -->
           <div class="settings-panel ${activeTab==='screensaver'?'active':''}" id="sp-screensaver">
             <div class="settings-section">
@@ -388,6 +403,7 @@ const Settings = (() => {
         if (tab.dataset.tab === 'display') renderThemePicker(body);
         if (tab.dataset.tab === 'startmenu') renderStartMenu(body);
         if (tab.dataset.tab === 'screensaver') initScreenSaver(body);
+        if (tab.dataset.tab === 'system') renderSystem(body);
       });
     });
 
@@ -397,6 +413,7 @@ const Settings = (() => {
     if (activeTab === 'display' || !activeTab) renderThemePicker(body);
     if (activeTab === 'startmenu') renderStartMenu(body);
     if (activeTab === 'screensaver') initScreenSaver(body);
+    if (activeTab === 'system') renderSystem(body);
 
     // Display — auto-save on slider change
     const iconSlider = body.querySelector('#s-icon-size');
@@ -1124,6 +1141,18 @@ const Settings = (() => {
 
     container.querySelector('#ss-widget-select').addEventListener('change', e => {
       localStorage.setItem('ss_widget_id', e.target.value);
+    });
+  }
+
+  function renderSystem(body) {
+    const panel = body.querySelector('#sp-system');
+    if (!panel) return;
+    const cb = panel.querySelector('#s-error-reporting');
+    if (!cb) return;
+    cb.checked = currentSettings.error_reporting !== false;
+    cb.addEventListener('change', () => {
+      saveSettings({ error_reporting: cb.checked });
+      window.dispatchEvent(new CustomEvent('error-reporting-changed', { detail: cb.checked }));
     });
   }
 

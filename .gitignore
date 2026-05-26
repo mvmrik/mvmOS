@@ -12,3 +12,4 @@ themes/
 CLAUDE.md
 *.db
 backend/app-backends/
+error-reports/

@@ -1,0 +1,161 @@
+// ── Error Reporter — mvmOS ────────────────────────────────────────────────────
+// Captures JS errors and backend 5xx responses.
+// Shows opt-in dialog — user decides whether to send.
+// Reports go to https://mvmos.mvmrik.com/report (independent receiver).
+
+window.ErrorReporter = (() => {
+  const REPORT_URL = 'https://mvmos.mvmrik.com/report';
+  const _buf = [];   // circular buffer, max 20 items
+  let _enabled = true;
+  let _dialogOpen = false;
+  const _recentShown = {}; // message → timestamp, 10s dedup
+
+  function _push(entry) {
+    _buf.push(entry);
+    if (_buf.length > 20) _buf.shift();
+  }
+
+  function _version() {
+    const m = document.querySelector('meta[name="mvmos-version"]');
+    return (m && m.getAttribute('content')) || window.MVMOS_VERSION || 'unknown';
+  }
+
+  function _disableForever() {
+    _enabled = false;
+    fetch('/api/settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ settings: { error_reporting: false } }),
+    }).catch(() => {});
+  }
+
+  function _isDup(msg) {
+    const t = _recentShown[msg];
+    return t && (Date.now() - t) < 10000;
+  }
+
+  function _sendReport(entry) {
+    fetch(REPORT_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message:     entry.message,
+        stack:       entry.stack || null,
+        url:         entry.url || null,
+        status:      entry.status || null,
+        app:         entry.app || null,
+        browser:     navigator.userAgent,
+        version:     _version(),
+        client_time: entry.time,
+      }),
+    }).catch(() => {});
+  }
+
+  function _showDialog(entry) {
+    if (!_enabled || _dialogOpen || _isDup(entry.message)) return;
+    _dialogOpen = true;
+    _recentShown[entry.message] = Date.now();
+
+    const esc = s => String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.65);display:flex;align-items:center;justify-content:center;padding:16px;box-sizing:border-box';
+    overlay.innerHTML = `
+      <div style="background:var(--surface,#1e1e2e);border:1px solid var(--border,#313244);border-radius:10px;padding:24px;max-width:460px;width:100%;box-shadow:0 8px 32px rgba(0,0,0,.5);color:var(--text,#cdd6f4);font-family:inherit">
+        <div style="font-size:1.1rem;font-weight:700;margin-bottom:6px">⚠ Something went wrong</div>
+        <div style="font-size:.85rem;color:var(--text-dim,#a6adc8);margin-bottom:16px">An error occurred. Would you like to send a report to help fix it?</div>
+
+        <details style="margin-bottom:16px;background:var(--surface2,#313244);border:1px solid var(--border,#45475a);border-radius:6px;padding:8px 12px;font-size:.8rem">
+          <summary style="cursor:pointer;color:var(--text-dim,#a6adc8);user-select:none">Details</summary>
+          <div style="margin-top:8px;display:flex;flex-direction:column;gap:4px">
+            <div><b>Message:</b> ${esc(entry.message)}</div>
+            <div><b>Time:</b> ${esc(entry.time)}</div>
+            <div><b>Version:</b> ${esc(_version())}</div>
+            ${entry.status ? `<div><b>HTTP status:</b> ${esc(entry.status)}</div>` : ''}
+            ${entry.url ? `<div style="word-break:break-all"><b>URL:</b> ${esc(entry.url)}</div>` : ''}
+            ${entry.stack ? `<pre style="margin:6px 0 0;overflow:auto;font-size:.73rem;white-space:pre-wrap;max-height:110px">${esc(entry.stack.slice(0,600))}</pre>` : ''}
+          </div>
+        </details>
+
+        <label style="display:flex;align-items:center;gap:8px;margin-bottom:16px;font-size:.83rem;cursor:pointer;color:var(--text-dim,#a6adc8)">
+          <input type="checkbox" id="err-no-more" style="cursor:pointer">
+          Don't show this again
+        </label>
+
+        <div style="display:flex;gap:10px;justify-content:flex-end">
+          <button id="err-dont" style="padding:7px 16px;background:var(--surface2,#313244);border:1px solid var(--border,#45475a);border-radius:6px;color:var(--text,#cdd6f4);cursor:pointer;font-size:.85rem;font-family:inherit">Don't send</button>
+          <button id="err-send" style="padding:7px 16px;background:var(--accent,#6366f1);border:none;border-radius:6px;color:#fff;cursor:pointer;font-size:.85rem;font-weight:600;font-family:inherit">Send report</button>
+        </div>
+      </div>`;
+
+    document.body.appendChild(overlay);
+
+    function close() { overlay.remove(); _dialogOpen = false; }
+
+    overlay.querySelector('#err-dont').addEventListener('click', () => {
+      if (overlay.querySelector('#err-no-more').checked) _disableForever();
+      close();
+    });
+    overlay.querySelector('#err-send').addEventListener('click', () => {
+      _sendReport(entry);
+      if (overlay.querySelector('#err-no-more').checked) _disableForever();
+      close();
+    });
+  }
+
+  function _capture(type, message, stack, url, status) {
+    const entry = {
+      time: new Date().toISOString(),
+      type, message: String(message || '(unknown)'),
+      stack: stack || null, url: url || null, status: status || null,
+      app: document.title || 'mvmOS',
+    };
+    _push(entry);
+    if (_enabled) _showDialog(entry);
+  }
+
+  function _patchFetch() {
+    const _orig = window.fetch;
+    window.fetch = async function(input, init) {
+      const url = typeof input === 'string' ? input : (input?.url || '');
+      if (url.includes('/report')) return _orig.apply(this, arguments);
+      const res = await _orig.apply(this, arguments);
+      if (res.status >= 500) {
+        let body = '';
+        try { body = (await res.clone().text()).slice(0, 400); } catch (_) {}
+        _capture('fetch', `HTTP ${res.status} — ${url}`, body || null, url, res.status);
+      }
+      return res;
+    };
+  }
+
+  function _patchErrors() {
+    window.addEventListener('error', e => {
+      _capture('js', e.message, e.error?.stack || null, e.filename || location.href);
+    });
+    window.addEventListener('unhandledrejection', e => {
+      const r = e.reason;
+      _capture('promise',
+        r instanceof Error ? r.message : String(r || 'Unhandled rejection'),
+        r instanceof Error ? r.stack : null,
+        location.href
+      );
+    });
+  }
+
+  async function init() {
+    try {
+      const res = await fetch('/api/settings');
+      const data = await res.json();
+      if (data.error_reporting === false) return;
+    } catch (_) {}
+
+    _patchFetch();
+    _patchErrors();
+
+    window.addEventListener('error-reporting-changed', e => {
+      _enabled = e.detail !== false;
+    });
+  }
+
+  return { init };
+})();
