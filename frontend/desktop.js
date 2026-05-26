@@ -894,6 +894,9 @@ const Desktop = (() => {
     if (_powerFlyout) { _powerFlyout.remove(); _powerFlyout = null; document.getElementById('start-menu').style.visibility = ''; }
   }
   function _showPowerOverlay(action) {
+    // Disable error reporting during restart/stop — fetch errors are expected
+    window.dispatchEvent(new CustomEvent('error-reporting-changed', { detail: false }));
+
     const ov = document.createElement('div');
     ov.style.cssText = 'position:fixed;inset:0;z-index:99999;background:#000;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2.5rem';
     const _msg = action === 'restart' ? t('power_restarting') : t('power_stopped');
@@ -1388,7 +1391,7 @@ const Desktop = (() => {
   // load error reporter after page is ready
   window.addEventListener('load', function() {
     var s = document.createElement('script');
-    s.src = '/errorreporter.js';
+    s.src = '/errorreporter.js?v=' + Date.now();
     s.onload = function() { if (window.ErrorReporter) ErrorReporter.init(); };
     document.head.appendChild(s);
   });

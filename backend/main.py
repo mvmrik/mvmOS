@@ -149,6 +149,15 @@ def _versioned_html():
         return m.group(0)
 
     html = re.sub(r'"(/[^"]+\.(?:js|css))"', add_version, html)
+
+    # Inject mvmOS version as meta tag
+    try:
+        version_path = os.path.join(os.path.dirname(FRONTEND_DIR), "version.txt")
+        mvmos_version = open(version_path).read().strip()
+        html = html.replace('<meta charset="UTF-8">', f'<meta charset="UTF-8">\n<meta name="mvmos-version" content="{mvmos_version}">')
+    except Exception:
+        pass
+
     return html
 
 

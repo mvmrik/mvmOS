@@ -824,6 +824,8 @@ const Settings = (() => {
   }
 
   function _showRestartingOverlay() {
+    // Disable error reporting — fetch errors during restart are expected
+    window.dispatchEvent(new CustomEvent('error-reporting-changed', { detail: false }));
     const ov = document.createElement('div');
     ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:99999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;color:#fff;font-family:inherit';
     ov.innerHTML = `
