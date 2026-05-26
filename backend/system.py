@@ -310,16 +310,21 @@ async def get_hardware(session=Depends(get_current_session)):
 
 @router.get("/resources")
 async def get_resources(session=Depends(get_current_session)):
-    # CPU
-    cpu_r = subprocess.run(["top", "-bn2", "-d0.2"], capture_output=True, text=True)
-    cpu_pct = 0.0
+    # CPU — read /proc/stat twice with 200ms interval for accurate usage
     import re
-    for line in reversed(cpu_r.stdout.splitlines()):
-        if line.startswith("%Cpu") or line.startswith("Cpu"):
-            idle = re.search(r'([\d.]+)\s*id', line)
-            if idle:
-                cpu_pct = round(100 - float(idle.group(1)), 1)
-            break
+    def _read_cpu_stat():
+        with open('/proc/stat') as f:
+            line = f.readline()
+        vals = list(map(int, line.split()[1:]))
+        idle = vals[3]
+        total = sum(vals)
+        return idle, total
+    idle1, total1 = _read_cpu_stat()
+    await asyncio.sleep(0.2)
+    idle2, total2 = _read_cpu_stat()
+    diff_total = total2 - total1
+    diff_idle  = idle2  - idle1
+    cpu_pct = round((1 - diff_idle / diff_total) * 100, 1) if diff_total else 0.0
 
     # Memory
     mem_r = subprocess.run(["free", "-b"], capture_output=True, text=True)
