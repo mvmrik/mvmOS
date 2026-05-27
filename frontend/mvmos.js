@@ -1060,6 +1060,26 @@ var mvmOS = (() => {
     openSettings: (tab) => Settings.openWindow(tab),
     notify,
     storage,
+    multiplayer: {
+      async createRoom(gameId) {
+        const res = await fetch('/api/multiplayer/room', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ game_id: gameId }),
+        });
+        const data = await res.json();
+        const origin = location.origin;
+        return {
+          roomId: data.room_id,
+          link: `${origin}/api/multiplayer/play/${gameId}/${data.room_id}`,
+        };
+      },
+      connect(roomId, gameId) {
+        const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+        const ws = new WebSocket(`${proto}://${location.host}/api/multiplayer/room/${roomId}/ws`);
+        return ws;
+      },
+    },
     widgetSetting,
     db: (appId) => _makeDb(appId),
     widgetDb: (widgetId) => _makeWidgetDb(widgetId),

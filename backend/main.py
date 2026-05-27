@@ -39,6 +39,7 @@ from .updates import router as updates_router
 from .cron import router as cron_router
 from .domains import router as domains_router
 from .projects import router as projects_router
+from .multiplayer import router as multiplayer_router
 from .db import APPS_DIR, WIDGETS_DIR, THEMES_DIR
 from . import app_backends, public_loader, projects
 
@@ -61,6 +62,7 @@ app.include_router(updates_router)
 app.include_router(cron_router)
 app.include_router(domains_router)
 app.include_router(projects_router)
+app.include_router(multiplayer_router)
 
 app_backends.load_all(app)
 public_loader.load_all(app)
@@ -89,7 +91,7 @@ async def auth_middleware(request: Request, call_next):
         if path == prefix or path.startswith(prefix + "/"):
             return await call_next(request)
 
-    if path in public or path.startswith("/static") or path.startswith("/pub/") or path.endswith((".js", ".css", ".ico", ".png", ".svg", ".woff", ".woff2")):
+    if path in public or path.startswith("/static") or path.startswith("/pub/") or path.startswith("/api/multiplayer/") or path.endswith((".js", ".css", ".ico", ".png", ".svg", ".woff", ".woff2")):
         return await call_next(request)
     token = request.cookies.get("session")
     if not token:
