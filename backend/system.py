@@ -129,17 +129,33 @@ async def do_update(session=Depends(get_current_session)):
                 if os.path.exists(db_path):
                     shutil.copy2(db_path, db_bak)
 
-                # overwrite everything except venv and .git
+                # overwrite everything except venv, .git, and installed app backends
                 SKIP = {".git", "venv"}
+                BACKEND_SKIP = {"apps"}
                 for item in os.listdir(extracted):
                     if item in SKIP:
                         continue
                     src = os.path.join(extracted, item)
                     dst = os.path.join(repo_dir, item)
                     if os.path.isdir(src):
-                        if os.path.exists(dst):
-                            shutil.rmtree(dst)
-                        shutil.copytree(src, dst)
+                        if item == "backend":
+                            # merge backend/ file by file, skip apps/ subdir
+                            os.makedirs(dst, exist_ok=True)
+                            for sub in os.listdir(src):
+                                if sub in BACKEND_SKIP:
+                                    continue
+                                s = os.path.join(src, sub)
+                                d = os.path.join(dst, sub)
+                                if os.path.isdir(s):
+                                    if os.path.exists(d):
+                                        shutil.rmtree(d)
+                                    shutil.copytree(s, d)
+                                else:
+                                    shutil.copy2(s, d)
+                        else:
+                            if os.path.exists(dst):
+                                shutil.rmtree(dst)
+                            shutil.copytree(src, dst)
                     else:
                         shutil.copy2(src, dst)
 
