@@ -223,6 +223,7 @@ const ScreenSaver = (() => {
     if (_active) return;
     _active = true;
     _stopPollers();
+    window.dispatchEvent(new CustomEvent('error-reporting-changed', { detail: false }));
 
     _overlay = document.createElement('div');
     _overlay.id = 'screensaver';
@@ -265,6 +266,7 @@ const ScreenSaver = (() => {
     if (!_active) return;
     _active = false;
     _resumePollers();
+    window.dispatchEvent(new CustomEvent('error-reporting-changed', { detail: true }));
     cancelAnimationFrame(_animFrame);
     clearInterval(_photoTimer); _photoTimer = null;
     if (_overlay) {

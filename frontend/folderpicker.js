@@ -79,7 +79,7 @@ const FolderPicker = (() => {
         folders.forEach(name => {
           const row = document.createElement('div');
           row.style.cssText = 'display:flex;align-items:center;gap:10px;padding:7px 16px;cursor:pointer;font-size:.88rem';
-          row.innerHTML = `<span style="font-size:1rem">📁</span><span>${name}</span>`;
+          row.innerHTML = `<span style="font-size:1rem">📁</span><span style="flex:1">${name}</span>`;
           row.addEventListener('mouseenter', () => row.style.background = 'var(--hover)');
           row.addEventListener('mouseleave', () => row.style.background = '');
           row.addEventListener('click', () => { currentPath = currentPath.replace(/\/+$/, '') + '/' + name; _render(); });
