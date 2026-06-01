@@ -168,7 +168,7 @@ window.ErrorReporter = (() => {
       app: document.title || 'mvmOS',
     };
     _push(entry);
-    if (_enabled) _showDialog(entry);
+    if (_enabled && !document.getElementById('screensaver')) _showDialog(entry);
   }
 
   function _patchFetch() {

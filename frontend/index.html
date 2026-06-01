@@ -6,6 +6,12 @@
 <title>mvmOS</title>
 <link rel="icon" type="image/x-icon" href="/favicon.ico">
 <link rel="icon" type="image/png" sizes="192x192" href="/favicon-192.png">
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="mvmOS">
+<link rel="apple-touch-icon" href="/favicon-192.png">
 <link rel="stylesheet" href="/style.css">
 <link id="theme-css" rel="stylesheet" href="/api/themes/active/css">
 <link rel="stylesheet" href="/lib/xterm.css">
@@ -109,5 +115,10 @@
 <script src="/folderpicker.js"></script>
 <script src="/screensaver.js"></script>
 <script>ScreenSaver.init();</script>
+<script>
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js').catch(() => {});
+}
+</script>
 </body>
 </html>
