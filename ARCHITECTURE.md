@@ -20,6 +20,7 @@
         backend.py
     db.py             — SQLite connection, APPS_DIR, WIDGETS_DIR, THEMES_DIR
     cron.py           — cron jobs
+    scheduler.py      — mvmOS App Scheduler (POST /api/scheduler/tick, GET /api/scheduler/status)
   frontend/
     index.html
     mvmos.js          — main JS, mvmOS object, SDK
