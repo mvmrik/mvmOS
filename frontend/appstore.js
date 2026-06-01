@@ -764,7 +764,7 @@ const AppStore = (() => {
       row.style.cssText = 'display:flex;flex-direction:column;gap:4px';
       let input;
       if (s.type === 'select') {
-        input = `<select class="s-input" data-key="${s.key}">${s.options.map(o => `<option value="${o}"${val===o?' selected':''}>${o}</option>`).join('')}</select>`;
+        input = `<select class="s-input" data-key="${s.key}">${(s.options||[]).map(o => { const v = typeof o==='object'?o.value:o; const l = typeof o==='object'?o.label:o; return `<option value="${v}"${val===v?' selected':''}>${l}</option>`; }).join('')}</select>`;
       } else if (s.type === 'checkbox') {
         input = `<label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" data-key="${s.key}" ${val?'checked':''}> ${s.label}</label>`;
       } else {
@@ -1383,7 +1383,7 @@ const AppStore = (() => {
           row.innerHTML = `
             <label style="flex:1">${s.label}</label>
             <select id="ws-${widgetId}-${s.key}" class="s-input" style="width:auto">
-              ${(s.options || []).map(o => `<option ${o === val ? 'selected' : ''}>${o}</option>`).join('')}
+              ${(s.options || []).map(o => { const v = typeof o === 'object' ? o.value : o; const l = typeof o === 'object' ? o.label : o; return `<option value="${v}" ${v === val ? 'selected' : ''}>${l}</option>`; }).join('')}
             </select>`;
         } else if (s.type === 'city') {
           const val = _savedVal(s);

@@ -51,7 +51,7 @@ def _get_config(app_id: str) -> dict:
         return {}
 
 
-@router.post("/api/scheduler/tick")
+@router.api_route("/api/scheduler/tick", methods=["GET", "POST"])
 async def scheduler_tick():
     now = datetime.now()
     results = []
