@@ -150,9 +150,16 @@ const Desktop = (() => {
       }
 
       // position above clock
-      const rect = clock.getBoundingClientRect();
-      calPopup.style.right = (window.innerWidth - rect.right) + 'px';
-      calPopup.style.bottom = '44px';
+      const fsTaskbar = document.getElementById('fs-taskbar');
+      if (isMobile() && fsTaskbar) {
+        calPopup.style.right = '84px';
+        calPopup.style.top = '10px';
+        calPopup.style.bottom = 'auto';
+      } else {
+        const rect = clock.getBoundingClientRect();
+        calPopup.style.right = (window.innerWidth - rect.right) + 'px';
+        calPopup.style.bottom = '44px';
+      }
 
       setTimeout(() => {
         document.addEventListener('click', function handler(e) {
@@ -576,9 +583,15 @@ const Desktop = (() => {
     el.dataset.winId = id;
 
     const mobile = isMobile();
+    const mobileFullscreen = mobile && window._vosSettings?.mobile_fullscreen !== false;
     if (mobile) {
       el.classList.add('window-mobile');
-      el.style.cssText = 'position:fixed;left:0;top:0;width:100vw;height:calc(100vh - 44px);z-index:8000;overflow:hidden';
+      if (mobileFullscreen) {
+        el.classList.add('window-mobile-fullscreen');
+        el.style.cssText = 'position:fixed;left:0;top:0;width:100vw;height:calc(100vh - 44px);z-index:8000;overflow:hidden';
+      } else {
+        el.style.cssText = 'position:fixed;left:0;top:0;width:100vw;height:calc(100vh - 44px);z-index:8000;overflow:hidden';
+      }
     } else {
       const cx = Math.max(20, (window.innerWidth  - width)  / 2 + Math.random() * 40 - 20);
       const cy = Math.max(20, (window.innerHeight - height - 44) / 2 + Math.random() * 40 - 20);
@@ -586,15 +599,17 @@ const Desktop = (() => {
     }
 
     el.innerHTML = `
-      <div class="window-titlebar">
+      ${mobileFullscreen
+        ? ``
+        : `<div class="window-titlebar">
         <div class="window-controls">
           <button class="wbtn wbtn-close"  title="${t('win_close')}"></button>
-          ${!mobile ? `<button class="wbtn wbtn-min" title="${t('win_minimize')}"></button>` : ''}
+          <button class="wbtn wbtn-min" title="${t('win_minimize')}"></button>
           ${!mobile ? `<button class="wbtn wbtn-max" title="${t('win_maximize')}"></button>` : ''}
         </div>
         <div class="window-title">${title}</div>
         ${appSettings ? `<button class="wbtn-appsettings" title="${t('settings_title')}">⚙</button>` : ''}
-      </div>
+      </div>`}
       <div class="window-body"></div>
       ${!mobile ? '<div class="window-resize"></div>' : ''}
     `;
@@ -607,13 +622,13 @@ const Desktop = (() => {
       makeWindowResizable(el, el.querySelector('.window-resize'), () => onResize && onResize(el));
     }
 
-    el.querySelector('.wbtn-close').addEventListener('click', () => closeWindow(id));
+    el.querySelector('.wbtn-close')?.addEventListener('click', () => closeWindow(id));
     el.querySelector('.wbtn-min')?.addEventListener('click', () => toggleMinimize(id));
     el.querySelector('.wbtn-max')?.addEventListener('click', () => toggleMaximize(el));
 
     if (appSettings) {
       const btn = el.querySelector('.wbtn-appsettings');
-      btn.addEventListener('click', e => {
+      btn?.addEventListener('click', e => {
         e.stopPropagation();
         if (onAppSettings) onAppSettings();
         else Settings.openWindow(appSettings);
@@ -646,8 +661,13 @@ const Desktop = (() => {
     // on mobile, add sidebar toggle if window has .as-sidebar
     if (mobile) _initMobileSidebar(body);
 
+    // fullscreen mode — right swipe panel for close/settings
+    if (mobileFullscreen) _initFullscreenPanel(el, id, appSettings ? onAppSettings : null);
+
     return el;
   }
+
+  let _lastFocusedId = null;
 
   function focusWindow(id) {
     Object.values(windows).forEach(w => {
@@ -661,6 +681,43 @@ const Desktop = (() => {
       windows[id].el.style.zIndex = ++zCounter;
       const tb = taskbarWindows.querySelector(`[data-win-id="${id}"]`);
       if (tb) tb.classList.add('active');
+    }
+    if (id) _lastFocusedId = id;
+    _updateFsActiveWindow(id);
+  }
+
+  function _updateFsActiveWindow(id) {
+    const panel = document.getElementById('fs-taskbar');
+    const mid = panel?.querySelector('#fs-tb-mid');
+    if (!mid) return;
+    mid.querySelectorAll('.fs-tb-win-btn').forEach(b => b.remove());
+    const settingsBtn = panel.querySelector('#fs-tb-settings');
+    if (!id || !windows[id]) { if (settingsBtn) settingsBtn.style.display = 'none'; return; }
+    const hasAppSettings = !!windows[id].el.querySelector('.wbtn-appsettings');
+    if (settingsBtn) settingsBtn.style.display = hasAppSettings ? '' : 'none';
+
+    const closeBtn = document.createElement('button');
+    closeBtn.className = 'fs-tb-btn fs-tb-win-btn fs-tb-close-win';
+    closeBtn.textContent = '✕';
+    closeBtn.title = 'Close';
+    closeBtn.addEventListener('touchend', e => { e.preventDefault(); closeWindow(id); _hideFsTaskbar(); });
+    mid.insertBefore(closeBtn, settingsBtn);
+
+    const minBtn = document.createElement('button');
+    minBtn.className = 'fs-tb-btn fs-tb-win-btn';
+    minBtn.textContent = '—';
+    minBtn.title = 'Minimize';
+    minBtn.addEventListener('touchend', e => { e.preventDefault(); toggleMinimize(id); _hideFsTaskbar(); });
+    mid.insertBefore(minBtn, settingsBtn);
+
+    const appSettingsBtn = windows[id].el.querySelector('.wbtn-appsettings');
+    if (appSettingsBtn) {
+      const settBtn = document.createElement('button');
+      settBtn.className = 'fs-tb-btn fs-tb-win-btn';
+      settBtn.textContent = '⚙';
+      settBtn.title = 'App settings';
+      settBtn.addEventListener('touchend', e => { e.preventDefault(); appSettingsBtn.click(); _hideFsTaskbar(); });
+      mid.insertBefore(settBtn, settingsBtn);
     }
   }
 
@@ -758,6 +815,7 @@ const Desktop = (() => {
     if (isMobile()) {
       const remaining = Object.keys(windows);
       if (remaining.length > 0) focusWindow(remaining[remaining.length - 1]);
+      else _updateFsActiveWindow(null);
     }
   }
 
@@ -1275,6 +1333,7 @@ const Desktop = (() => {
       const res = await fetch('/api/settings');
       window._vosSettings = await res.json();
     } catch (_) { window._vosSettings = {}; }
+    _initFullscreenTaskbar();
     startClock();
     document.addEventListener('mvmos-plugins-loaded', () => renderIcons());
     mvmOS._loadAllPlugins();
@@ -1327,6 +1386,7 @@ const Desktop = (() => {
       const dx = e.changedTouches[0].clientX - _swipeStartX;
       _swipeStartX = null;
       if (Math.abs(dx) < 50) return;
+      if (document.querySelector('.window')) return; // don't swipe pages when a window is open
       if (dx < 0 && _mobilePage === 0) _setMobilePage(1);
       else if (dx > 0 && _mobilePage === 1) _setMobilePage(0);
     }, { passive: true });
@@ -1334,6 +1394,8 @@ const Desktop = (() => {
 
   function _setMobilePage(page) {
     _mobilePage = page;
+    const fsPanel = document.getElementById('fs-taskbar');
+    if (fsPanel) fsPanel.style.display = page === 1 ? 'none' : '';
     const widgetPage = document.getElementById('mobile-widget-page');
     if (!widgetPage) return;
     if (page === 1) {
@@ -1351,42 +1413,246 @@ const Desktop = (() => {
     const sidebar = body.querySelector('.as-sidebar, .fm-places');
     if (!sidebar) return;
     if (body.closest('.window')?.querySelector('.as-mobile-menu-btn')) return; // already added
-    const titlebar = body.closest('.window')?.querySelector('.window-titlebar');
-    if (!titlebar) return;
-    const menuBtn = document.createElement('button');
-    menuBtn.className = 'wbtn as-mobile-menu-btn';
-    menuBtn.title = 'Menu';
-    menuBtn.textContent = '☰';
-    menuBtn.style.cssText = 'display:flex;font-size:1rem;margin-right:4px';
-    titlebar.querySelector('.window-controls').after(menuBtn);
+
+    const win = body.closest('.window');
+    const isFullscreen = win?.classList.contains('window-mobile-fullscreen');
+    const titlebar = win?.querySelector('.window-titlebar');
+
+    if (isFullscreen) {
+      // fullscreen mode — swipe from left edge to open sidebar
+      sidebar.classList.add('mobile-sidebar-fullscreen');
+      let _sidebarSwipeStart = null;
+      body.addEventListener('touchstart', e => {
+        if (e.touches[0].clientX < 24) _sidebarSwipeStart = e.touches[0].clientX;
+        else _sidebarSwipeStart = null;
+      }, { passive: true });
+      body.addEventListener('touchend', e => {
+        if (_sidebarSwipeStart === null) return;
+        const dx = e.changedTouches[0].clientX - _sidebarSwipeStart;
+        _sidebarSwipeStart = null;
+        if (dx > 40) _openSidebar(sidebar, body);
+      }, { passive: true });
+    } else {
+      if (!titlebar) return;
+      const menuBtn = document.createElement('button');
+      menuBtn.className = 'wbtn as-mobile-menu-btn';
+      menuBtn.title = 'Menu';
+      menuBtn.textContent = '☰';
+      menuBtn.style.cssText = 'display:flex;font-size:1rem;margin-right:4px';
+      titlebar.querySelector('.window-controls').after(menuBtn);
+      menuBtn.addEventListener('click', e => {
+        e.stopPropagation();
+        const isOpen = sidebar.classList.toggle('mobile-open');
+        if (isOpen) _openSidebar(sidebar, body);
+        else body.querySelector('.as-sidebar-overlay')?.remove();
+      });
+    }
 
     sidebar.addEventListener('click', e => {
-      if (e.target === sidebar) return; // click on sidebar itself, not a child item
+      if (e.target === sidebar) return;
       sidebar.classList.remove('mobile-open');
       body.querySelector('.as-sidebar-overlay')?.remove();
     });
+  }
 
-    menuBtn.addEventListener('click', e => {
-      e.stopPropagation();
-      const isOpen = sidebar.classList.toggle('mobile-open');
-      if (isOpen) {
-        const overlay = document.createElement('div');
-        overlay.className = 'as-sidebar-overlay';
-        const container = sidebar.parentElement;
-        if (container) { container.style.position = 'relative'; container.appendChild(overlay); }
-        overlay.addEventListener('click', () => {
-          sidebar.classList.remove('mobile-open');
-          overlay.remove();
+  function _initFullscreenTaskbar() {
+    if (!isMobile() || window._vosSettings?.mobile_fullscreen === false) return;
+    if (document.getElementById('fs-taskbar')) return;
+
+    const taskbar = document.getElementById('taskbar');
+    if (taskbar) { taskbar.style.display = 'none'; taskbar.style.height = '0'; taskbar.style.overflow = 'hidden'; }
+    document.body.classList.add('fs-mode');
+
+    // move notif-panel to body so it's visible when taskbar is hidden
+    const notifPanel = document.getElementById('notif-panel');
+    if (notifPanel) {
+      document.body.appendChild(notifPanel);
+      notifPanel.classList.add('fs-notif-panel');
+    }
+
+    const panel = document.createElement('div');
+    panel.id = 'fs-taskbar';
+    panel.className = 'fs-taskbar';
+    panel.innerHTML = `
+      <div class="fs-tb-top">
+        <div class="fs-tb-header">
+          <span class="fs-tb-clock" id="fs-tb-clock"></span>
+          <button class="fs-tb-notif-btn" id="fs-notif-btn">
+            🔔<span id="fs-notif-badge" style="display:none"></span>
+          </button>
+        </div>
+      </div>
+      <div class="fs-tb-mid" id="fs-tb-mid">
+        <button class="fs-tb-btn" id="fs-tb-settings" title="Settings" style="display:none">⚙</button>
+        <div class="fs-tb-apps" id="fs-tb-apps"></div>
+      </div>
+      <div class="fs-tb-bot">
+        <button class="fs-tb-btn fs-tb-start" id="fs-tb-start">⊞</button>
+      </div>
+    `;
+    document.body.appendChild(panel);
+
+    // Clock sync
+    setInterval(() => {
+      const orig = document.getElementById('clock');
+      const el = panel.querySelector('#fs-tb-clock');
+      if (orig && el) el.textContent = orig.textContent;
+    }, 1000);
+    const orig = document.getElementById('clock');
+    const fsClock = panel.querySelector('#fs-tb-clock');
+    if (orig && fsClock) fsClock.textContent = orig.textContent;
+    fsClock?.addEventListener('touchend', e => {
+      e.preventDefault();
+      const c = document.getElementById('clock');
+      if (c) { c.style.display = ''; c.click(); c.style.display = 'none'; }
+    });
+
+    // Notification badge sync
+    const badge = document.getElementById('notif-badge');
+    const fsBadge = panel.querySelector('#fs-notif-badge');
+    if (badge && fsBadge) {
+      fsBadge.style.display = badge.style.display;
+      new MutationObserver(() => { fsBadge.style.display = badge.style.display; })
+        .observe(badge, { attributes: true, attributeFilter: ['style'] });
+    }
+    panel.querySelector('#fs-notif-btn')?.addEventListener('touchend', e => {
+      e.preventDefault();
+      const np = document.getElementById('notif-panel');
+      if (np) np.classList.toggle('open');
+    });
+
+
+    // Apps sync — use icon from windows object
+    function _syncApps() {
+      const fsApps = panel.querySelector('#fs-tb-apps');
+      if (!fsApps) return;
+      fsApps.innerHTML = '';
+      Object.entries(windows).forEach(([wid, w]) => {
+        if (!w) return;
+        const btn = document.createElement('button');
+        btn.className = 'fs-tb-btn fs-tb-app' + (w.minimized ? ' fs-tb-app-min' : '');
+        btn.textContent = w.icon || '□';
+        btn.title = w.title || wid;
+        btn.addEventListener('touchend', e => {
+          e.preventDefault();
+          if (w.minimized) toggleMinimize(wid);
+          focusWindow(wid);
+          _hideFsTaskbar();
         });
-      } else {
-        body.querySelector('.as-sidebar-overlay')?.remove();
+        fsApps.appendChild(btn);
+      });
+    }
+    setInterval(_syncApps, 800);
+
+    // Settings
+    panel.querySelector('#fs-tb-settings')?.addEventListener('touchend', e => {
+      e.preventDefault();
+      Settings.openWindow(); _hideFsTaskbar();
+    });
+
+    panel.querySelector('#fs-tb-start')?.addEventListener('touchend', e => {
+      e.preventDefault();
+      const sb = document.getElementById('start-btn');
+      if (sb) { sb.style.display = ''; sb.click(); sb.style.display = 'none'; }
+    });
+
+    // Show/hide logic:
+    // - No open window → always visible
+    // - Open window → hidden until intentional swipe, stays open until tap outside
+    window._fsPanelManualOpen = false;
+    function _updateVisibility() {
+      const hasWindow = Object.values(windows).some(w => w && !w.minimized);
+      if (!hasWindow) {
+        window._fsPanelManualOpen = false;
+        panel.classList.add('visible');
+      } else if (!window._fsPanelManualOpen && panel.classList.contains('visible')) {
+        panel.classList.remove('visible');
       }
+    }
+    setInterval(_updateVisibility, 500);
+    _updateVisibility();
+
+    let _swipeX = null, _swipeT = null;
+    document.addEventListener('touchstart', e => {
+      if (e.touches[0].clientX > window.innerWidth - 28) {
+        _swipeX = e.touches[0].clientX; _swipeT = Date.now();
+      } else { _swipeX = null; }
+    }, { passive: true });
+    document.addEventListener('touchend', e => {
+      if (_swipeX === null) return;
+      const dx = e.changedTouches[0].clientX - _swipeX;
+      const held = Date.now() - _swipeT;
+      _swipeX = null;
+      if (dx < -40 && held >= 300 && document.querySelector('.window')) _showFsTaskbar();
+    }, { passive: true });
+
+    // tap outside panel to close (only when window is open)
+    let _outsideTouchX = null, _outsideTouchY = null;
+    document.addEventListener('touchstart', e => {
+      _outsideTouchX = e.touches[0].clientX;
+      _outsideTouchY = e.touches[0].clientY;
+    }, { passive: true });
+    document.addEventListener('touchend', e => {
+      if (!panel.classList.contains('visible') || !document.querySelector('.window')) return;
+      const rect = panel.getBoundingClientRect();
+      const x = e.changedTouches[0].clientX;
+      const y = e.changedTouches[0].clientY;
+      if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) return;
+      const dx = Math.abs(x - (_outsideTouchX || 0));
+      const dy = Math.abs(y - (_outsideTouchY || 0));
+      if (dx < 10 && dy < 10) _hideFsTaskbar();
+    }, { passive: true });
+  }
+
+  function _showFsTaskbar() {
+    const panel = document.getElementById('fs-taskbar');
+    if (!panel) return;
+    window._fsPanelManualOpen = true;
+    if (_lastFocusedId && windows[_lastFocusedId]) _updateFsActiveWindow(_lastFocusedId);
+    panel.classList.add('visible');
+  }
+
+  function _hideFsTaskbar() {
+    const panel = document.getElementById('fs-taskbar');
+    if (panel) { window._fsPanelManualOpen = false; panel.classList.remove('visible'); }
+  }
+
+  function _initFullscreenPanel(el, winId, onSettings) {
+    // close/settings buttons are now in the global fs-taskbar panel
+    // nothing per-window needed anymore
+  }
+
+  function _openSidebar(sidebar, body) {
+    sidebar.classList.add('mobile-open');
+    const overlay = document.createElement('div');
+    overlay.className = 'as-sidebar-overlay';
+    const container = sidebar.parentElement;
+    if (container) { container.style.position = 'relative'; container.appendChild(overlay); }
+    overlay.addEventListener('click', () => {
+      sidebar.classList.remove('mobile-open');
+      overlay.remove();
     });
   }
 
   init();
   _initMobilePages();
   _initLongPress();
+  _initGestures();
+  window.addEventListener('settings-changed', e => {
+    if (e.detail?.mobile_fullscreen !== undefined) {
+      const taskbar = document.getElementById('taskbar');
+      const fsPanel = document.getElementById('fs-taskbar');
+      if (e.detail.mobile_fullscreen === false) {
+        if (taskbar) taskbar.style.display = '';
+        fsPanel?.remove();
+      } else {
+        _initFullscreenTaskbar();
+      }
+    }
+  });
+  // init fullscreen taskbar after settings load
+  window.addEventListener('mvmos-settings-ready', () => _initFullscreenTaskbar());
+  if (window._vosSettings) _initFullscreenTaskbar();
 
   // load error reporter after page is ready
   window.addEventListener('load', function() {
@@ -1395,6 +1661,89 @@ const Desktop = (() => {
     s.onload = function() { if (window.ErrorReporter) ErrorReporter.init(); };
     document.head.appendChild(s);
   });
+
+  function _execGestureAction(action) {
+    if (!action) return;
+    const focused = _lastFocusedId && windows[_lastFocusedId] ? _lastFocusedId : Object.keys(windows)[0];
+    switch (action) {
+      case 'close':         if (focused) closeWindow(focused); break;
+      case 'minimize':      if (focused) toggleMinimize(focused); break;
+      case 'switch': {
+        const ids = Object.keys(windows).filter(id => windows[id] && !windows[id].minimized);
+        if (ids.length > 1) {
+          const idx = ids.indexOf(focused);
+          const next = ids[(idx + 1) % ids.length];
+          focusWindow(next);
+        }
+        break;
+      }
+      case 'start': {
+        const sb = document.getElementById('start-btn');
+        if (sb) { sb.style.display = ''; sb.click(); sb.style.display = document.getElementById('fs-taskbar') ? 'none' : ''; }
+        break;
+      }
+      case 'sidebar':       _showFsTaskbar(); break;
+      case 'notifications': {
+        const np = document.getElementById('notif-panel');
+        if (np) np.classList.toggle('open');
+        break;
+      }
+    }
+  }
+
+  function _initGestures() {
+    if (!('ontouchstart' in window) && navigator.maxTouchPoints === 0) return;
+
+    const GESTURES = ['double_tap','triple_tap','2finger_tap','3finger_tap','2finger_swipe_down','2finger_swipe_up'];
+    let _tapCount = 0, _tapTimer = null, _tapFingers = 1;
+    let _touchStartY = null, _touchStartFingers = 0;
+
+    function _getAction(key) {
+      return window._vosSettings?.['gesture_' + key] || '';
+    }
+
+    // Multi-tap detection
+    document.addEventListener('touchstart', e => {
+      _touchStartFingers = e.touches.length;
+      _touchStartY = e.touches[0].clientY;
+    }, { passive: true });
+
+    document.addEventListener('touchend', e => {
+      const fingers = _touchStartFingers;
+      const dy = e.changedTouches[0].clientY - (_touchStartY || 0);
+      const dx = Math.abs(e.changedTouches[0].clientX - (e.changedTouches[0].clientX));
+
+      // Swipe detection (2 fingers)
+      if (fingers === 2 && Math.abs(dy) > 50) {
+        if (dy > 0) { const a = _getAction('2finger_swipe_down'); if (a) { _execGestureAction(a); return; } }
+        else        { const a = _getAction('2finger_swipe_up');   if (a) { _execGestureAction(a); return; } }
+      }
+
+      // Tap detection (2 or 3 fingers — immediate, no timer needed)
+      if (fingers === 2 && Math.abs(dy) < 20) {
+        const a = _getAction('2finger_tap');
+        if (a) { _execGestureAction(a); return; }
+      }
+      if (fingers === 3 && Math.abs(dy) < 20) {
+        const a = _getAction('3finger_tap');
+        if (a) { _execGestureAction(a); return; }
+      }
+
+      // Single finger multi-tap (double/triple)
+      if (fingers !== 1) return;
+      _tapCount++;
+      _tapFingers = 1;
+      clearTimeout(_tapTimer);
+      _tapTimer = setTimeout(() => {
+        if (_tapCount === 2) { const a = _getAction('double_tap'); if (a) _execGestureAction(a); }
+        if (_tapCount >= 3) { const a = _getAction('triple_tap');  if (a) _execGestureAction(a); }
+        _tapCount = 0;
+      }, 300);
+    }, { passive: true });
+
+    // re-read settings on change
+    window.addEventListener('settings-changed', () => {});
+  }
 
   function _initLongPress() {
     if (!('ontouchstart' in window) && navigator.maxTouchPoints === 0) return;

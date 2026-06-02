@@ -211,6 +211,34 @@ const Settings = (() => {
                 <label>${t('display_single_click')}</label>
                 <input type="checkbox" id="s-single-click" ${(d.single_click !== false) ? 'checked' : ''}>
               </div>
+              <div class="settings-row">
+                <label>${t('display_mobile_fullscreen')}</label>
+                <input type="checkbox" id="s-mobile-fullscreen" ${(s.mobile_fullscreen !== false) ? 'checked' : ''}>
+              </div>
+            </div>
+            <div class="settings-section" style="border-top:1px solid var(--border);padding-top:16px">
+              <div class="settings-section-title">${t('display_gestures')}</div>
+              ${[
+                ['double_tap',         t('gesture_double_tap')],
+                ['triple_tap',         t('gesture_triple_tap')],
+                ['2finger_tap',        t('gesture_2finger_tap')],
+                ['3finger_tap',        t('gesture_3finger_tap')],
+                ['2finger_swipe_down', t('gesture_2finger_swipe_down')],
+                ['2finger_swipe_up',   t('gesture_2finger_swipe_up')],
+              ].map(([key, label]) => `
+                <div class="settings-row">
+                  <label>${label}</label>
+                  <select id="s-gesture-${key}" class="s-select" style="width:160px">
+                    <option value="" ${!(s['gesture_'+key]) ? 'selected' : ''}>${t('gesture_action_none')}</option>
+                    <option value="close"         ${s['gesture_'+key]==='close'         ? 'selected' : ''}>${t('gesture_action_close')}</option>
+                    <option value="minimize"      ${s['gesture_'+key]==='minimize'      ? 'selected' : ''}>${t('gesture_action_minimize')}</option>
+                    <option value="switch"        ${s['gesture_'+key]==='switch'        ? 'selected' : ''}>${t('gesture_action_switch')}</option>
+                    <option value="start"         ${s['gesture_'+key]==='start'         ? 'selected' : ''}>${t('gesture_action_start')}</option>
+                    <option value="sidebar"       ${s['gesture_'+key]==='sidebar'       ? 'selected' : ''}>${t('gesture_action_sidebar')}</option>
+                    <option value="notifications" ${s['gesture_'+key]==='notifications' ? 'selected' : ''}>${t('gesture_action_notifications')}</option>
+                  </select>
+                </div>
+              `).join('')}
             </div>
 
           </div>
@@ -453,6 +481,16 @@ const Settings = (() => {
         saveSettings({ single_click: singleClick.checked });
       });
     }
+    const mobileFullscreen = body.querySelector('#s-mobile-fullscreen');
+    if (mobileFullscreen) {
+      mobileFullscreen.addEventListener('change', () => {
+        saveSettings({ mobile_fullscreen: mobileFullscreen.checked });
+      });
+    }
+    ['double_tap','triple_tap','2finger_tap','3finger_tap','2finger_swipe_down','2finger_swipe_up'].forEach(key => {
+      const sel = body.querySelector(`#s-gesture-${key}`);
+      if (sel) sel.addEventListener('change', () => saveSettings({ ['gesture_'+key]: sel.value }));
+    });
 
     // Regional — auto-save on any change (debounced for selects)
     let regionalTimer;

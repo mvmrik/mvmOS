@@ -1101,6 +1101,10 @@ html, body {
     height: calc(100vh - 44px) !important;
     max-width: 100vw !important;
     max-height: calc(100vh - 44px) !important;
+  }
+  .window.window-mobile-fullscreen {
+    height: 100vh !important;
+    max-height: 100vh !important;
     border-radius: 0;
     z-index: 8000 !important;
     overflow: hidden !important;
@@ -1109,6 +1113,99 @@ html, body {
     overflow: hidden !important;
     height: calc(100% - 36px) !important;
   }
+  .window.window-mobile-fullscreen .window-body {
+    height: 100% !important;
+  }
+  .mobile-sidebar-fullscreen {
+    position: absolute !important;
+    left: -100% !important;
+    top: 0 !important;
+    height: 100% !important;
+    z-index: 50 !important;
+    transition: left .25s ease !important;
+    box-shadow: 4px 0 20px rgba(0,0,0,.4);
+  }
+  .mobile-sidebar-fullscreen.mobile-open {
+    left: 0 !important;
+  }
+  /* Fullscreen taskbar — right side panel */
+  .fs-taskbar {
+    position: fixed; top: 0; right: -90px; width: 80px; height: 100vh;
+    background: rgba(0,0,0,.75); backdrop-filter: blur(16px);
+    display: flex; flex-direction: column;
+    z-index: 9450; transition: right .25s ease;
+    border-left: 1px solid rgba(255,255,255,.1);
+    box-sizing: border-box;
+  }
+  .fs-taskbar.visible { right: 0; }
+  #notif-panel.fs-notif-panel { top: 10px !important; bottom: auto !important; right: 84px !important; left: 4px !important; width: auto !important; max-width: calc(100vw - 92px) !important; z-index: 10000 !important; }
+  body.fs-mode #desktop { bottom: 0 !important; }
+  body.fs-mode #mobile-widget-page { bottom: 0 !important; }
+  .fs-tb-top {
+    flex: 0 0 auto; padding: 8px 4px 6px;
+    border-bottom: 1px solid rgba(255,255,255,.1);
+    display: flex; flex-direction: column; gap: 4px;
+  }
+  .fs-tb-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 4px; gap: 4px;
+  }
+  .fs-tb-clock {
+    font-size: .75rem; font-weight: 700; color: #fff; white-space: nowrap;
+  }
+  .fs-tb-notif-btn {
+    background: none; border: none; color: #fff; font-size: .75rem;
+    cursor: pointer; padding: 0; position: relative; flex-shrink: 0;
+  }
+  #fs-notif-badge {
+    position: absolute; top: 0; right: 0;
+    background: #f38ba8; border-radius: 50%; width: 6px; height: 6px;
+  }
+  .fs-tb-widgets {
+    display: flex; flex-direction: column; gap: 2px; width: 100%;
+    padding: 0; box-sizing: border-box;
+  }
+  .fs-tb-widgets > * { width: 100% !important; min-width: 0 !important; box-sizing: border-box !important; max-width: 100% !important; }
+  .fs-tb-mid {
+    flex: 1; padding: 8px 4px; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 8px; overflow-y: auto;
+  }
+  .fs-tb-bot {
+    flex: 0 0 auto; padding: 8px 4px;
+    border-top: 1px solid rgba(255,255,255,.1);
+    display: flex; justify-content: center;
+  }
+  .fs-tb-btn {
+    width: 52px; height: 52px; border-radius: 12px;
+    border: 1px solid rgba(255,255,255,.2);
+    background: rgba(255,255,255,.1); color: #fff;
+    font-size: 1.2rem; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    position: relative; flex-shrink: 0;
+  }
+  .fs-tb-close-win { border-color: rgba(255,80,80,.5); background: rgba(255,80,80,.15); }
+  .fs-tb-start { background: rgba(42,110,224,.3); border-color: rgba(42,110,224,.5); }
+  .fs-tb-apps { display: flex; flex-direction: column; gap: 6px; align-items: center; width: 100%; }
+  .fs-tb-app { font-size: 1.1rem; }
+  .fs-tb-app-min { opacity: .45; }
+
+  .win-fs-panel {
+    position: absolute; top: 0; right: -120px; width: 120px; height: 100%;
+    background: rgba(0,0,0,.65); backdrop-filter: blur(10px);
+    display: flex; flex-direction: column; align-items: center;
+    justify-content: center; gap: 20px; z-index: 100;
+    transition: right .25s ease;
+  }
+  .win-fs-panel.visible { right: 0; }
+  .win-fs-btn {
+    width: 64px; height: 64px; border-radius: 50%;
+    border: 2px solid rgba(255,255,255,.3);
+    background: rgba(255,255,255,.1); color: #fff;
+    font-size: 1.4rem; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .win-fs-close { border-color: rgba(255,80,80,.6); }
+  .win-fs-settings { border-color: rgba(255,255,255,.3); }
   .window.window-mobile .window-body .as-main {
     overflow-y: auto;
     height: 100%;
