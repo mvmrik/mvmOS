@@ -220,7 +220,7 @@ async def login(request: Request):
         conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('last_login_user', ?)", (username,))
 
     resp = RedirectResponse(url="/", status_code=303)
-    resp.set_cookie("session", token, httponly=True, samesite="lax")
+    resp.set_cookie("session", token, httponly=True, samesite="lax", max_age=30*24*3600)
     return resp
 
 

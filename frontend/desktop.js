@@ -824,6 +824,10 @@ const Desktop = (() => {
     const w = windows[id];
     w.minimized = !w.minimized;
     w.el.classList.toggle('minimized', w.minimized);
+    if (w.minimized) {
+      const hasVisible = Object.values(windows).some(x => x && !x.minimized);
+      _updateFsActiveWindow(hasVisible ? id : null);
+    }
   }
 
   function toggleMaximize(el) {
