@@ -1061,11 +1061,11 @@ var mvmOS = (() => {
     notify,
     storage,
     multiplayer: {
-      async createRoom(gameId) {
+      async createRoom(gameId, opts = {}) {
         const res = await fetch('/api/multiplayer/room', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ game_id: gameId }),
+          body: JSON.stringify({ game_id: gameId, ...opts }),
         });
         const data = await res.json();
         const origin = location.origin;
