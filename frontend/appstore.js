@@ -712,7 +712,7 @@ const AppStore = (() => {
     ov.innerHTML = `
       <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:24px;max-width:380px;width:90%;box-shadow:var(--shadow)">
         <div style="font-size:1.1rem;font-weight:700;margin-bottom:8px">🔄 ${t('backend_restart_title')}</div>
-        <div style="font-size:.85rem;color:var(--text-dim);margin-bottom:20px">${t('backend_restart_msg')}</div>
+        <div id="as-restart-msg" style="font-size:.85rem;color:var(--text-dim);margin-bottom:20px">${t('backend_restart_msg')}</div>
         <div style="display:flex;gap:8px;justify-content:flex-end">
           <button id="as-restart-later" class="s-btn s-btn-sm">${t('backend_restart_later')}</button>
           <button id="as-restart-now" class="s-btn s-btn-sm s-btn-primary">${t('backend_restart_now')}</button>
@@ -722,8 +722,15 @@ const AppStore = (() => {
     document.body.appendChild(ov);
     ov.querySelector('#as-restart-later').addEventListener('click', () => ov.remove());
     ov.querySelector('#as-restart-now').addEventListener('click', async () => {
+      const res = await fetch('/api/system/power/restart', { method: 'POST' });
+      if (!res.ok) {
+        // non-root session can't restart mvmOS — show why instead of failing silently
+        ov.querySelector('#as-restart-msg').textContent = t('backend_restart_need_root');
+        ov.querySelector('#as-restart-now').style.display = 'none';
+        ov.querySelector('#as-restart-later').textContent = t('close');
+        return;
+      }
       ov.remove();
-      await fetch('/api/system/power/restart', { method: 'POST' });
       window._mvmosShowRestartOverlay?.();
     });
   }

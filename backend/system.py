@@ -4,9 +4,21 @@ import subprocess
 from fastapi import APIRouter, Depends, BackgroundTasks, HTTPException
 from pydantic import BaseModel
 from fastapi.responses import JSONResponse, StreamingResponse
-from .auth import get_current_session
+from .auth import get_current_session, require_root_session
 
 router = APIRouter(prefix="/api/system", tags=["system"])
+
+
+def _as_user(user: str, cmd: list) -> list:
+    """Wrap a command so it runs as `user` (the session's effective_user).
+
+    uvicorn runs as root, so runuser drops to the target user. For a root
+    session this is a no-op (still root); for a non-root session privileged
+    commands then fail with permission denied, and the caller's sudo_password
+    path can escalate — same model as the core terminal."""
+    if os.geteuid() != 0:
+        return ["sudo", "runuser", "-u", user, "--"] + cmd
+    return ["runuser", "-u", user, "--"] + cmd
 
 REPO_DIR = os.path.join(os.path.dirname(__file__), "..")
 VERSION_FILE = os.path.join(REPO_DIR, "version.txt")
@@ -93,7 +105,7 @@ async def check_update(session=Depends(get_current_session)):
 
 
 @router.post("/update")
-async def do_update(session=Depends(get_current_session)):
+async def do_update(session=Depends(require_root_session)):
     async def generate():
         import tempfile, tarfile, shutil, httpx
         repo_dir = os.path.abspath(REPO_DIR)
@@ -181,7 +193,7 @@ def _restart():
 
 
 @router.post("/power/restart")
-async def power_restart(bg: BackgroundTasks, session=Depends(get_current_session)):
+async def power_restart(bg: BackgroundTasks, session=Depends(require_root_session)):
     bg.add_task(_restart)
     return JSONResponse({"ok": True})
 
@@ -189,7 +201,7 @@ async def power_restart(bg: BackgroundTasks, session=Depends(get_current_session
 
 
 @router.post("/power/stop")
-async def power_stop(bg: BackgroundTasks, session=Depends(get_current_session)):
+async def power_stop(bg: BackgroundTasks, session=Depends(require_root_session)):
     bg.add_task(_restart)
     return JSONResponse({"ok": True})
 
@@ -417,7 +429,9 @@ async def kill_process(body: KillRequest, session=Depends(get_current_session)):
         proc = subprocess.run(cmd, input=body.sudo_password + "\n",
                               capture_output=True, text=True)
     else:
-        proc = subprocess.run(cmd, capture_output=True, text=True)
+        # run as the logged-in user — non-root can only signal their own processes
+        proc = subprocess.run(_as_user(session["effective_user"], cmd),
+                              capture_output=True, text=True)
 
     if proc.returncode != 0:
         err = proc.stderr.strip()
@@ -519,7 +533,10 @@ async def service_action(body: ServiceRequest, session=Depends(get_current_sessi
             capture_output=True, text=True,
         )
     else:
-        proc = subprocess.run(cmd, capture_output=True, text=True)
+        # run as the logged-in user — non-root falls through to permission_denied,
+        # and the UI re-tries with sudo_password
+        proc = subprocess.run(_as_user(session["effective_user"], cmd),
+                              capture_output=True, text=True)
 
     if proc.returncode != 0:
         err = proc.stderr.strip() or proc.stdout.strip()

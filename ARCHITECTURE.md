@@ -43,6 +43,25 @@
 
 ---
 
+## Privilege Model
+
+uvicorn runs as root so it can act as any Linux user. Each session carries an
+`effective_user` (the user who logged in). The security rule: **a session may only
+do what its `effective_user` is allowed to do on the host.**
+
+- Shell/file operations run as the user via `runuser` — `backend/terminal.py`,
+  `backend/files.py` (`run_as`), `backend/system.py` (`_as_user`). For a root
+  session this is a no-op; for a non-root session, privileged commands fail with
+  permission denied, and the caller's optional `sudo_password` path can escalate
+  (same as typing `sudo` in a real shell).
+- Operations on mvmOS / the host itself that have no per-user form (self-update,
+  service restart of mvmOS, power) require `Depends(require_root_session)` in
+  `backend/auth.py` — non-root sessions get 403.
+- App backends follow the same rule (see App Backends).
+
+Not yet converted: `POST /api/plugins/{id}/db` runs SQL in-process as root and is
+shared across apps — app-level DB isolation is a separate task.
+
 ## mvmOS SDK (frontend/mvmos.js)
 
 Global `mvmOS` object — available to all apps.
@@ -159,6 +178,7 @@ Opens system settings. Tabs: `'apps'`, `'about'`, `'widgets'`, `'themes'`.
 - Must define a `router = APIRouter(...)` at module level
 - All endpoints must require `session=Depends(get_current_session)`
 - Only `backend.py` is installed — no other Python files are allowed
+- **Shell commands must run as the session's `effective_user`** (see Privilege Model) — never as the root uvicorn process
 
 ```python
 import sys

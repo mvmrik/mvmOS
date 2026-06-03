@@ -788,10 +788,19 @@ const Settings = (() => {
         } else {
           statusEl.style.color = '#f1fa8c';
           statusEl.textContent = t('about_new_version', { local: d.local, remote: d.remote });
-          updateBtn.style.display = '';
+          // only the root user can apply an update (system self-update runs as root)
+          if (window._effectiveUser === 'root') {
+            updateBtn.style.display = '';
+          } else {
+            updateBtn.style.display = 'none';
+            outputEl.style.display = 'block';
+            outputEl.style.color = 'var(--text-dim)';
+            outputEl.textContent = t('about_need_root');
+          }
           if (d.notes) {
             outputEl.style.display = 'block';
-            outputEl.textContent = d.notes;
+            outputEl.style.color = '';
+            outputEl.textContent = (window._effectiveUser === 'root' ? '' : t('about_need_root') + '\n\n') + d.notes;
           }
         }
       } catch (_) {
@@ -812,6 +821,13 @@ const Settings = (() => {
       statusEl.textContent = t('about_updating');
 
       const res = await fetch('/api/system/update', { method: 'POST' });
+      if (!res.ok) {
+        // 403 = non-root session; surface it instead of hanging on an empty stream
+        statusEl.style.color = '#f38ba8';
+        statusEl.textContent = res.status === 403 ? t('about_update_no_perm') : t('about_update_failed');
+        updateBtn.disabled = false;
+        return;
+      }
       const reader = res.body.getReader();
       const dec = new TextDecoder();
       let buf = '';

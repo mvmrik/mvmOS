@@ -154,7 +154,8 @@ async def get_places(session=Depends(get_current_session)):
 async def list_dir(path: str = "/", as_root: bool = False, session=Depends(get_current_session)):
     eu = session["effective_user"]
     real = safe_path(path, home_for(eu))
-    check_user = "root" if as_root else eu
+    # only an actual root session may browse as root — otherwise stay as the user
+    check_user = "root" if (as_root and eu == "root") else eu
     if run_as(check_user, ["test", "-d", real]).returncode != 0:
         raise HTTPException(status_code=404, detail="Not a directory")
     try:

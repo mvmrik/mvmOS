@@ -10,6 +10,7 @@ apps/
 widgets/
 themes/
 CLAUDE.md
+TODO.md
 *.db
 backend/app-backends/
 error-reports/

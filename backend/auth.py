@@ -39,6 +39,18 @@ def get_current_session(request: Request):
     return {"token": row["token"], "effective_user": row["effective_user"]}
 
 
+def require_root_session(session=Depends(get_current_session)):
+    """Dependency for actions that only the root mvmOS user may perform.
+
+    These are operations on mvmOS itself / the host (service restart, self-update)
+    that have no per-user equivalent — a non-root session must not be able to run
+    them. Commands that DO have a per-user form should instead run via runuser as
+    session['effective_user'] (see backend/terminal.py, backend/files.py)."""
+    if session.get("effective_user") != "root":
+        raise HTTPException(status_code=403, detail="Root privileges required")
+    return session
+
+
 def verify_linux_password(username: str, password: str) -> bool:
     if os.geteuid() == 0:
         try:
