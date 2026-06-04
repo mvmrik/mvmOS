@@ -393,6 +393,7 @@ window._i18n = {
   'sm_custom':                    '📌 Quick Access',
   'sm_show_last':                 'Show last',
   'sm_hidden':                    'Hidden',
+  'sm_opacity':                   'Taskbar opacity',
   'sm_dedup':                     'Hide duplicates already shown above',
   'sm_add_app':                   '+ Add application…',
 

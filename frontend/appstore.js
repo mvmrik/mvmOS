@@ -471,20 +471,20 @@ const AppStore = (() => {
   // ── App Installed (all installed mvmOS apps) ──────────────────────────────
   async function loadAppInstalled(body) {
     const list = body.querySelector('#as-app-installed-list');
+    const pendingAppId = body._as?._pendingAppSettings;
+    if (pendingAppId) delete body._as._pendingAppSettings;
     list.innerHTML = `<div class="as-loading">${t('loading')}</div>`;
     const res = await fetch('/api/plugins');
     const plugins = await res.json();
+    if (pendingAppId) {
+      const app = plugins.find(p => p.id === pendingAppId);
+      if (app) { _openAppSettings(body, pendingAppId, app); return; }
+    }
     if (!plugins.length) {
       list.innerHTML = `<div class="as-loading">${t('appstore_no_installed')}</div>`;
       return;
     }
-    const pendingAppId = body._as?._pendingAppSettings;
-    if (pendingAppId) delete body._as._pendingAppSettings;
     renderMvmosApps(list, plugins.map(p => ({ ...p, installed: true })), body);
-    if (pendingAppId) {
-      const app = plugins.find(p => p.id === pendingAppId);
-      if (app) _openAppSettings(body, pendingAppId, app);
-    }
   }
 
   // ── My Apps (custom stores only) ──────────────────────────────────────────
@@ -753,18 +753,14 @@ const AppStore = (() => {
 
     main.innerHTML = `
       <div style="padding:10px 14px;display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--border)">
-        <button class="s-btn s-btn-sm" id="as-app-settings-back">← ${t('as_back')}</button>
+        <button class="s-btn s-btn-sm" id="as-app-settings-back">${t('as_back')}</button>
         <span style="font-weight:600;font-size:.9rem">${def.icon || ''} ${def.name} — ${t('wstore_settings_title')}</span>
+        <span id="as-app-settings-saved" style="font-size:.75rem;color:var(--accent);margin-left:auto;opacity:0;transition:opacity .3s">${t('users_saved')}</span>
       </div>
-      <div id="as-app-settings-content" style="padding:14px;display:flex;flex-direction:column;gap:10px"></div>
-      <div style="padding:10px 14px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end">
-        <button class="s-btn s-btn-sm" id="as-app-settings-cancel">${t('as_cancel_btn')}</button>
-        <button class="s-btn s-btn-sm" id="as-app-settings-save">${t('wstore_settings_save')}</button>
-      </div>
+      <div id="as-app-settings-content" style="padding:14px;display:flex;flex-direction:column;gap:10px;overflow-y:auto;flex:1"></div>
     `;
 
     const content = main.querySelector('#as-app-settings-content');
-    const inputs = {};
     settings.forEach(s => {
       const val = saved[s.key] ?? s.default ?? '';
       const row = document.createElement('div');
@@ -804,26 +800,35 @@ const AppStore = (() => {
       content.appendChild(trayWrap);
     }
 
-    main.querySelector('#as-app-settings-back').addEventListener('click', () => { main.innerHTML = prev; });
-    main.querySelector('#as-app-settings-cancel').addEventListener('click', () => { main.innerHTML = prev; });
-    main.querySelector('#as-app-settings-save').addEventListener('click', async () => {
+    const savedIndicator = main.querySelector('#as-app-settings-saved');
+    let _saveTimer = null;
+    const doSave = async () => {
       for (const s of settings) {
         const el = main.querySelector(`[data-key="${s.key}"]`);
         if (!el) continue;
         const val = s.type === 'checkbox' ? el.checked : (s.type === 'number' ? Number(el.value) : el.value);
         await db.run('INSERT OR REPLACE INTO cfg (key,value) VALUES (?,?)', [s.key, JSON.stringify(val)]);
       }
-      // save tray setting if present
       const trayCb = main.querySelector('[data-key="close_to_tray"]');
       if (trayCb) await db.run('INSERT OR REPLACE INTO cfg (key,value) VALUES (?,?)', ['close_to_tray', JSON.stringify(trayCb.checked)]);
-      // let the app save its extra settings too
       const def3 = mvmOS._apps?.[appId];
-      if (typeof def3?.saveSettingsExtra === 'function') {
-        await def3.saveSettingsExtra(main);
-      }
+      if (typeof def3?.saveSettingsExtra === 'function') await def3.saveSettingsExtra(main);
       window.dispatchEvent(new CustomEvent('settings-changed', { detail: { app: appId } }));
-      main.innerHTML = prev;
+      savedIndicator.style.opacity = '1';
+      clearTimeout(_saveTimer);
+      _saveTimer = setTimeout(() => { savedIndicator.style.opacity = '0'; }, 1500);
+    };
+
+    content.addEventListener('change', doSave);
+    content.addEventListener('input', e => {
+      if (e.target.matches('input[type="text"], input[type="password"], input[type="number"], textarea')) {
+        clearTimeout(_saveTimer);
+        _saveTimer = setTimeout(doSave, 600);
+      }
     });
+
+    const goBack = () => { main.innerHTML = prev; if (main.children.length <= 1) loadAppInstalled(body); };
+    main.querySelector('#as-app-settings-back').addEventListener('click', goBack);
   }
 
   // ── Linux packages ────────────────────────────────────────────────────────

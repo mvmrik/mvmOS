@@ -643,7 +643,7 @@ const Desktop = (() => {
     el.style.zIndex = zCounter;
     focusWindow(id);
 
-    windows[id] = { el, title, icon: icon || '📦', minimized: false, origStyle: null, closeToTray };
+    windows[id] = { el, title, icon: icon || '📦', minimized: false, origStyle: null, closeToTray, onAppSettings: appSettings ? (onAppSettings || null) : null };
 
     // taskbar button
     const tbItem = document.createElement('div');
@@ -692,9 +692,9 @@ const Desktop = (() => {
     if (!mid) return;
     mid.querySelectorAll('.fs-tb-win-btn').forEach(b => b.remove());
     const settingsBtn = panel.querySelector('#fs-tb-settings');
-    if (!id || !windows[id]) { if (settingsBtn) settingsBtn.style.display = 'none'; return; }
-    const hasAppSettings = !!windows[id].el.querySelector('.wbtn-appsettings');
-    if (settingsBtn) settingsBtn.style.display = hasAppSettings ? '' : 'none';
+    if (!id || !windows[id] || _trayItems[id]) { if (settingsBtn) settingsBtn.style.display = 'none'; return; }
+    if (settingsBtn) settingsBtn.style.display = 'none';
+    const winOnAppSettings = windows[id].onAppSettings || (windows[id].el.querySelector('.wbtn-appsettings') ? () => windows[id].el.querySelector('.wbtn-appsettings').click() : null);
 
     const closeBtn = document.createElement('button');
     closeBtn.className = 'fs-tb-btn fs-tb-win-btn fs-tb-close-win';
@@ -710,13 +710,12 @@ const Desktop = (() => {
     minBtn.addEventListener('touchend', e => { e.preventDefault(); toggleMinimize(id); _hideFsTaskbar(); });
     mid.insertBefore(minBtn, settingsBtn);
 
-    const appSettingsBtn = windows[id].el.querySelector('.wbtn-appsettings');
-    if (appSettingsBtn) {
+    if (winOnAppSettings) {
       const settBtn = document.createElement('button');
       settBtn.className = 'fs-tb-btn fs-tb-win-btn';
       settBtn.textContent = '⚙';
       settBtn.title = 'App settings';
-      settBtn.addEventListener('touchend', e => { e.preventDefault(); appSettingsBtn.click(); _hideFsTaskbar(); });
+      settBtn.addEventListener('touchend', e => { e.preventDefault(); winOnAppSettings(); _hideFsTaskbar(); });
       mid.insertBefore(settBtn, settingsBtn);
     }
   }
@@ -770,6 +769,7 @@ const Desktop = (() => {
     w.el.style.display = 'none';
     taskbarWindows.querySelector(`[data-win-id="${id}"]`)?.remove();
     _renderTray();
+    _updateFsActiveWindow(null);
   }
 
   function restoreFromTray(id) {
@@ -1539,8 +1539,8 @@ const Desktop = (() => {
         btn.title = w.title || wid;
         btn.addEventListener('touchend', e => {
           e.preventDefault();
-          if (w.minimized) toggleMinimize(wid);
-          focusWindow(wid);
+          if (_trayItems[wid]) restoreFromTray(wid);
+          else { if (w.minimized) toggleMinimize(wid); focusWindow(wid); }
           _hideFsTaskbar();
         });
         fsApps.appendChild(btn);

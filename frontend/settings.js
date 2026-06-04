@@ -947,6 +947,7 @@ const Settings = (() => {
 
   function saveStartMenuPrefs(prefs) {
     localStorage.setItem(SM_KEY, JSON.stringify(prefs));
+    _applyStartMenuOpacity(prefs.opacity ?? 80);
     window.dispatchEvent(new CustomEvent('startmenu-changed', { detail: prefs }));
   }
 
@@ -956,7 +957,26 @@ const Settings = (() => {
       recent: 0,
       frequent: 0,
       custom: [],
+      opacity: 80,
     };
+  }
+
+  function _applyStartMenuOpacity(opacity) {
+    const bar = document.getElementById('taskbar');
+    if (!bar) return;
+    bar.style.opacity = '';
+    const tmp = document.createElement('div');
+    tmp.style.cssText = 'position:fixed;left:-9999px;width:1px;height:1px;background:var(--taskbar)';
+    document.body.appendChild(tmp);
+    const bg = getComputedStyle(tmp).backgroundColor;
+    document.body.removeChild(tmp);
+    const m = bg.match(/\d+/g);
+    if (m && m.length >= 3) {
+      const rgba = `rgba(${m[0]},${m[1]},${m[2]},${Number(opacity)/100})`;
+      bar.style.background = rgba;
+      const fsBar = document.getElementById('fs-taskbar');
+      if (fsBar) fsBar.style.background = rgba;
+    }
   }
 
   function renderStartMenu(body) {
@@ -972,7 +992,16 @@ const Settings = (() => {
     }
 
     function _draw() {
-      panel.innerHTML = `<div style="padding:4px 0">` + prefs.order.map((blockId, idx) => {
+      const opacity = prefs.opacity ?? 80;
+      panel.innerHTML = `<div style="padding:4px 0">
+        <div style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:10px 14px;margin-bottom:10px">
+          <div style="font-weight:600;font-size:.84rem;margin-bottom:10px">${t('sm_opacity') || 'Background opacity'}</div>
+          <div style="display:flex;align-items:center;gap:10px">
+            <input type="range" id="sm-opacity-slider" min="10" max="100" step="5" value="${opacity}" style="flex:1">
+            <span id="sm-opacity-val" style="font-size:.82rem;color:var(--text-dim);min-width:36px;text-align:right">${opacity}%</span>
+          </div>
+        </div>
+      ` + prefs.order.map((blockId, idx) => {
         const isFirst = idx === 0, isLast = idx === prefs.order.length - 1;
         let inner = '';
 
@@ -1054,6 +1083,18 @@ const Settings = (() => {
           if (sel.value) { prefs.custom.push(sel.value); _saveAndRedraw(); }
         });
       });
+      const slider = panel.querySelector('#sm-opacity-slider');
+      const valEl  = panel.querySelector('#sm-opacity-val');
+      if (slider) {
+        slider.addEventListener('input', () => {
+          valEl.textContent = slider.value + '%';
+          _applyStartMenuOpacity(slider.value);
+        });
+        slider.addEventListener('change', () => {
+          prefs.opacity = parseInt(slider.value);
+          saveStartMenuPrefs(prefs);
+        });
+      }
     }
 
     _draw();
@@ -1212,5 +1253,5 @@ const Settings = (() => {
     });
   }
 
-  return { openWindow, get, initDisplay, loadFMPrefs, loadStartMenuPrefs, defaultStartMenuPrefs, initScreenSaver };
+  return { openWindow, get, initDisplay, loadFMPrefs, loadStartMenuPrefs, defaultStartMenuPrefs, initScreenSaver, applyStartMenuOpacity: _applyStartMenuOpacity };
 })();

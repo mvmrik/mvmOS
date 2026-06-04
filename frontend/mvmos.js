@@ -125,6 +125,7 @@ var mvmOS = (() => {
     const startMenu = document.getElementById('start-menu');
     if (!startMenu) return;
     const prefs = Settings.loadStartMenuPrefs?.() || Settings.defaultStartMenuPrefs?.() || { order: ['recent','frequent','custom'], recent: 0, frequent: 0, custom: [] };
+    Settings.applyStartMenuOpacity?.(prefs.opacity ?? 80);
 
     // fetch recent/frequent from API if needed
     let recentApps = [], frequentApps = [];
