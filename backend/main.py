@@ -93,7 +93,7 @@ async def auth_middleware(request: Request, call_next):
         if path == prefix or path.startswith(prefix + "/"):
             return await call_next(request)
 
-    if path in public or path.startswith("/api/scheduler/") or path.startswith("/static") or path.startswith("/pub/") or path.startswith("/api/multiplayer/") or path.endswith((".js", ".css", ".ico", ".png", ".svg", ".woff", ".woff2", ".webmanifest")):
+    if path in public or path.startswith("/api/scheduler/") or path.startswith("/static") or path.startswith("/pub/") or path.startswith("/api/pub/") or path.startswith("/api/multiplayer/") or path.endswith((".js", ".css", ".ico", ".png", ".svg", ".woff", ".woff2", ".webmanifest")):
         return await call_next(request)
     token = request.cookies.get("session")
     if not token:
