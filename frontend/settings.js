@@ -788,19 +788,11 @@ const Settings = (() => {
         } else {
           statusEl.style.color = '#f1fa8c';
           statusEl.textContent = t('about_new_version', { local: d.local, remote: d.remote });
-          // only the root user can apply an update (system self-update runs as root)
-          if (window._effectiveUser === 'root') {
-            updateBtn.style.display = '';
-          } else {
-            updateBtn.style.display = 'none';
-            outputEl.style.display = 'block';
-            outputEl.style.color = 'var(--text-dim)';
-            outputEl.textContent = t('about_need_root');
-          }
+          updateBtn.style.display = '';
           if (d.notes) {
             outputEl.style.display = 'block';
             outputEl.style.color = '';
-            outputEl.textContent = (window._effectiveUser === 'root' ? '' : t('about_need_root') + '\n\n') + d.notes;
+            outputEl.textContent = d.notes;
           }
         }
       } catch (_) {
@@ -815,6 +807,8 @@ const Settings = (() => {
     doCheck(true);
 
     updateBtn.addEventListener('click', async () => {
+      const ok = await mvmOS.requireRoot(t('about_system_update'), t('about_new_version', { local: '', remote: '' }).trim());
+      if (!ok) return;
       updateBtn.disabled = true;
       outputEl.style.display = 'block';
       outputEl.textContent = '';

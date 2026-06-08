@@ -450,4 +450,10 @@ window._i18n = {
   'uninstall_run_cmd':            'Изпълни тази команда в терминала за деинсталиране на mvmOS:',
   'uninstall_wrong_password':     'Грешна парола',
   'uninstall_error':              'Грешка',
+  'confirm':                      'Потвърди',
+  'require_root_title':           'Необходим е root',
+  'require_root_password':        'Root парола',
+  'require_root_ph':              'Въведи root парола…',
+  'require_root_required':        'Паролата е задължителна',
+  'require_root_wrong':           'Грешна root парола',
 };

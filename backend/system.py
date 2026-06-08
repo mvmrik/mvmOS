@@ -105,7 +105,7 @@ async def check_update(session=Depends(get_current_session)):
 
 
 @router.post("/update")
-async def do_update(session=Depends(require_root_session)):
+async def do_update(session=Depends(get_current_session)):
     async def generate():
         import tempfile, tarfile, shutil, httpx
         repo_dir = os.path.abspath(REPO_DIR)

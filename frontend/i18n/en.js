@@ -448,4 +448,10 @@ window._i18n = {
   'uninstall_run_cmd':            'Run this command in a terminal to uninstall mvmOS:',
   'uninstall_wrong_password':     'Wrong password',
   'uninstall_error':              'Error',
+  'confirm':                      'Confirm',
+  'require_root_title':           'Root required',
+  'require_root_password':        'Root password',
+  'require_root_ph':              'Enter root password…',
+  'require_root_required':        'Password required',
+  'require_root_wrong':           'Wrong root password',
 };

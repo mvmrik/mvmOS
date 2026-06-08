@@ -652,6 +652,12 @@ const AppStore = (() => {
       });
       row.querySelector('.as-mvmos-remove')?.addEventListener('click', async e => {
         const btn = e.target;
+        const appLabel = btn.dataset.name || btn.dataset.id;
+        const confirmed = await mvmOS.requireRoot(
+          t('appstore_remove'),
+          `"${appLabel}" ${t('appstore_backend_warn')}`
+        );
+        if (!confirmed) return;
         btn.disabled = true; btn.textContent = t('um_removing');
         await fetch(`/api/plugins/${btn.dataset.id}`, { method: 'DELETE' });
         mvmOS._removeFromStartMenu(btn.dataset.id);
@@ -665,45 +671,10 @@ const AppStore = (() => {
   }
 
   function _backendConfirmDialog(body, appName) {
-    return new Promise(resolve => {
-      const ov = document.createElement('div');
-      ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;';
-      ov.innerHTML = `
-        <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:24px;max-width:400px;width:90%;box-shadow:var(--shadow)">
-          <div style="font-size:1.1rem;font-weight:700;margin-bottom:8px">⚠️ ${t('appstore_backend_title')}</div>
-          <div style="font-size:.85rem;color:var(--text-dim);margin-bottom:6px">"${appName}" ${t('appstore_backend_msg')}</div>
-          <div style="font-size:.8rem;color:#f38ba8;margin-bottom:16px">${t('appstore_backend_warn')}</div>
-          <label style="font-size:.82rem;color:var(--text-dim);display:block;margin-bottom:4px">${t('appstore_backend_password')}</label>
-          <input type="password" id="as-backend-pw" style="width:100%;box-sizing:border-box;padding:7px 10px;border:1px solid var(--border);border-radius:4px;background:var(--surface2);color:var(--text);font-size:.85rem;margin-bottom:6px" placeholder="${t('appstore_backend_password_ph')}">
-          <div id="as-backend-err" style="font-size:.78rem;color:#f38ba8;min-height:16px;margin-bottom:12px"></div>
-          <div style="display:flex;gap:8px;justify-content:flex-end">
-            <button id="as-backend-cancel" class="s-btn s-btn-sm">${t('cancel')}</button>
-            <button id="as-backend-ok" class="s-btn s-btn-sm s-btn-primary">${t('appstore_install')}</button>
-          </div>
-        </div>
-      `;
-      document.body.appendChild(ov);
-      const pwInput = ov.querySelector('#as-backend-pw');
-      const errEl = ov.querySelector('#as-backend-err');
-      pwInput.focus();
-
-      ov.querySelector('#as-backend-cancel').addEventListener('click', () => { ov.remove(); resolve(false); });
-      const doConfirm = async () => {
-        const pw = pwInput.value;
-        if (!pw) { errEl.textContent = t('appstore_backend_password_required'); return; }
-        const okBtn = ov.querySelector('#as-backend-ok');
-        okBtn.disabled = true; okBtn.textContent = '…';
-        const res = await fetch('/api/auth/verify', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ password: pw }),
-        });
-        if (res.ok) { ov.remove(); resolve(true); }
-        else { errEl.textContent = t('appstore_backend_wrong_password'); okBtn.disabled = false; okBtn.textContent = t('appstore_install'); pwInput.value = ''; pwInput.focus(); }
-      };
-      ov.querySelector('#as-backend-ok').addEventListener('click', doConfirm);
-      pwInput.addEventListener('keydown', e => { if (e.key === 'Enter') doConfirm(); });
-    });
+    return mvmOS.requireRoot(
+      t('appstore_backend_title'),
+      `"${appName}" ${t('appstore_backend_msg')}<br><span style="color:#f38ba8;font-size:.8rem">${t('appstore_backend_warn')}</span>`
+    );
   }
 
   function _backendRestartDialog() {

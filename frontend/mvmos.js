@@ -1084,6 +1084,49 @@ var mvmOS = (() => {
     widgetSetting,
     db: (appId) => _makeDb(appId),
     widgetDb: (widgetId) => _makeWidgetDb(widgetId),
+    requireRoot(title, message) {
+      const _t = window.mvmOS?.t || (k => k);
+      return new Promise(resolve => {
+        const ov = document.createElement('div');
+        ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;';
+        ov.innerHTML = `
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius,6px);padding:24px;max-width:380px;width:90%;box-shadow:var(--shadow)">
+            <div style="font-size:1.05rem;font-weight:700;margin-bottom:8px">🔐 ${title || _t('require_root_title') || 'Root required'}</div>
+            ${message ? `<div style="font-size:.85rem;color:var(--text-dim);margin-bottom:12px">${message}</div>` : ''}
+            <label style="font-size:.82rem;color:var(--text-dim);display:block;margin-bottom:4px">${_t('require_root_password') || 'Root password'}</label>
+            <input type="password" id="_rr-pw" style="width:100%;box-sizing:border-box;padding:7px 10px;border:1px solid var(--border);border-radius:4px;background:var(--surface2);color:var(--text);font-size:.85rem;margin-bottom:6px" placeholder="${_t('require_root_ph') || 'Enter root password…'}">
+            <div id="_rr-err" style="font-size:.78rem;color:#f38ba8;min-height:16px;margin-bottom:12px"></div>
+            <div style="display:flex;gap:8px;justify-content:flex-end">
+              <button id="_rr-cancel" class="s-btn s-btn-sm">${_t('cancel') || 'Cancel'}</button>
+              <button id="_rr-ok" class="s-btn s-btn-sm s-btn-primary">${_t('confirm') || 'Confirm'}</button>
+            </div>
+          </div>`;
+        document.body.appendChild(ov);
+        const pw = ov.querySelector('#_rr-pw');
+        const err = ov.querySelector('#_rr-err');
+        const okBtn = ov.querySelector('#_rr-ok');
+        pw.focus();
+        ov.querySelector('#_rr-cancel').onclick = () => { ov.remove(); resolve(false); };
+        const confirm = async () => {
+          if (!pw.value) { err.textContent = _t('require_root_required') || 'Password required'; return; }
+          okBtn.disabled = true; okBtn.textContent = '…';
+          const res = await fetch('/api/auth/verify', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username: 'root', password: pw.value }),
+          });
+          if (res.ok) { ov.remove(); resolve(true); }
+          else {
+            const msg = await res.json().catch(() => ({}));
+            err.textContent = res.status === 429 ? (msg.detail || 'Too many attempts.') : (_t('require_root_wrong') || 'Wrong password');
+            okBtn.disabled = res.status === 429;
+            if (res.status !== 429) { okBtn.textContent = _t('confirm') || 'Confirm'; pw.value = ''; pw.focus(); }
+          }
+        };
+        okBtn.onclick = confirm;
+        pw.addEventListener('keydown', e => { if (e.key === 'Enter') confirm(); });
+      });
+    },
     _loadPlugin,
     _loadWidget,
     _removeFromStartMenu,

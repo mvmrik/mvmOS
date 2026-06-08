@@ -20,6 +20,23 @@ echo "  Login uses your existing Linux system users."
 echo "  No separate username/password needed."
 echo ""
 
+# ── Terms ─────────────────────────────────────────────────────────────────────
+echo "  DISCLAIMER"
+echo "  ──────────────────────────────────────────"
+echo "  mvmOS is open-source software provided \"as-is\" without any warranty,"
+echo "  express or implied. The authors are not liable for any damage to your"
+echo "  system, data loss, security breaches, or any other issues that may"
+echo "  arise from its use. You are solely responsible for securing your own"
+echo "  server and data. Use at your own risk."
+echo ""
+read -rp "  Do you agree to the terms? [y/N]: " AGREE
+AGREE="${AGREE:-N}"
+if [[ "$AGREE" != "y" && "$AGREE" != "Y" ]]; then
+    echo "  Installation cancelled."
+    exit 0
+fi
+echo ""
+
 # ── Port ──────────────────────────────────────────────────────────────────────
 read -rp "  Port [2026]: " PORT
 PORT="${PORT:-2026}"

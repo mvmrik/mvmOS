@@ -62,3 +62,7 @@ For remote access over the internet, put it behind **nginx + HTTPS** or use a **
 | `passlib[bcrypt]` | Password hashing |
 
 No npm, no build step. xterm.js is bundled locally.
+
+## Disclaimer
+
+mvmOS is open-source software provided "as-is" without any warranty, express or implied. The authors are not liable for any damage to your system, data loss, security breaches, or any other issues that may arise from its use. You are solely responsible for securing your own server and data. Use at your own risk.

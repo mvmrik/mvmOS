@@ -2,10 +2,32 @@ import os
 import subprocess
 import pwd as _pwd
 import secrets
+import time
 from fastapi import APIRouter, Request, HTTPException, Depends
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from pydantic import BaseModel
+from typing import Optional
 from .db import get_conn
+
+_MAX_ATTEMPTS = 5
+_BLOCK_SECONDS = 15 * 60
+_login_attempts: dict[str, list[float]] = {}  # ip -> [timestamps]
+
+def _check_rate_limit(ip: str) -> int:
+    """Returns seconds remaining if blocked, 0 if allowed."""
+    now = time.time()
+    times = _login_attempts.get(ip, [])
+    times = [t for t in times if now - t < _BLOCK_SECONDS]
+    _login_attempts[ip] = times
+    if len(times) >= _MAX_ATTEMPTS:
+        return int(_BLOCK_SECONDS - (now - times[0]))
+    return 0
+
+def _record_attempt(ip: str):
+    _login_attempts.setdefault(ip, []).append(time.time())
+
+def _clear_attempts(ip: str):
+    _login_attempts.pop(ip, None)
 
 _AUTH_HELPER = os.path.join(os.path.dirname(__file__), "..", "bin", "mvmos-auth")
 
@@ -175,6 +197,12 @@ async function doLogin() {
   });
   if (res.type === 'opaqueredirect' || res.status === 303 || res.ok) {
     window.location.href = '/';
+  } else if (res.status === 429) {
+    const msg = await res.text();
+    err.textContent = msg;
+    err.classList.add('show');
+    document.getElementById('password').value = '';
+    document.getElementById('submit-btn').disabled = true;
   } else {
     err.textContent = 'Invalid password. Please try again.';
     err.classList.add('show');
@@ -218,13 +246,24 @@ async def login_users():
 
 @router.post("/login")
 async def login(request: Request):
+    ip = request.headers.get("X-Real-IP") or request.client.host
+    wait = _check_rate_limit(ip)
+    if wait > 0:
+        mins = (wait + 59) // 60
+        return HTMLResponse(content=f"Too many attempts. Try again in {mins} minute{'s' if mins != 1 else ''}.", status_code=429)
+
     form = await request.form()
     username = form.get("username", "")
     password = form.get("password", "")
 
     if not verify_linux_password(username, password):
+        _record_attempt(ip)
+        remaining = _MAX_ATTEMPTS - len(_login_attempts.get(ip, []))
+        if remaining <= 0:
+            return HTMLResponse(content=f"Too many attempts. Try again in 15 minutes.", status_code=429)
         return HTMLResponse(content="Unauthorized", status_code=401)
 
+    _clear_attempts(ip)
     _init_user_xdg(username)
     token = secrets.token_hex(32)
     with get_conn() as conn:
@@ -243,13 +282,21 @@ async def whoami(session=Depends(get_current_session)):
 
 class VerifyRequest(BaseModel):
     password: str
+    username: Optional[str] = None
 
 
 @router.post("/api/auth/verify")
-async def verify_password(body: VerifyRequest, session=Depends(get_current_session)):
-    username = session["effective_user"]
+async def verify_password(body: VerifyRequest, request: Request, session=Depends(get_current_session)):
+    ip = request.headers.get("X-Real-IP") or request.client.host
+    wait = _check_rate_limit(ip)
+    if wait > 0:
+        mins = (wait + 59) // 60
+        raise HTTPException(status_code=429, detail=f"Too many attempts. Try again in {mins} minute{'s' if mins != 1 else ''}.")
+    username = body.username if body.username else session["effective_user"]
     if not verify_linux_password(username, body.password):
+        _record_attempt(ip)
         raise HTTPException(status_code=403, detail="Wrong password")
+    _clear_attempts(ip)
     return JSONResponse({"ok": True})
 
 
