@@ -263,3 +263,137 @@ On install/update, `_apply_schema()` in `plugins.py` automatically:
 ```
 
 - `base_url` in manifests points to the raw GitHub URL of the app folder
+
+## Game Hub Integration
+
+Game Hub (`apps/gamehub`) is an optional app that provides player profiles, session history, leaderboards, multiplayer invitations, and a public-facing page. Games integrate with it voluntarily — if Game Hub is not installed, games must work normally without it.
+
+### Widget API (`/apps/gamehub/widget.js`)
+
+Load the widget dynamically and use the `window.GameHub` API:
+
+```javascript
+function _loadGameHub(cb, errCb) {
+  if (window.GameHub) { window.GameHub.init().then(cb); return; }
+  const s = document.createElement('script');
+  s.src = '/apps/gamehub/widget.js';
+  s.onload  = () => window.GameHub?.init().then(cb) || cb();
+  s.onerror = errCb || cb;  // always unlock UI even if GH not installed
+  document.head.appendChild(s);
+}
+```
+
+Available methods on `window.GameHub`:
+
+| Method | Returns | Description |
+|---|---|---|
+| `init()` | `Promise` | Restore session from localStorage, returns resolved when done |
+| `isLoggedIn()` | `bool` | Whether a player is logged in |
+| `currentPlayer()` | `{id, username, display_name, avatar_color}` or `null` | Logged-in player info (sync) |
+| `getToken()` | `string` or `null` | Raw GH token for manual API calls |
+| `renderWidget(container, opts)` | — | Render login/profile widget with optional Ready button |
+| `recordSession(data)` | `Promise<Response>` | Record a completed game session |
+| `logout()` | `Promise` | Log out the current player |
+
+### Recording a session
+
+Call after the game ends. All player fields are optional — include only those you have:
+
+```javascript
+window.GameHub.recordSession({
+  game_id:          'mygame',          // must match the app id in plugins table
+  mode:             'singleplayer',    // or 'multiplayer'
+  duration_seconds: 120,               // total game time
+  metadata:         { rounds: 5, time_per_round: 30 },  // any extra data
+  players: [
+    {
+      player_id: 'abc123',   // GH player id — null for guests
+      guest_name: null,      // display name for guests without a GH account
+      score:    4200,
+      rank:     1,
+      is_winner: true,
+    },
+    {
+      player_id: null,
+      guest_name: 'Guest',
+      score:    1800,
+      rank:     2,
+      is_winner: false,
+    },
+  ],
+});
+```
+
+### Multiplayer lobby — GH widget for join screen
+
+Use `window.GameHub.renderWidget(container, opts)` on join screens that need a Ready button. Use the compact `_renderGhSection` pattern (show who is logged in, no Ready button) on host setup screens.
+
+```javascript
+// Join screen — shows login/profile + Ready button
+window.GameHub.renderWidget(container, {
+  onReady: (player) => {
+    // player is null if joining as guest
+    connectToRoom(player);
+  },
+  onGuest: (name) => connectToRoom(null, name),
+});
+```
+
+### Sending multiplayer invitations
+
+Favourites are stored per-player in localStorage under the key `gh_favs_<player_id>` as a JSON array:
+
+```json
+[
+  { "id": "abc123", "username": "martin", "display_name": "Martin", "avatar_color": "#89b4fa" }
+]
+```
+
+In the host lobby, after creating a room, you can invite Game Hub favourites:
+
+```javascript
+const me = window.GameHub.currentPlayer();
+if (me) {
+  const favs = JSON.parse(localStorage.getItem('gh_favs_' + me.id) || '[]');
+  // show checkboxes for each fav, then:
+  await fetch('/api/pub/gamehub/invite', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-GH-Token': window.GameHub.getToken() },
+    body: JSON.stringify({
+      to_ids:   ['player-id-1', 'player-id-2'],  // selected fav ids
+      game_id:  'mygame',
+      room_url: link,   // the room join URL from mvmOS.multiplayer.createRoom()
+    }),
+  });
+}
+```
+
+Invitations expire after 2 hours. Recipients see them in Game Hub → Games tab with a 🔔 badge and a "Join ▶" button. Dismissing removes the invite from the DB.
+
+### Public endpoints (no mvmOS session required)
+
+All endpoints are under `/api/pub/gamehub/`. The caller passes `X-GH-Token: <token>` for authenticated actions.
+
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| GET | `/api/pub/gamehub/config` | — | `{public, allow_registrations}` hub settings |
+| POST | `/api/pub/gamehub/login` | — | Login, returns `{token, player}` |
+| POST | `/api/pub/gamehub/register` | — | Register, returns `{token, player}` |
+| POST | `/api/pub/gamehub/logout` | token | Invalidate token |
+| GET | `/api/pub/gamehub/me` | token | Current player info |
+| PUT | `/api/pub/gamehub/me` | token | Update display_name / password |
+| GET | `/api/pub/gamehub/stats` | — | Full stats: games, leaderboard, recent sessions, players |
+| POST | `/api/pub/gamehub/session` | — | Record a session (token not required — game sends it) |
+| POST | `/api/pub/gamehub/invite` | token | Send invitations to GH players |
+| GET | `/api/pub/gamehub/invites` | token | List pending invitations for the logged-in player |
+| DELETE | `/api/pub/gamehub/invites/{id}` | token | Dismiss an invitation (recipient) |
+| DELETE | `/api/pub/gamehub/invites?room_url=…` | token | Cancel all invites sent for a room (host) |
+
+### Checklist for adding Game Hub support to a new game
+
+1. Use `_loadGameHub(cb, errCb)` — `errCb` must unlock any locked UI so the game works without GH
+2. Use `window.GameHub.renderWidget()` on join screens; use compact profile display on host setup screens
+3. Call `recordSession()` once per completed game — host-only in multiplayer (use a `sessionRecorded` flag to avoid duplicates)
+4. Pass `gh_player_id` through the multiplayer hello protocol so the host has it when recording the session
+5. Use `game_id` that exactly matches the app's `id` in the plugins DB — this is what links sessions to the game's name and icon in Game Hub
+6. In the host lobby, if `currentPlayer()` is not null, read `gh_favs_<id>` from localStorage and show the invite UI; skip silently if no favourites

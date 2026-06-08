@@ -93,7 +93,7 @@ async def auth_middleware(request: Request, call_next):
         if path == prefix or path.startswith(prefix + "/"):
             return await call_next(request)
 
-    if path in public or path.startswith("/api/scheduler/") or path.startswith("/static") or path.startswith("/pub/") or path.startswith("/api/pub/") or path.startswith("/api/multiplayer/") or path.endswith((".js", ".css", ".ico", ".png", ".svg", ".woff", ".woff2", ".webmanifest")):
+    if path in public or path.startswith("/api/scheduler/") or path.startswith("/static") or path.startswith("/pub/") or path.startswith("/api/pub/") or path.startswith("/api/multiplayer/") or path.endswith((".js", ".css", ".ico", ".png", ".svg", ".woff", ".woff2", ".webmanifest")) or "/public/" in path or path.endswith("/public"):
         return await call_next(request)
     token = request.cookies.get("session")
     if not token:
@@ -222,7 +222,7 @@ async def _dispatch_public(app_id: str, subpath: str, request: Request) -> Respo
 
 
 
-app.mount("/apps", StaticFiles(directory=APPS_DIR), name="apps")
+app.mount("/apps", StaticFiles(directory=APPS_DIR, html=True), name="apps")
 app.mount("/widgets", StaticFiles(directory=WIDGETS_DIR), name="widgets")
 app.mount("/themes", StaticFiles(directory=THEMES_DIR), name="themes")
 app.mount("/", _MvmStaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")
