@@ -654,6 +654,34 @@ const Desktop = (() => {
       if (windows[id].minimized) { toggleMinimize(id); focusWindow(id); }
       else focusWindow(id);
     });
+    tbItem.addEventListener('contextmenu', e => {
+      e.preventDefault();
+      e.stopPropagation();
+      document.querySelectorAll('.tbwin-ctx,.tray-ctx').forEach(m => m.remove());
+      const menu = document.createElement('div');
+      menu.className = 'tbwin-ctx';
+      const x = Math.min(e.clientX, window.innerWidth - 160);
+      const bot = window.innerHeight - e.clientY + 4;
+      menu.style.cssText = `position:fixed;left:${x}px;bottom:${bot}px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:4px 0;z-index:9999;min-width:130px;box-shadow:var(--shadow)`;
+      const title = windows[id]?.title || '';
+      [
+        { label: title, style: 'font-weight:600', disabled: true },
+        { label: '─────', disabled: true },
+        { label: '✕ ' + (window._t?.('close') || 'Close'), action: () => closeWindow(id), style: 'color:#ff5555' },
+      ].forEach(({ label, action, style, disabled }) => {
+        const it = document.createElement('div');
+        it.textContent = label;
+        it.style.cssText = `padding:6px 14px;font-size:.82rem;cursor:${disabled ? 'default' : 'pointer'};color:var(--text);${style || ''}`;
+        if (!disabled) {
+          it.onmouseenter = () => it.style.background = 'var(--surface3,rgba(255,255,255,.07))';
+          it.onmouseleave = () => it.style.background = '';
+          it.addEventListener('click', () => { menu.remove(); action(); });
+        }
+        menu.appendChild(it);
+      });
+      document.body.appendChild(menu);
+      setTimeout(() => document.addEventListener('click', () => menu.remove(), { once: true }), 0);
+    });
     taskbarWindows.appendChild(tbItem);
 
     if (onMount) onMount(body);
