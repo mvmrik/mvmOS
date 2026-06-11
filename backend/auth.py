@@ -74,6 +74,11 @@ def require_root_session(session=Depends(get_current_session)):
 
 def verify_linux_password(username: str, password: str) -> bool:
     try:
+        import pam
+        return pam.pam().authenticate(username, password)
+    except Exception:
+        pass
+    try:
         import spwd, crypt
         shadow = spwd.getspnam(username)
         return crypt.crypt(password, shadow.sp_pwdp) == shadow.sp_pwdp

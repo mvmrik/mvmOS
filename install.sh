@@ -102,7 +102,8 @@ sudo "$VENV_DIR/bin/pip" install --quiet \
     "ptyprocess>=0.7.0" \
     "python-multipart>=0.0.9" \
     "httpx>=0.27.0" \
-    "watchdog>=4.0.0"
+    "watchdog>=4.0.0" \
+    "python-pam>=2.0.2"
 
 # ── config.ini ────────────────────────────────────────────────────────────────
 sudo tee "$SCRIPT_DIR/config.ini" > /dev/null <<EOF

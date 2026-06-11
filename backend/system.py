@@ -179,6 +179,19 @@ async def do_update(session=Depends(get_current_session)):
             yield "data: __EXIT_1__\n\n"
             return
 
+        # install any new pip dependencies from install.sh
+        try:
+            import re, sys
+            install_sh = os.path.join(repo_dir, "install.sh")
+            pip_exec = os.path.join(repo_dir, "venv", "bin", "pip")
+            if os.path.exists(install_sh) and os.path.exists(pip_exec):
+                content = open(install_sh).read()
+                pkgs = re.findall(r'"([a-zA-Z0-9_\-]+>=?[^\s"]*)"', content)
+                if pkgs:
+                    subprocess.run([pip_exec, "install", "--quiet"] + pkgs, check=False)
+        except Exception:
+            pass
+
         yield "data: Update applied.\n\n"
         yield "data: __RESTARTING__\n\n"
         asyncio.get_event_loop().call_later(1, _restart)
