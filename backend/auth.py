@@ -285,6 +285,27 @@ class VerifyRequest(BaseModel):
     username: Optional[str] = None
 
 
+@router.get("/api/auth/can-sudo")
+async def can_sudo(session=Depends(get_current_session)):
+    import grp
+    username = session["effective_user"]
+    if username == "root":
+        return JSONResponse({"ok": True, "is_root": True})
+    try:
+        sudo_group = grp.getgrnam("sudo")
+        if username in sudo_group.gr_mem:
+            return JSONResponse({"ok": True})
+    except KeyError:
+        pass
+    try:
+        wheel_group = grp.getgrnam("wheel")
+        if username in wheel_group.gr_mem:
+            return JSONResponse({"ok": True})
+    except KeyError:
+        pass
+    return JSONResponse({"ok": False})
+
+
 @router.post("/api/auth/verify")
 async def verify_password(body: VerifyRequest, request: Request, session=Depends(get_current_session)):
     ip = request.headers.get("X-Real-IP") or request.client.host

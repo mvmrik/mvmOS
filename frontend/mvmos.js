@@ -1085,16 +1085,33 @@ var mvmOS = (() => {
     db: (appId) => _makeDb(appId),
     widgetDb: (widgetId) => _makeWidgetDb(widgetId),
     requireRoot(title, message) {
-      const _t = window.mvmOS?.t || (k => k);
-      return new Promise(resolve => {
+      const _t = k => window._i18n?.[k] || window.mvmOS?.t?.(k) || k;
+      return new Promise(async resolve => {
+        const sudoRes = await fetch('/api/auth/can-sudo').then(r => r.json()).catch(() => ({ ok: false }));
+        if (sudoRes.is_root) { resolve(true); return; }
+        if (!sudoRes.ok) {
+          const ov = document.createElement('div');
+          ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;';
+          ov.innerHTML = `
+            <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius,6px);padding:24px;max-width:380px;width:90%;box-shadow:var(--shadow)">
+              <div style="font-size:1.05rem;font-weight:700;margin-bottom:8px">🔐 ${title || _t('require_root_title') || 'Confirmation required'}</div>
+              <div style="font-size:.85rem;color:#f38ba8;margin-bottom:16px">${_t('require_root_no_sudo') || 'Your account does not have the necessary privileges to perform this action.'}</div>
+              <div style="display:flex;justify-content:flex-end">
+                <button id="_rr-close" class="s-btn s-btn-sm">${_t('close') || 'Close'}</button>
+              </div>
+            </div>`;
+          document.body.appendChild(ov);
+          ov.querySelector('#_rr-close').onclick = () => { ov.remove(); resolve(false); };
+          return;
+        }
         const ov = document.createElement('div');
         ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;';
         ov.innerHTML = `
           <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius,6px);padding:24px;max-width:380px;width:90%;box-shadow:var(--shadow)">
             <div style="font-size:1.05rem;font-weight:700;margin-bottom:8px">🔐 ${title || _t('require_root_title') || 'Root required'}</div>
             ${message ? `<div style="font-size:.85rem;color:var(--text-dim);margin-bottom:12px">${message}</div>` : ''}
-            <label style="font-size:.82rem;color:var(--text-dim);display:block;margin-bottom:4px">${_t('require_root_password') || 'Root password'}</label>
-            <input type="password" id="_rr-pw" style="width:100%;box-sizing:border-box;padding:7px 10px;border:1px solid var(--border);border-radius:4px;background:var(--surface2);color:var(--text);font-size:.85rem;margin-bottom:6px" placeholder="${_t('require_root_ph') || 'Enter root password…'}">
+            <label style="font-size:.82rem;color:var(--text-dim);display:block;margin-bottom:4px">${_t('require_root_password') || 'Your password'}</label>
+            <input type="password" id="_rr-pw" style="width:100%;box-sizing:border-box;padding:7px 10px;border:1px solid var(--border);border-radius:4px;background:var(--surface2);color:var(--text);font-size:.85rem;margin-bottom:6px" placeholder="${_t('require_root_ph') || 'Enter your password…'}">
             <div id="_rr-err" style="font-size:.78rem;color:#f38ba8;min-height:16px;margin-bottom:12px"></div>
             <div style="display:flex;gap:8px;justify-content:flex-end">
               <button id="_rr-cancel" class="s-btn s-btn-sm">${_t('cancel') || 'Cancel'}</button>
@@ -1113,7 +1130,7 @@ var mvmOS = (() => {
           const res = await fetch('/api/auth/verify', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username: 'root', password: pw.value }),
+            body: JSON.stringify({ password: pw.value }),
           });
           if (res.ok) { ov.remove(); resolve(true); }
           else {
