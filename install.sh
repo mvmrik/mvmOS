@@ -117,13 +117,9 @@ sudo useradd -r -s /usr/sbin/nologin -g mvmos -M mvmos 2>/dev/null || true
 # Set ownership of install dir to mvmos
 sudo chown -R mvmos:mvmos "$SCRIPT_DIR"
 sudo chmod 755 "$SCRIPT_DIR"
-# Auth helper — owned by root, readable by mvmos group via sudo
-sudo chown root:root "$SCRIPT_DIR/bin/mvmos-auth"
-sudo chmod 755 "$SCRIPT_DIR/bin/mvmos-auth"
 
 # ── sudoers ───────────────────────────────────────────────────────────────────
 sudo tee /etc/sudoers.d/mvmos > /dev/null <<EOF
-mvmos ALL=(root) NOPASSWD: $SCRIPT_DIR/bin/mvmos-auth
 mvmos ALL=(ALL)  NOPASSWD: /usr/sbin/runuser
 EOF
 sudo chmod 440 /etc/sudoers.d/mvmos

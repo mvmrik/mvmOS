@@ -29,7 +29,6 @@ def _record_attempt(ip: str):
 def _clear_attempts(ip: str):
     _login_attempts.pop(ip, None)
 
-_AUTH_HELPER = os.path.join(os.path.dirname(__file__), "..", "bin", "mvmos-auth")
 
 _XDG_DIRS = ["Desktop", "Downloads", "Documents", "Music", "Pictures", "Videos", "Public", "Templates"]
 _TRASH_DIRS = [".Trash", ".Trash/files", ".Trash/info"]
@@ -74,20 +73,10 @@ def require_root_session(session=Depends(get_current_session)):
 
 
 def verify_linux_password(username: str, password: str) -> bool:
-    if os.geteuid() == 0:
-        try:
-            import spwd, crypt
-            shadow = spwd.getspnam(username)
-            return crypt.crypt(password, shadow.sp_pwdp) == shadow.sp_pwdp
-        except Exception:
-            return False
     try:
-        r = subprocess.run(
-            ["sudo", os.path.realpath(_AUTH_HELPER)],
-            input=f"{username}:{password}",
-            capture_output=True, text=True, timeout=5,
-        )
-        return r.returncode == 0
+        import spwd, crypt
+        shadow = spwd.getspnam(username)
+        return crypt.crypt(password, shadow.sp_pwdp) == shadow.sp_pwdp
     except Exception:
         return False
 
