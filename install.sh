@@ -102,14 +102,34 @@ sudo "$VENV_DIR/bin/pip" install --quiet \
     "ptyprocess>=0.7.0" \
     "python-multipart>=0.0.9" \
     "httpx>=0.27.0" \
-    "watchdog>=4.0.0" \
-    "python-pam>=2.0.2"
+    "watchdog>=4.0.0"
 
 # ── config.ini ────────────────────────────────────────────────────────────────
 sudo tee "$SCRIPT_DIR/config.ini" > /dev/null <<EOF
 [server]
 port = $PORT
 EOF
+
+# ── Auth helper ───────────────────────────────────────────────────────────────
+# Written here so it's always up-to-date regardless of git history
+sudo mkdir -p "$SCRIPT_DIR/bin"
+sudo tee "$SCRIPT_DIR/bin/mvmos-auth" > /dev/null <<'AUTHEOF'
+#!/usr/bin/env python3
+import sys, spwd, ctypes, ctypes.util
+try:
+    line = sys.stdin.readline().rstrip('\n')
+    username, password = line.split(':', 1)
+    shadow = spwd.getspnam(username)
+    lib = ctypes.CDLL(ctypes.util.find_library('crypt') or 'libcrypt.so.1')
+    lib.crypt.restype = ctypes.c_char_p
+    result = lib.crypt(password.encode(), shadow.sp_pwdp.encode())
+    sys.exit(0 if result == shadow.sp_pwdp.encode() else 1)
+except KeyError:
+    sys.exit(2)
+except Exception as e:
+    sys.stderr.write(str(e) + '\n')
+    sys.exit(1)
+AUTHEOF
 
 # ── mvmos system user & group ─────────────────────────────────────────────────
 echo "  [3/4] Setting up mvmos user..."
@@ -118,10 +138,16 @@ sudo useradd -r -s /usr/sbin/nologin -g mvmos -M mvmos 2>/dev/null || true
 # Set ownership of install dir to mvmos
 sudo chown -R mvmos:mvmos "$SCRIPT_DIR"
 sudo chmod 755 "$SCRIPT_DIR"
+# Auth helper — owned by root so it can read /etc/shadow via sudo
+sudo chown root:root "$SCRIPT_DIR/bin/mvmos-auth"
+sudo chmod 755 "$SCRIPT_DIR/bin/mvmos-auth"
 
 # ── sudoers ───────────────────────────────────────────────────────────────────
 sudo tee /etc/sudoers.d/mvmos > /dev/null <<EOF
+mvmos ALL=(root) NOPASSWD: $SCRIPT_DIR/bin/mvmos-auth
 mvmos ALL=(ALL)  NOPASSWD: /usr/sbin/runuser
+mvmos ALL=(root) NOPASSWD: /bin/chown root\:root $SCRIPT_DIR/bin/mvmos-auth
+mvmos ALL=(root) NOPASSWD: /bin/chmod 755 $SCRIPT_DIR/bin/mvmos-auth
 EOF
 sudo chmod 440 /etc/sudoers.d/mvmos
 

@@ -40,7 +40,7 @@ The installer will ask for a port (default `2026`), set up a Python virtualenv a
 ## Uninstall
 
 ```bash
-sudo systemctl disable --now mvmos mvmos-public ; sudo rm -f /etc/systemd/system/mvmos.service /etc/systemd/system/mvmos-public.service ; sudo systemctl daemon-reload ; sudo rm -f /etc/sudoers.d/mvmos ; sudo userdel mvmos ; sudo groupdel mvmos ; sudo rm -rf /opt/mvmos
+sudo systemctl disable --now mvmos 2>/dev/null || true; sudo rm -f /etc/systemd/system/mvmos.service; sudo systemctl daemon-reload; sudo rm -f /etc/sudoers.d/mvmos; sudo pkill -u mvmos 2>/dev/null; sleep 2; sudo userdel mvmos 2>/dev/null; sudo groupdel mvmos 2>/dev/null; sudo rm -rf /opt/mvmos
 ```
 
 > **Note:** This removes everything including installed apps, desktop configuration and all user data. Your Linux system users are not affected.
@@ -59,7 +59,9 @@ For remote access over the internet, put it behind **nginx + HTTPS** or use a **
 | `fastapi` | HTTP + WebSocket framework |
 | `uvicorn[standard]` | ASGI server |
 | `ptyprocess` | Terminal PTY |
-| `passlib[bcrypt]` | Password hashing |
+| `python-multipart` | Form parsing |
+| `httpx` | HTTP client |
+| `watchdog` | File system events |
 
 No npm, no build step. xterm.js is bundled locally.
 

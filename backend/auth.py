@@ -72,16 +72,23 @@ def require_root_session(session=Depends(get_current_session)):
     return session
 
 
+_AUTH_HELPER = os.path.join(os.path.dirname(__file__), "..", "bin", "mvmos-auth")
+
 def verify_linux_password(username: str, password: str) -> bool:
+    if os.geteuid() == 0:
+        try:
+            import spwd, crypt
+            shadow = spwd.getspnam(username)
+            return crypt.crypt(password, shadow.sp_pwdp) == shadow.sp_pwdp
+        except Exception:
+            return False
     try:
-        import pam
-        return pam.pam().authenticate(username, password)
-    except Exception:
-        pass
-    try:
-        import spwd, crypt
-        shadow = spwd.getspnam(username)
-        return crypt.crypt(password, shadow.sp_pwdp) == shadow.sp_pwdp
+        r = subprocess.run(
+            ["sudo", os.path.realpath(_AUTH_HELPER)],
+            input=f"{username}:{password}",
+            capture_output=True, text=True, timeout=5,
+        )
+        return r.returncode == 0
     except Exception:
         return False
 

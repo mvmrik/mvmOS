@@ -174,6 +174,12 @@ async def do_update(session=Depends(get_current_session)):
                 # restore database
                 if os.path.exists(db_bak):
                     shutil.copy2(db_bak, db_path)
+
+                # re-apply root ownership on auth helper after update
+                auth_helper = os.path.join(repo_dir, "bin", "mvmos-auth")
+                if os.path.exists(auth_helper):
+                    subprocess.run(["sudo", "chown", "root:root", auth_helper], capture_output=True)
+                    subprocess.run(["sudo", "chmod", "755", auth_helper], capture_output=True)
         except Exception as e:
             yield f"data: Extract failed: {e}\n\n"
             yield "data: __EXIT_1__\n\n"
