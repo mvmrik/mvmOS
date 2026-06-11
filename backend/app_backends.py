@@ -7,15 +7,28 @@ object at module level.  This module discovers and mounts all such routers
 automatically at startup, and provides helpers for install/uninstall.
 """
 
-import importlib.util
 import os
 import sys
+import types
 from fastapi import FastAPI
+from starlette.routing import Mount
 
 BACKENDS_DIR = os.path.join(os.path.dirname(__file__), "apps")
 
 # Set by load_all() so install() can mount without needing the app reference
 _app_ref: FastAPI | None = None
+
+
+def reposition_before_mounts(app: FastAPI, new_routes: list) -> None:
+    """include_router appends at the end of app.routes — after the catch-all
+    "/" static mount, which shadows everything behind it. Move the freshly
+    added routes back in front of the first Mount so they can match."""
+    first_mount = next((i for i, r in enumerate(app.routes) if isinstance(r, Mount)), None)
+    if first_mount is None or not new_routes:
+        return
+    for r in new_routes:
+        app.routes.remove(r)
+    app.routes[first_mount:first_mount] = new_routes
 
 
 def load_all(app: FastAPI) -> None:
@@ -37,19 +50,26 @@ def _load_one(app: FastAPI, app_id: str) -> bool:
     try:
         app.routes[:] = [r for r in app.routes if not getattr(r, "_app_backend", None) == app_id]
 
-        spec = importlib.util.spec_from_file_location(mod_name, path)
-        mod = importlib.util.module_from_spec(spec)
+        # exec the source directly — importlib would reuse a stale .pyc when
+        # mtime (1s resolution) and file size happen to match the old version
+        with open(path) as f:
+            source = f.read()
+        mod = types.ModuleType(mod_name)
+        mod.__file__ = path
         sys.modules[mod_name] = mod
-        spec.loader.exec_module(mod)
+        exec(compile(source, path, "exec"), mod.__dict__)
         router = getattr(mod, "router", None)
         if router is None:
             print(f"[app-backends] {app_id}: no router found, skipping")
             return False
         existing_paths = {id(r) for r in app.routes}
         app.include_router(router)
+        new_routes = []
         for route in app.routes:
             if id(route) not in existing_paths:
                 route._app_backend = app_id
+                new_routes.append(route)
+        reposition_before_mounts(app, new_routes)
         print(f"[app-backends] loaded backend: {app_id}")
         return True
     except Exception as e:
@@ -69,12 +89,14 @@ def install(app_id: str, source_code: str) -> None:
 
 
 def uninstall(app_id: str) -> None:
-    """Remove backend folder. Router stays mounted until next restart (FastAPI limitation)."""
+    """Remove backend folder and unmount its routes immediately."""
     import shutil
     app_dir = os.path.join(BACKENDS_DIR, app_id)
     if os.path.isdir(app_dir):
         shutil.rmtree(app_dir)
     sys.modules.pop(f"app_backend_{app_id}", None)
+    if _app_ref is not None:
+        _app_ref.routes[:] = [r for r in _app_ref.routes if getattr(r, "_app_backend", None) != app_id]
     print(f"[app-backends] uninstalled backend: {app_id}")
 
 

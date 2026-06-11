@@ -175,6 +175,10 @@ Opens system settings. Tabs: `'apps'`, `'about'`, `'widgets'`, `'themes'`.
 - Loaded dynamically at startup by `app_backends.load_all()`
 - On install: `app_backends.install(app_id, source_code)`
 - On uninstall: `app_backends.uninstall(app_id)`
+- Install/update/uninstall take effect **immediately, no restart needed**: routes are
+  re-mounted at runtime and repositioned before the catch-all `/` static mount
+  (`reposition_before_mounts()`), and the source is exec'd directly (bypasses stale
+  `.pyc` caches). Same applies to `public_loader` (`public.py` → `/pub/<app-id>/`).
 - Must define a `router = APIRouter(...)` at module level
 - All endpoints must require `session=Depends(get_current_session)`
 - Only `backend.py` is installed — no other Python files are allowed

@@ -126,6 +126,7 @@ def _install_from_zip(zip_bytes: bytes, plugin_id: str, install_backend: bool) -
         mf_data = None
         has_backend = False
         be_code = None
+        pub_code = None
 
         for zname in names:
             rel = _strip(zname)
@@ -141,10 +142,12 @@ def _install_from_zip(zip_bytes: bytes, plugin_id: str, install_backend: bool) -
                 open(dest, "wb").write(data)
 
             elif parts[0] == "backend":
+                has_backend = True
+                if rel == "backend/backend.py":
+                    be_code = data.decode()
+                elif rel == "backend/public.py":
+                    pub_code = data.decode()
                 if not install_backend:
-                    has_backend = True
-                    if rel == "backend/backend.py":
-                        be_code = data.decode()
                     continue
                 # install backend files
                 sub = "/".join(parts[1:])
@@ -184,6 +187,9 @@ def _install_from_zip(zip_bytes: bytes, plugin_id: str, install_backend: bool) -
 
         if install_backend and be_code:
             app_backends.install(plugin_id, be_code)
+        if install_backend and pub_code:
+            from . import public_loader
+            public_loader.install(plugin_id, pub_code)
 
         return {"manifest": mf_data, "needs_backend_confirm": False}
 
@@ -523,7 +529,7 @@ async def install_plugin(body: InstallRequest, session=Depends(get_current_sessi
                 pub_r = await client.get(pub_url)
                 if pub_r.status_code == 200:
                     from . import public_loader
-                    public_loader.install(app, body.id, pub_r.text)
+                    public_loader.install(body.id, pub_r.text)
             except Exception:
                 pass
 

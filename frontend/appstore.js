@@ -1968,6 +1968,11 @@ const UpdateManager = (() => {
         body: JSON.stringify(payload) });
       const result = await res.json();
       if (result.needs_backend_confirm) {
+        const confirmed = await mvmOS.requireRoot(
+          t('appstore_backend_title'),
+          `"${u.name}" ${t('appstore_backend_msg') || 'includes a backend component.'}`
+        );
+        if (!confirmed) return;
         await fetch('/api/plugins/install', { method: 'POST', headers: {'Content-Type':'application/json'},
           body: JSON.stringify({ ...payload, install_backend: true }) });
       }
