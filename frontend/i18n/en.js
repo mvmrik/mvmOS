@@ -46,6 +46,7 @@ window._i18n = {
   'ctx_refresh_desktop':          'Refresh Desktop',
   'ctx_add_to_desktop':           'Add to Desktop',
   'ctx_remove_from_desktop':      'Remove from Desktop',
+  'ctx_rename':                   'Rename',
   'ctx_delete':                   'Delete',
 
   // ── New Link dialog ───────────────────────────────────────────────────────

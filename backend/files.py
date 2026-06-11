@@ -707,3 +707,88 @@ async def chown(body: ChownRequest, session=Depends(get_current_session)):
     if r.returncode != 0:
         raise HTTPException(status_code=403, detail="Permission denied")
     return {"ok": True}
+
+
+class CompressRequest(BaseModel):
+    paths: list
+    dest: str
+
+@router.post("/compress")
+async def compress_to_zip(body: CompressRequest, session=Depends(get_current_session)):
+    import zipfile, tempfile, io as _io
+    eu = session["effective_user"]
+    dest = safe_path(body.dest)
+    prefix = [] if os.geteuid() == 0 else ["sudo"]
+
+    buf = _io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for path in body.paths:
+            real = safe_path(path)
+            name = os.path.basename(real)
+            r = subprocess.run(prefix + ["runuser", "-u", eu, "--", "test", "-d", real], capture_output=True)
+            if r.returncode == 0:
+                # directory
+                for root, dirs, files in os.walk(real):
+                    for f in files:
+                        fpath = os.path.join(root, f)
+                        arcname = os.path.join(name, os.path.relpath(fpath, real))
+                        rc = subprocess.run(prefix + ["runuser", "-u", eu, "--", "cat", fpath], capture_output=True)
+                        if rc.returncode == 0:
+                            zf.writestr(arcname, rc.stdout)
+            else:
+                rc = subprocess.run(prefix + ["runuser", "-u", eu, "--", "cat", real], capture_output=True)
+                if rc.returncode == 0:
+                    zf.writestr(name, rc.stdout)
+
+    zip_bytes = buf.getvalue()
+    cmd = prefix + ["runuser", "-u", eu, "--", "tee", dest]
+    subprocess.run(cmd, input=zip_bytes, capture_output=True)
+    return {"ok": True}
+
+
+class ExtractRequest(BaseModel):
+    path: str
+
+@router.post("/extract")
+async def extract_archive(body: ExtractRequest, session=Depends(get_current_session)):
+    import zipfile, tarfile, tempfile, io as _io
+    eu = session["effective_user"]
+    real = safe_path(body.path)
+    dest_dir = os.path.dirname(real)
+    name = os.path.basename(real).lower()
+
+    prefix = [] if os.geteuid() == 0 else ["sudo"]
+    cmd = prefix + ["runuser", "-u", eu, "--", "cat", real]
+    r = subprocess.run(cmd, capture_output=True)
+    if r.returncode != 0:
+        raise HTTPException(status_code=403, detail="Cannot read file")
+
+    with tempfile.TemporaryDirectory() as tmp:
+        if name.endswith('.zip'):
+            try:
+                with zipfile.ZipFile(_io.BytesIO(r.stdout)) as zf:
+                    zf.extractall(tmp)
+            except zipfile.BadZipFile:
+                raise HTTPException(status_code=400, detail="Not a valid zip file")
+        elif any(name.endswith(ext) for ext in ('.tar', '.tar.gz', '.tgz', '.tar.bz2', '.tar.xz')):
+            try:
+                with tarfile.open(fileobj=_io.BytesIO(r.stdout)) as tf:
+                    tf.extractall(tmp)
+            except tarfile.TarError as e:
+                raise HTTPException(status_code=400, detail=f"Not a valid tar archive: {e}")
+        else:
+            raise HTTPException(status_code=400, detail="Unsupported archive format")
+
+        for root, dirs, files in os.walk(tmp):
+            for d in dirs:
+                dst = os.path.join(dest_dir, os.path.relpath(os.path.join(root, d), tmp))
+                run_as(eu, ["mkdir", "-p", dst])
+            for f in files:
+                src = os.path.join(root, f)
+                dst = os.path.join(dest_dir, os.path.relpath(src, tmp))
+                run_as(eu, ["mkdir", "-p", os.path.dirname(dst)])
+                cmd2 = prefix + ["runuser", "-u", eu, "--", "tee", dst]
+                with open(src, "rb") as fh:
+                    subprocess.run(cmd2, input=fh.read(), capture_output=True)
+
+    return {"ok": True}

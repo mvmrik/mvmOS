@@ -616,7 +616,6 @@ const AppStore = (() => {
           if (result2.ok) {
             mvmOS._loadPlugin(appData.id);
             body._as?.refreshCurrent?.();
-            _backendRestartDialog(body);
           } else {
             btn.disabled = false; btn.textContent = btn.dataset.orig || t('appstore_install');
             alert('Failed: ' + (result2.error || 'unknown'));

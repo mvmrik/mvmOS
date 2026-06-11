@@ -46,6 +46,7 @@ window._i18n = {
   'ctx_refresh_desktop':          'Опресни десктопа',
   'ctx_add_to_desktop':           'Добави към десктопа',
   'ctx_remove_from_desktop':      'Премахни от десктопа',
+  'ctx_rename':                   'Преименувай',
   'ctx_delete':                   'Изтрий',
 
   // ── New Link dialog ───────────────────────────────────────────────────────

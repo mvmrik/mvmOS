@@ -229,9 +229,11 @@ const Desktop = (() => {
     const vid = ['mp4','webm','ogg','mov','mkv'];
     const aud = ['mp3','flac','wav','aac','opus','m4a'];
     const ext = entry.ext || '';
+    const arc = ['zip','tar','gz','bz2','xz','rar','7z'];
     if (img.includes(ext)) return { emoji: '🖼️' };
     if (vid.includes(ext)) return { emoji: '🎬' };
     if (aud.includes(ext)) return { emoji: '🎵' };
+    if (arc.includes(ext)) return { emoji: '🗜️' };
     return { emoji: '📄' };
   }
 
@@ -420,6 +422,7 @@ const Desktop = (() => {
         if (fsEntry.type === 'file') {
           if (ImageViewer.isImage(fsEntry.name))  { ImageViewer.openWindow(fsEntry.path, _desktopEntries); return; }
           if (VideoPlayer.isVideo(fsEntry.name) || VideoPlayer.isAudio(fsEntry.name)) { VideoPlayer.openWindow(fsEntry.path); return; }
+          if (/\.(zip|tar|tar\.gz|tgz|tar\.bz2|tar\.xz)$/i.test(fsEntry.name)) { fetch('/api/files/extract', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ path: fsEntry.path }) }); return; }
           if (CodeEditor.isCode(fsEntry.name)) { CodeEditor.openFile(fsEntry.path); return; }
           if (TextEditor.isText(fsEntry.name)) { TextEditor.openWindow(fsEntry.path); return; }
         }
@@ -480,8 +483,13 @@ const Desktop = (() => {
       const multi = _desktopSelected.size > 1;
       const items = [];
       if (fsEntry && (fsEntry.type === 'file' || fsEntry.type === 'dir' || fsEntry.type === 'url')) {
+        if (!multi) items.push({ label: `✏️ ${t('ctx_rename')}`, action: 'rename' });
         items.push({ label: `📋 Copy${multi ? ' ('+_desktopSelected.size+')' : ''}`, action: 'copy' });
         items.push({ label: `✂️ Cut${multi ? ' ('+_desktopSelected.size+')' : ''}`,  action: 'cut'  });
+        items.push('sep');
+        if (!multi && fsEntry.type === 'file') items.push({ label: '⬇️ Download', action: 'download' });
+        items.push({ label: '🗜️ Compress to zip', action: 'compress' });
+        if (!multi) items.push({ label: 'ℹ️ Info', action: 'info' });
         items.push('sep');
       }
       if (fsEntry) {
@@ -490,12 +498,59 @@ const Desktop = (() => {
         items.push({ label: `🗑️ ${t('ctx_remove_from_desktop')}`, action: 'remove', danger: true });
       }
       const ctx = showIconCtx(e.clientX, e.clientY, items);
+      ctx.querySelector('[data-action="rename"]')?.addEventListener('click', async () => {
+        hideIconCtx();
+        const newName = prompt('Rename to:', fsEntry.name);
+        if (!newName || newName === fsEntry.name) return;
+        await fetch('/api/files/rename', { method: 'POST', headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({ path: fsEntry.path, new_name: newName }) });
+        await loadDesktopFiles(); renderIcons();
+      });
+      ctx.querySelector('[data-action="download"]')?.addEventListener('click', async () => {
+        hideIconCtx();
+        const r = await fetch(`/api/files/download?path=${encodeURIComponent(fsEntry.path)}`);
+        const blob = await r.blob();
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = fsEntry.name;
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+      });
+      ctx.querySelector('[data-action="info"]')?.addEventListener('click', async () => {
+        hideIconCtx();
+        const r = await fetch(`/api/files?path=${encodeURIComponent(fsEntry.path.replace(/[^/]+$/, ''))}`);
+        const data = await r.json();
+        const entry = (data.entries || []).find(e => e.name === fsEntry.name);
+        const size = entry?.size != null ? (entry.size >= 1048576 ? (entry.size/1048576).toFixed(1)+' MB' : entry.size >= 1024 ? (entry.size/1024).toFixed(1)+' KB' : entry.size+' B') : '—';
+        const modified = entry?.modified ? new Date(entry.modified*1000).toLocaleString() : '—';
+        alert(`Name: ${fsEntry.name}\nPath: ${fsEntry.path}\nSize: ${size}\nModified: ${modified}\nOwner: ${entry?.owner||'—'}`);
+      });
+      ctx.querySelector('[data-action="compress"]')?.addEventListener('click', async () => {
+        hideIconCtx();
+        const paths = selEntries.length ? selEntries.map(en => en.path) : [fsEntry.path];
+        const defaultName = (paths.length === 1 ? fsEntry.name : 'archive') + '.zip';
+        const zipName = prompt('Archive name:', defaultName);
+        if (!zipName) return;
+        const destPath = fsEntry.path.replace(/[^/]+$/, zipName.endsWith('.zip') ? zipName : zipName + '.zip');
+        await fetch('/api/files/compress', { method: 'POST', headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({ paths, dest: destPath }) });
+        await loadDesktopFiles(); renderIcons();
+      });
       ctx.querySelector('[data-action="remove"]')?.addEventListener('click', async () => {
         hideIconCtx();
         if (fsEntry) {
           const toDelete = selEntries.length ? selEntries : [fsEntry];
-          for (const en of toDelete) {
-            await fetch(`/api/files/desktop/entry?path=${encodeURIComponent(en.path)}`, { method: 'DELETE' });
+          const paths = toDelete.map(en => en.path);
+          const choice = await FileManager.deleteDialog(paths.length);
+          if (!choice) return;
+          if (choice === 'trash') {
+            await fetch('/api/files/trash/move', { method: 'POST', headers: {'Content-Type':'application/json'},
+              body: JSON.stringify({ paths }) });
+          } else {
+            for (const p of paths) {
+              await fetch('/api/files/delete', { method: 'DELETE', headers: {'Content-Type':'application/json'},
+                body: JSON.stringify({ path: p }) });
+            }
           }
           _desktopSelected.clear();
           await loadDesktopFiles();

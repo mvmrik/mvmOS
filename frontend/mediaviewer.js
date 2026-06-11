@@ -12,7 +12,7 @@ const ImageViewer = (() => {
     const imgs = (siblings || []).filter(s => isImage(s.name));
     let idx = imgs.findIndex(s => s.name === name);
 
-    const id = 'imageviewer-' + btoa(path).slice(0, 12);
+    const id = 'imageviewer-' + btoa(unescape(encodeURIComponent(path))).slice(0, 12);
     const win = Desktop.createWindow({
       id,
       title: '🖼️ ' + name,
@@ -91,7 +91,7 @@ const VideoPlayer = (() => {
     const name = path.split('/').pop();
     const ext = name.split('.').pop().toLowerCase();
     const audio = AUDIO_EXTS.includes(ext);
-    const id = 'mediaplayer-' + btoa(path).slice(0, 12);
+    const id = 'mediaplayer-' + btoa(unescape(encodeURIComponent(path))).slice(0, 12);
     Desktop.createWindow({
       id,
       title: (audio ? '🎵 ' : '▶ ') + name,
@@ -124,7 +124,7 @@ const TextEditor = (() => {
 
   function openWindow(path) {
     const name = path.split('/').pop();
-    const id = 'texteditor-' + btoa(path).slice(0, 12);
+    const id = 'texteditor-' + btoa(unescape(encodeURIComponent(path))).slice(0, 12);
     Desktop.createWindow({
       id,
       title: '📝 ' + name,

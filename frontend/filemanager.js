@@ -654,6 +654,9 @@ const FileManager = (() => {
               ImageViewer.openWindow(fullPath, this._lastEntries);
             } else if (VideoPlayer.isVideo(entry.name) || VideoPlayer.isAudio(entry.name)) {
               VideoPlayer.openWindow(fullPath);
+            } else if (/\.(zip|tar|tar\.gz|tgz|tar\.bz2|tar\.xz)$/i.test(entry.name)) {
+              fetch('/api/files/extract', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ path: fullPath }) })
+                .then(r => r.json()).then(res => { if (res.ok) this.navigate(this.currentPath); });
             } else if (CodeEditor.isCode(entry.name)) {
               CodeEditor.openFile(fullPath);
             } else if (TextEditor.isText(entry.name)) {
@@ -744,6 +747,7 @@ const FileManager = (() => {
         items.push({ label: `✂️ Cut${names.length > 1 ? ' ('+names.length+')' : ''}`,  action: () => { window._fmClipboard = { paths: names.map(n => this.joinPath(this.currentPath, n)), cut: true  }; } });
         items.push({ label: `🗑️ Delete${names.length > 1 ? ' ('+names.length+')' : ''}`, action: () => this.deleteEntries(names), danger: true });
         items.push({ label: `⬇️ Download${names.length > 1 ? ' ('+names.length+')' : ''}`, action: () => this.download(names) });
+        items.push({ label: `🗜️ Compress to zip`, action: () => this.compressToZip(names) });
         if (names.length === 1) items.push({ label: 'ℹ️ Info', action: () => this.showInfo(this._lastEntries.find(e => e.name === name)) });
       } else {
         if (window._fmClipboard) {
@@ -917,6 +921,20 @@ const FileManager = (() => {
       a.download = zipName + '.zip';
       a.click();
       setTimeout(() => URL.revokeObjectURL(url), 10000);
+    }
+
+    async compressToZip(names) {
+      const paths = names.map(n => this.joinPath(this.currentPath, n));
+      const defaultName = (names.length === 1 ? names[0] : 'archive') + '.zip';
+      const zipName = prompt('Archive name:', defaultName);
+      if (!zipName) return;
+      const destPath = this.joinPath(this.currentPath, zipName.endsWith('.zip') ? zipName : zipName + '.zip');
+      await fetch('/api/files/compress', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ paths, dest: destPath }),
+      });
+      this.navigate(this.currentPath);
     }
 
     async mkdirPrompt() {
@@ -1158,11 +1176,31 @@ const FileManager = (() => {
       const ext = name.split('.').pop().toLowerCase();
       const map = { js: '📜', py: '🐍', sh: '⚙️', txt: '📄', md: '📝', json: '📋',
                     png: '🖼️', jpg: '🖼️', jpeg: '🖼️', gif: '🖼️', svg: '🖼️',
-                    pdf: '📕', zip: '📦', tar: '📦', gz: '📦', mp4: '🎬', mp3: '🎵',
+                    pdf: '📕', zip: '🗜️', tar: '🗜️', gz: '🗜️', rar: '🗜️', '7z': '🗜️', bz2: '🗜️', xz: '🗜️', mp4: '🎬', mp3: '🎵',
                     url: '🔗', mvmos: '🚀' };
       return map[ext] || '📄';
     }
   }
 
-  return { openWindow };
+  function deleteDialog(count) {
+    return new Promise(resolve => {
+      const overlay = document.createElement('div');
+      overlay.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;';
+      overlay.innerHTML = `
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:24px;min-width:280px;max-width:360px;box-shadow:var(--shadow)">
+          <div style="font-size:1rem;margin-bottom:16px;">${t('fm_delete_title').replace('{n}', count)}</div>
+          <div style="display:flex;flex-direction:column;gap:8px;">
+            <button id="del-trash" style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:8px 14px;color:var(--text);cursor:pointer;text-align:left;">${t('fm_delete_to_trash')}</button>
+            <button id="del-perm" style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:8px 14px;color:#e05555;cursor:pointer;text-align:left;">${t('fm_delete_permanent')}</button>
+            <button id="del-cancel" style="background:transparent;border:none;padding:6px;color:var(--text-dim);cursor:pointer;">${t('fm_delete_cancel')}</button>
+          </div>
+        </div>`;
+      document.body.appendChild(overlay);
+      overlay.querySelector('#del-trash').addEventListener('click',  () => { overlay.remove(); resolve('trash'); });
+      overlay.querySelector('#del-perm').addEventListener('click',   () => { overlay.remove(); resolve('permanent'); });
+      overlay.querySelector('#del-cancel').addEventListener('click', () => { overlay.remove(); resolve(null); });
+    });
+  }
+
+  return { openWindow, deleteDialog };
 })();

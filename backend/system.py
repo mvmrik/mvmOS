@@ -175,7 +175,7 @@ async def do_update(session=Depends(get_current_session)):
                 if os.path.exists(db_bak):
                     shutil.copy2(db_bak, db_path)
 
-                # re-apply root ownership on auth helper after update
+                # re-apply root ownership on auth helper after update (tarball extraction resets it)
                 auth_helper = os.path.join(repo_dir, "bin", "mvmos-auth")
                 if os.path.exists(auth_helper):
                     subprocess.run(["sudo", "chown", "root:root", auth_helper], capture_output=True)
