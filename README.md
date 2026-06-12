@@ -37,6 +37,14 @@ bash install.sh
 
 The installer will ask for a port (default `2026`), set up a Python virtualenv and create a systemd service.
 
+## Manual update (terminal)
+
+If you can't access the UI, update from the terminal:
+
+```bash
+cd /opt/mvmos && sudo curl -fsSL https://github.com/mvmrik/mvmOS/archive/refs/heads/main.tar.gz | sudo tar -xz --strip-components=1 --exclude='.git' --exclude='venv' --exclude='backend/apps' --exclude='data.db' --exclude='config.ini' -C /opt/mvmos && sudo systemctl restart mvmos
+```
+
 ## Uninstall
 
 ```bash
