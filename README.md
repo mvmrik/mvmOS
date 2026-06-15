@@ -35,7 +35,7 @@ cd mvmOS-main
 bash install.sh
 ```
 
-The installer will ask for a port (default `2026`), set up a Python virtualenv and create a systemd service.
+The installer will ask for a port (default `2026`), set up a Python virtualenv and create a systemd service. Run as root or with `sudo`.
 
 ## Manual update (terminal)
 
@@ -70,6 +70,7 @@ For remote access over the internet, put it behind **nginx + HTTPS** or use a **
 | `python-multipart` | Form parsing |
 | `httpx` | HTTP client |
 | `watchdog` | File system events |
+| `python-pam` | Linux password authentication |
 
 No npm, no build step. xterm.js is bundled locally.
 
