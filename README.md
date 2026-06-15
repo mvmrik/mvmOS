@@ -48,7 +48,7 @@ cd /opt/mvmos && sudo curl -fsSL https://github.com/mvmrik/mvmOS/archive/refs/he
 ## Uninstall
 
 ```bash
-sudo systemctl disable --now mvmos 2>/dev/null || true; sudo rm -f /etc/systemd/system/mvmos.service; sudo systemctl daemon-reload; sudo rm -f /etc/sudoers.d/mvmos; sudo pkill -u mvmos 2>/dev/null; sleep 2; sudo userdel mvmos 2>/dev/null; sudo groupdel mvmos 2>/dev/null; sudo rm -rf /opt/mvmos
+sudo systemctl disable --now mvmos 2>/dev/null || true; sudo rm -f /etc/systemd/system/mvmos.service; sudo systemctl daemon-reload; sudo rm -rf /opt/mvmos
 ```
 
 > **Note:** This removes everything including installed apps, desktop configuration and all user data. Your Linux system users are not affected.

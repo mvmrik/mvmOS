@@ -110,49 +110,16 @@ sudo tee "$SCRIPT_DIR/config.ini" > /dev/null <<EOF
 port = $PORT
 EOF
 
-# ── Auth helper ───────────────────────────────────────────────────────────────
-# Written here so it's always up-to-date regardless of git history
-sudo mkdir -p "$SCRIPT_DIR/bin"
-sudo tee "$SCRIPT_DIR/bin/mvmos-auth" > /dev/null <<'AUTHEOF'
-#!/usr/bin/env python3
-import sys, spwd, ctypes, ctypes.util
-try:
-    line = sys.stdin.readline().rstrip('\n')
-    username, password = line.split(':', 1)
-    shadow = spwd.getspnam(username)
-    lib = ctypes.CDLL(ctypes.util.find_library('crypt') or 'libcrypt.so.1')
-    lib.crypt.restype = ctypes.c_char_p
-    result = lib.crypt(password.encode(), shadow.sp_pwdp.encode())
-    sys.exit(0 if result == shadow.sp_pwdp.encode() else 1)
-except KeyError:
-    sys.exit(2)
-except Exception as e:
-    sys.stderr.write(str(e) + '\n')
-    sys.exit(1)
-AUTHEOF
-
-# ── mvmos system user & group ─────────────────────────────────────────────────
-echo "  [3/4] Setting up mvmos user..."
-sudo groupadd -f mvmos
-sudo useradd -r -s /usr/sbin/nologin -g mvmos -M mvmos 2>/dev/null || true
-# Set ownership of install dir to mvmos
-sudo chown -R mvmos:mvmos "$SCRIPT_DIR"
+# ── Ownership ─────────────────────────────────────────────────────────────────
+# mvmOS runs as root: it manages the host (services, packages, OS updates) and
+# authenticates against /etc/shadow directly. Per-user actions (terminal, file
+# operations) are dropped to the logged-in user via `runuser`, so a non-root
+# session can never act as root. This is the same model used by Webmin/Cockpit.
+sudo chown -R root:root "$SCRIPT_DIR"
 sudo chmod 755 "$SCRIPT_DIR"
-# Auth helper — owned by root so it can read /etc/shadow via sudo
-sudo chown root:root "$SCRIPT_DIR/bin/mvmos-auth"
-sudo chmod 755 "$SCRIPT_DIR/bin/mvmos-auth"
-
-# ── sudoers ───────────────────────────────────────────────────────────────────
-sudo tee /etc/sudoers.d/mvmos > /dev/null <<EOF
-mvmos ALL=(root) NOPASSWD: $SCRIPT_DIR/bin/mvmos-auth
-mvmos ALL=(ALL)  NOPASSWD: /usr/sbin/runuser
-mvmos ALL=(root) NOPASSWD: /bin/chown root\:root $SCRIPT_DIR/bin/mvmos-auth
-mvmos ALL=(root) NOPASSWD: /bin/chmod 755 $SCRIPT_DIR/bin/mvmos-auth
-EOF
-sudo chmod 440 /etc/sudoers.d/mvmos
 
 # ── systemd service ───────────────────────────────────────────────────────────
-echo "  [4/4] Installing systemd service..."
+echo "  [3/3] Installing systemd service..."
 SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
 
 sudo tee "$SERVICE_FILE" > /dev/null <<EOF
@@ -162,8 +129,8 @@ After=network.target
 
 [Service]
 Type=simple
-User=mvmos
-Group=mvmos
+User=root
+Group=root
 WorkingDirectory=$SCRIPT_DIR
 ExecStart=$VENV_DIR/bin/uvicorn backend.main:app --host 0.0.0.0 --port $PORT
 Restart=always

@@ -174,21 +174,6 @@ async def do_update(session=Depends(get_current_session)):
                 # restore database
                 if os.path.exists(db_bak):
                     shutil.copy2(db_bak, db_path)
-
-                # re-apply root ownership on auth helper after update (tarball extraction resets it)
-                # sudo cp creates the destination owned by root, which is what we need
-                auth_helper = os.path.join(repo_dir, "bin", "mvmos-auth")
-                if os.path.exists(auth_helper):
-                    import tempfile as _tf
-                    with _tf.NamedTemporaryFile(delete=False, suffix=".auth") as _tmp:
-                        _tmp_path = _tmp.name
-                    shutil.copy2(auth_helper, _tmp_path)
-                    os.chmod(_tmp_path, 0o755)
-                    subprocess.run(["sudo", "cp", _tmp_path, auth_helper], capture_output=True)
-                    try:
-                        os.unlink(_tmp_path)
-                    except OSError:
-                        pass
         except Exception as e:
             yield f"data: Extract failed: {e}\n\n"
             yield "data: __EXIT_1__\n\n"
