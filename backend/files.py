@@ -346,8 +346,10 @@ async def raw_file(path: str, session=Depends(get_current_session)):
     if subprocess.run(test_cmd, capture_output=True).returncode != 0:
         raise HTTPException(status_code=403, detail="Permission denied")
 
+    from urllib.parse import quote
     mime, _ = mimetypes.guess_type(real)
     filename = os.path.basename(real)
+    encoded_name = quote(filename, safe='')
 
     def _stream():
         cmd = (prefix + ["runuser", "-u", eu, "--", "cat", real]) if eu != "root" else ["cat", real]
@@ -365,7 +367,7 @@ async def raw_file(path: str, session=Depends(get_current_session)):
     return StreamingResponse(
         _stream(),
         media_type=mime or "application/octet-stream",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{encoded_name}"},
     )
 
 
@@ -454,11 +456,13 @@ async def download_zip(body: DownloadZipRequest, session=Depends(get_current_ses
                         zf.writestr(os.path.relpath(fpath, base), data)
 
     buf.seek(0)
+    from urllib.parse import quote
     name = os.path.basename(reals[0]) if len(reals) == 1 else "download"
+    encoded_zip = quote(name + ".zip", safe='')
     return StreamingResponse(
         buf,
         media_type="application/zip",
-        headers={"Content-Disposition": f'attachment; filename="{name}.zip"'},
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{encoded_zip}"},
     )
 
 def _trash_dir(eu: str) -> str:

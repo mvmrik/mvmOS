@@ -118,6 +118,7 @@ const TextEditor = (() => {
   const TEXT_EXTS = ['txt','md','json','js','py','sh','css','html','xml','yaml','yml','ini','conf','log','csv','ts','env'];
 
   function isText(name) {
+    if (!name.includes('.')) return true;
     const ext = name.split('.').pop().toLowerCase();
     return TEXT_EXTS.includes(ext);
   }

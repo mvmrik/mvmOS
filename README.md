@@ -21,14 +21,6 @@ Anyone can create their own apps, widgets and themes. See the [mvmos-store devel
 
 ## Install
 
-**With git:**
-```bash
-git clone https://github.com/mvmrik/mvmOS.git
-cd mvmOS
-bash install.sh
-```
-
-**Without git:**
 ```bash
 curl -fsSL https://github.com/mvmrik/mvmOS/archive/refs/heads/main.tar.gz | tar -xz
 cd mvmOS-main
