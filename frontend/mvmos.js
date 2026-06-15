@@ -815,6 +815,7 @@ var mvmOS = (() => {
     _ensureAppsMenuItem();
     _loadAllWidgets().then(() => _splashProgress(80));
     _startResourcePoller();
+    Wallpaper.apply();
     document.addEventListener('mvmos-plugins-loaded', () => {
       _renderQuickAccess();
       _splashProgress(100);

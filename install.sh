@@ -103,7 +103,8 @@ sudo "$VENV_DIR/bin/pip" install --quiet \
     "python-multipart>=0.0.9" \
     "httpx>=0.27.0" \
     "watchdog>=4.0.0" \
-    "python-pam>=2.0.0"
+    "python-pam>=2.0.0" \
+    "six>=1.16.0"
 
 # ── config.ini ────────────────────────────────────────────────────────────────
 sudo tee "$SCRIPT_DIR/config.ini" > /dev/null <<EOF

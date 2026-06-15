@@ -25,7 +25,7 @@
 </div>
 
 <!-- Desktop area -->
-<div id="desktop"></div>
+<div id="desktop"><div id="desktop-wallpaper"></div></div>
 
 <!-- Taskbar -->
 <div id="taskbar">
@@ -115,6 +115,7 @@
 <script src="/folderpicker.js"></script>
 <script src="/screensaver.js"></script>
 <script>ScreenSaver.init();</script>
+<script src="/wallpaper.js"></script>
 <script>
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('/sw.js').catch(() => {});

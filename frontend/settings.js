@@ -148,6 +148,7 @@ const Settings = (() => {
         <nav class="settings-tabs as-sidebar">
           <div class="settings-tab ${activeTab==='display'?'active':''}" data-tab="display">${t('settings_display')}</div>
           <div class="settings-tab ${activeTab==='screensaver'?'active':''}" data-tab="screensaver">${t('settings_screensaver')}</div>
+          <div class="settings-tab ${activeTab==='wallpaper'?'active':''}" data-tab="wallpaper">${t('settings_wallpaper')}</div>
           <div class="settings-tab ${activeTab==='regional'?'active':''}" data-tab="regional">${t('settings_regional')}</div>
           <div class="settings-tab ${activeTab==='filemanager'?'active':''}" data-tab="filemanager">${t('settings_filemanager')}</div>
           <div class="settings-tab ${activeTab==='users'?'active':''}" data-tab="users">${t('settings_users')}</div>
@@ -406,6 +407,14 @@ const Settings = (() => {
             </div>
           </div>
 
+          <!-- Wallpaper panel -->
+          <div class="settings-panel ${activeTab==='wallpaper'?'active':''}" id="sp-wallpaper">
+            <div class="settings-section">
+              <div class="settings-section-title">${t('wp_title')}</div>
+              <div id="wp-accordion" style="display:flex;flex-direction:column;gap:6px"></div>
+            </div>
+          </div>
+
           <!-- About panel -->
           <div class="settings-panel ${activeTab==='about'?'active':''}" id="sp-about">
             <div id="about-content" style="padding:8px 0"><div style="color:var(--text-dim);font-size:.85rem">Loading…</div></div>
@@ -431,6 +440,7 @@ const Settings = (() => {
         if (tab.dataset.tab === 'display') renderThemePicker(body);
         if (tab.dataset.tab === 'startmenu') renderStartMenu(body);
         if (tab.dataset.tab === 'screensaver') initScreenSaver(body);
+        if (tab.dataset.tab === 'wallpaper') initWallpaper(body);
         if (tab.dataset.tab === 'system') renderSystem(body);
       });
     });
@@ -441,6 +451,7 @@ const Settings = (() => {
     if (activeTab === 'display' || !activeTab) renderThemePicker(body);
     if (activeTab === 'startmenu') renderStartMenu(body);
     if (activeTab === 'screensaver') initScreenSaver(body);
+    if (activeTab === 'wallpaper') initWallpaper(body);
     if (activeTab === 'system') renderSystem(body);
 
     // Display — auto-save on slider change
@@ -1235,6 +1246,213 @@ const Settings = (() => {
     });
   }
 
+  async function _saveWp(partial) {
+    if (!Object.keys(currentSettings).length) await loadSettings();
+    await saveSettings({ ...currentSettings, ...partial });
+  }
+
+  async function initWallpaper(body) {
+    const accordion = body.querySelector('#wp-accordion');
+    if (!accordion) return;
+    if (!Object.keys(currentSettings).length) await loadSettings();
+    accordion.innerHTML = '';
+    const activeType = currentSettings.wp_type || 'logo';
+    const types = [
+      { id: 'logo',   label: t('wp_type_logo'),   icon: '🖥' },
+      { id: 'static', label: t('wp_type_static'),  icon: '🖼' },
+      { id: 'folder', label: t('wp_type_folder'),  icon: '🎞' },
+    ];
+    types.forEach(tp => {
+      const isActive = activeType === tp.id;
+      const item = document.createElement('div');
+      item.style.cssText = 'border:1px solid var(--border);border-radius:var(--radius);overflow:hidden';
+      item.innerHTML = `
+        <div class="wp-acc-header" style="display:flex;align-items:center;gap:10px;padding:10px 14px;cursor:pointer;background:${isActive ? 'var(--accent-dim, rgba(99,102,241,.12))' : 'var(--surface)'}">
+          <span style="font-size:1.1rem">${tp.icon}</span>
+          <span style="flex:1;font-size:.9rem;font-weight:500">${tp.label}</span>
+          ${isActive ? `<span style="font-size:.75rem;color:var(--accent);font-weight:600">${t('ss_active')}</span>` : `<button class="s-btn s-btn-sm wp-select-btn">${t('ss_select')}</button>`}
+        </div>
+        <div class="wp-acc-body" style="display:${(tp.id === 'static' || tp.id === 'folder') && isActive ? 'block' : 'none'};padding:10px 14px;border-top:1px solid var(--border);background:var(--bg)"></div>
+      `;
+      const header = item.querySelector('.wp-acc-header');
+      const bodyEl = item.querySelector('.wp-acc-body');
+      const selectBtn = item.querySelector('.wp-select-btn');
+      if (tp.id === 'static') _buildWallpaperStaticSettings(bodyEl);
+      else if (tp.id === 'folder') _buildWallpaperFolderSettings(bodyEl);
+      if (selectBtn) {
+        selectBtn.addEventListener('click', async e => {
+          e.stopPropagation();
+          await _saveWp({ wp_type: tp.id });
+          window.dispatchEvent(new Event('wallpaper-changed'));
+          initWallpaper(body);
+        });
+      }
+      if ((tp.id === 'static' || tp.id === 'folder') && isActive) {
+        header.addEventListener('click', () => {
+          bodyEl.style.display = bodyEl.style.display === 'none' ? 'block' : 'none';
+        });
+      }
+      accordion.appendChild(item);
+    });
+  }
+
+  function _buildWallpaperStaticSettings(container) {
+    const path = currentSettings.wp_static_path || '';
+    const fname = path ? path.split('/').pop() : '';
+    container.innerHTML = `
+      <div class="settings-row">
+        <span style="font-size:.85rem">${t('wp_static_file')}</span>
+        <div style="display:flex;gap:6px;flex:1;justify-content:flex-end">
+          <input id="wp-static-path" type="text" class="s-input" style="width:130px;font-size:.82rem" placeholder="image.jpg" value="${fname}" readonly>
+          <button class="s-btn s-btn-sm" id="wp-static-browse">…</button>
+        </div>
+      </div>
+    `;
+    container.querySelector('#wp-static-browse').addEventListener('click', () => {
+      _openImagePicker(async fullPath => {
+        container.querySelector('#wp-static-path').value = fullPath.split('/').pop();
+        await _saveWp({ wp_static_path: fullPath });
+        window.dispatchEvent(new Event('wallpaper-changed'));
+      });
+    });
+  }
+
+  function _buildWallpaperFolderSettings(container) {
+    const folder = currentSettings.wp_folder || '';
+    const period = currentSettings.wp_period || '10';
+    container.innerHTML = `
+      <div class="settings-row" style="margin-bottom:8px">
+        <span style="font-size:.85rem">${t('ss_photos_folder')}</span>
+        <div style="display:flex;gap:6px;flex:1;justify-content:flex-end">
+          <input id="wp-folder" type="text" class="s-input" style="width:130px;font-size:.82rem" placeholder="Pictures" value="${folder}" readonly>
+          <button class="s-btn s-btn-sm" id="wp-folder-browse">…</button>
+        </div>
+      </div>
+      <div class="settings-row">
+        <span style="font-size:.85rem">${t('ss_photos_period')}</span>
+        <select id="wp-period" class="s-input" style="width:100px;font-size:.82rem">
+          <option value="1">1 ${t('ss_min')}</option>
+          <option value="5">5 ${t('ss_min')}</option>
+          <option value="10">10 ${t('ss_min')}</option>
+          <option value="30">30 ${t('ss_min')}</option>
+          <option value="60">60 ${t('ss_min')}</option>
+        </select>
+      </div>
+    `;
+    container.querySelector('#wp-period').value = period;
+    container.querySelector('#wp-folder-browse').addEventListener('click', async () => {
+      const me = await (await fetch('/api/auth/whoami')).json();
+      const home = me.effective_user === 'root' ? '/root' : `/home/${me.effective_user}`;
+      FolderPicker.open({
+        root: home,
+        asRoot: me.effective_user === 'root',
+        onSelect: async path => {
+          const rel = path.startsWith(home + '/') ? path.slice(home.length + 1) : path;
+          container.querySelector('#wp-folder').value = rel;
+          await _saveWp({ wp_folder: rel });
+          window.dispatchEvent(new Event('wallpaper-changed'));
+        }
+      });
+    });
+    container.querySelector('#wp-period').addEventListener('change', async e => {
+      await _saveWp({ wp_period: e.target.value });
+      window.dispatchEvent(new Event('wallpaper-changed'));
+    });
+  }
+
+  async function _openImagePicker(onSelect) {
+    const me = await (await fetch('/api/auth/whoami')).json();
+    const home = me.effective_user === 'root' ? '/root' : `/home/${me.effective_user}`;
+    const asRoot = me.effective_user === 'root';
+    const IMG_EXT = new Set(['jpg','jpeg','png','gif','webp','bmp','svg']);
+
+    document.getElementById('wp-img-picker')?.remove();
+    let currentPath = home;
+
+    const ov = document.createElement('div');
+    ov.id = 'wp-img-picker';
+    ov.style.cssText = 'position:fixed;inset:0;z-index:99990;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center';
+    const modal = document.createElement('div');
+    modal.style.cssText = 'background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);width:min(460px,92vw);max-height:75vh;display:flex;flex-direction:column;box-shadow:var(--shadow)';
+
+    async function _render() {
+      let entries = [];
+      try {
+        const d = await (await fetch(`/api/files?path=${encodeURIComponent(currentPath)}${asRoot ? '&as_root=true' : ''}`)).json();
+        entries = (d.entries || []).filter(e => !e.name.startsWith('.'));
+      } catch {}
+      const folders = entries.filter(e => e.is_dir || e.type === 'dir').sort((a,b) => a.name.localeCompare(b.name));
+      const images  = entries.filter(e => !(e.is_dir || e.type === 'dir') && IMG_EXT.has(e.name.split('.').pop().toLowerCase())).sort((a,b) => a.name.localeCompare(b.name));
+
+      const homeParts = home.replace(/\/+$/, '').split('/').filter(Boolean);
+      const curParts  = currentPath.replace(/\/+$/, '').split('/').filter(Boolean);
+      const crumbs = [{ label: '~', path: home }];
+      let acc = home;
+      for (let i = homeParts.length; i < curParts.length; i++) {
+        acc += '/' + curParts[i];
+        crumbs.push({ label: curParts[i], path: acc });
+      }
+
+      modal.innerHTML = `
+        <div style="padding:14px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px">
+          <span style="flex:1;font-weight:600;font-size:.95rem">${t('wp_static_file')}</span>
+          <button id="wip-close" style="background:none;border:none;cursor:pointer;font-size:1.1rem;color:var(--text-dim)">✕</button>
+        </div>
+        <div id="wip-bc" style="padding:8px 16px;display:flex;align-items:center;flex-wrap:wrap;gap:2px;border-bottom:1px solid var(--border);font-size:.82rem"></div>
+        <div id="wip-list" style="overflow-y:auto;flex:1;padding:6px 0;min-height:80px"></div>
+        <div style="padding:10px 16px;border-top:1px solid var(--border);display:flex;justify-content:flex-end">
+          <button class="s-btn" id="wip-cancel">${t('cancel') || 'Cancel'}</button>
+        </div>
+      `;
+
+      const bc = modal.querySelector('#wip-bc');
+      crumbs.forEach((c, i) => {
+        const span = document.createElement('span');
+        if (i < crumbs.length - 1) {
+          span.innerHTML = `<a href="#" style="color:var(--accent);text-decoration:none">${c.label}</a><span style="color:var(--text-dim);margin:0 2px">/</span>`;
+          span.querySelector('a').addEventListener('click', e => { e.preventDefault(); currentPath = c.path; _render(); });
+        } else {
+          span.textContent = c.label;
+          span.style.fontWeight = '500';
+        }
+        bc.appendChild(span);
+      });
+
+      const list = modal.querySelector('#wip-list');
+      if (!folders.length && !images.length) {
+        list.innerHTML = `<div style="padding:20px;text-align:center;color:var(--text-dim);font-size:.85rem">${t('fp_empty') || 'Empty'}</div>`;
+      }
+      folders.forEach(f => {
+        const row = document.createElement('div');
+        row.style.cssText = 'display:flex;align-items:center;gap:10px;padding:7px 16px;cursor:pointer;font-size:.88rem';
+        row.innerHTML = `<span>📁</span><span style="flex:1">${f.name}</span>`;
+        row.addEventListener('mouseenter', () => row.style.background = 'var(--hover)');
+        row.addEventListener('mouseleave', () => row.style.background = '');
+        row.addEventListener('click', () => { currentPath = currentPath.replace(/\/+$/, '') + '/' + f.name; _render(); });
+        list.appendChild(row);
+      });
+      images.forEach(img => {
+        const row = document.createElement('div');
+        row.style.cssText = 'display:flex;align-items:center;gap:10px;padding:7px 16px;cursor:pointer;font-size:.88rem';
+        row.innerHTML = `<span>🖼</span><span style="flex:1">${img.name}</span>`;
+        row.addEventListener('mouseenter', () => row.style.background = 'var(--hover)');
+        row.addEventListener('mouseleave', () => row.style.background = '');
+        row.addEventListener('click', () => {
+          ov.remove();
+          onSelect(currentPath.replace(/\/+$/, '') + '/' + img.name);
+        });
+        list.appendChild(row);
+      });
+      modal.querySelector('#wip-close').addEventListener('click', () => ov.remove());
+      modal.querySelector('#wip-cancel').addEventListener('click', () => ov.remove());
+    }
+
+    ov.appendChild(modal);
+    ov.addEventListener('click', e => { if (e.target === ov) ov.remove(); });
+    document.body.appendChild(ov);
+    _render();
+  }
+
   function renderSystem(body) {
     const panel = body.querySelector('#sp-system');
     if (!panel) return;
@@ -1247,5 +1465,5 @@ const Settings = (() => {
     });
   }
 
-  return { openWindow, get, initDisplay, loadFMPrefs, loadStartMenuPrefs, defaultStartMenuPrefs, initScreenSaver, applyStartMenuOpacity: _applyStartMenuOpacity };
+  return { openWindow, get, initDisplay, loadFMPrefs, loadStartMenuPrefs, defaultStartMenuPrefs, initScreenSaver, initWallpaper, applyStartMenuOpacity: _applyStartMenuOpacity };
 })();

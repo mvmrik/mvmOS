@@ -71,6 +71,7 @@ For remote access over the internet, put it behind **nginx + HTTPS** or use a **
 | `httpx` | HTTP client |
 | `watchdog` | File system events |
 | `python-pam` | Linux password authentication |
+| `six` | python-pam dependency |
 
 No npm, no build step. xterm.js is bundled locally.
 

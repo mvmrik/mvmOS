@@ -398,6 +398,14 @@ window._i18n = {
   'sm_dedup':                     'Hide duplicates already shown above',
   'sm_add_app':                   '+ Add application…',
 
+  // ── Wallpaper ─────────────────────────────────────────────────────────────
+  'settings_wallpaper':             '🖼 Wallpaper',
+  'wp_title':                       'Desktop Wallpaper',
+  'wp_type_logo':                   'mvmOS Logo',
+  'wp_type_static':                 'Single Image',
+  'wp_type_folder':                 'Image Folder',
+  'wp_static_file':                 'Image file',
+
   // ── Screen Saver ─────────────────────────────────────────────────────────
   'settings_screensaver':           '🖵 Screen Saver',
   'ss_title':                       'Screen Saver',
