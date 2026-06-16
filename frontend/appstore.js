@@ -2,7 +2,6 @@
 
 const AppStore = (() => {
 
-  // opts: string (legacy tab id) or { section: 'widgets', widgetType: 'taskbar'|'desktop'|'' }
   function openWindow(opts) {
     const existing = document.querySelector('.window[data-win-id="appstore"]');
     if (existing) {
@@ -15,7 +14,7 @@ const AppStore = (() => {
       title: `📦 ${t('app_appstore')}`,
       width: 880,
       height: 580,
-      onMount(body) { (window.mvmOS?.i18nReady || Promise.resolve()).then(() => { render(body); if (opts) _applyOpts(body, opts); Desktop.initMobileSidebar(body); }); },
+      onMount(body) { (window.mvmOS?.i18nReady || Promise.resolve()).then(() => { render(body, opts); if (opts) _applyOpts(body, opts); Desktop.initMobileSidebar(body); }); },
     });
   }
 
@@ -24,19 +23,20 @@ const AppStore = (() => {
       body?.querySelector?.(`.as-tab[data-tab="${opts}"]`)?.click();
     } else if (opts?.section === 'widgets') {
       const wt = opts.widgetType || '';
-      body._as._pendingWidgetFilter = wt;
-      const wsTab = body.querySelector('#as-widget-store-tabs .as-tab');
-      if (wsTab) {
-        wsTab.click();
-      } else {
-        // tabs not yet loaded — poll briefly then click
+      const _activate = () => {
+        const tab = body.querySelector('#as-widget-store-tabs .as-tab');
+        if (!tab) return false;
+        body._as.activateTab(tab);
+        // find the store object to pass to loadWidgetStoreCategories
+        fetch('/api/widgets/stores').then(r => r.json()).then(stores => {
+          if (stores[0]) loadWidgetStoreCategories(body, stores[0], wt || null);
+        });
+        return true;
+      };
+      if (!_activate()) {
         let attempts = 0;
-        const t = setInterval(() => {
-          const tab = body.querySelector('#as-widget-store-tabs .as-tab');
-          if (tab || ++attempts > 20) {
-            clearInterval(t);
-            if (tab) tab.click();
-          }
+        const ti = setInterval(() => {
+          if (_activate() || ++attempts > 20) clearInterval(ti);
         }, 50);
       }
     } else if (opts?.section === 'my-widgets') {
@@ -62,7 +62,7 @@ const AppStore = (() => {
   }
 
   // ── Render shell ──────────────────────────────────────────────────────────
-  function render(body) {
+  function render(body, opts) {
     body.style.overflow = 'hidden';
     body.style.padding = '0';
     body.innerHTML = `
@@ -362,13 +362,14 @@ const AppStore = (() => {
     body._as = { browseState, activateTab, refreshCurrent: null };
 
     // ── Load stores → build dynamic tabs ──
-    loadStoreTabs(body);
-    loadWidgetStoreTabs(body);
+    const _initSection = opts?.section;
+    loadStoreTabs(body, !_initSection || _initSection === 'apps');
+    loadWidgetStoreTabs(body, _initSection === 'widgets', opts?.widgetType || '');
     loadThemeStoreTabs(body);
   }
 
   // ── Store tabs (sidebar) ──────────────────────────────────────────────────
-  async function loadStoreTabs(body) {
+  async function loadStoreTabs(body, autoActivate = false) {
     const res = await fetch('/api/plugins/stores');
     const stores = await res.json();
     const tabsEl = body.querySelector('#as-store-tabs');
@@ -398,7 +399,7 @@ const AppStore = (() => {
     });
 
     // auto-activate first store tab unless my-widgets settings pending
-    if (stores.length && !body._as._suppressWidgetStoreAutoActivate) {
+    if (autoActivate && stores.length && !body._as._suppressWidgetStoreAutoActivate) {
       const firstTab = tabsEl.querySelector('.as-tab');
       if (firstTab) body._as.activateTab(firstTab);
       loadStoreCategories(body, stores[0]);
@@ -997,7 +998,7 @@ const AppStore = (() => {
   }
 
   // ── Widget store tabs ─────────────────────────────────────────────────────
-  async function loadWidgetStoreTabs(body) {
+  async function loadWidgetStoreTabs(body, autoActivate = false, widgetType = '') {
     const res = await fetch('/api/widgets/stores');
     const stores = await res.json();
     const tabsEl = body.querySelector('#as-widget-store-tabs');
@@ -1016,94 +1017,32 @@ const AppStore = (() => {
         const panel = document.createElement('div');
         panel.className = 'as-panel';
         panel.id = panelId;
-        panel.innerHTML = `
-          <div class="as-toolbar" id="as-wstore-filter-bar-${store.id}" style="gap:6px;flex-wrap:wrap">
-            <span style="font-size:.78rem;color:var(--text-dim);margin-right:4px">Show:</span>
-            ${['','desktop','taskbar'].map(v => `
-              <button class="s-btn-sm as-wtype-btn${v==='' ? ' active' : ''}" data-wtype="${v}"
-                style="${v==='' ? 'background:var(--accent);color:#fff;border-color:var(--accent)' : ''}"
-              >${v === '' ? 'All' : v.charAt(0).toUpperCase() + v.slice(1)}</button>
-            `).join('')}
-          </div>
-          <div class="as-list" id="as-wstore-list-${store.id}"><div class="as-loading"\>${t('loading')}</div></div>
-        `;
+        panel.innerHTML = `<div class="as-list" id="as-wstore-list-${store.id}"><div class="as-loading"\>${t('loading')}</div></div>`;
         body.querySelector('.as-main').insertBefore(panel, body.querySelector('#as-output-wrap'));
-
-        // filter pill click handlers
-        panel.querySelectorAll('.as-wtype-btn').forEach(btn => {
-          btn.addEventListener('click', () => {
-            panel.querySelectorAll('.as-wtype-btn').forEach(b => {
-              b.classList.remove('active');
-              b.style.background = ''; b.style.color = ''; b.style.borderColor = '';
-            });
-            btn.classList.add('active');
-            btn.style.background = 'var(--accent)'; btn.style.color = '#fff'; btn.style.borderColor = 'var(--accent)';
-            const wt = btn.dataset.wtype;
-            loadWidgetStoreCategories(body, store, wt);
-            body._as.refreshCurrent = () => loadWidgetStoreCategories(body, store, wt);
-          });
-        });
       }
 
       tab.addEventListener('click', () => {
         body._as.activateTab(tab);
-        // apply pending filter from _applyOpts if present
-        const pending = body._as._pendingWidgetFilter;
-        if (pending !== undefined) {
-          delete body._as._pendingWidgetFilter;
-          _setWidgetFilter(body, store, pending);
-        } else {
-          const wt = _getWidgetFilter(body, store.id);
-          loadWidgetStoreCategories(body, store, wt);
-          body._as.refreshCurrent = () => loadWidgetStoreCategories(body, store, wt);
-        }
+        loadWidgetStoreCategories(body, store);
+        body._as.refreshCurrent = () => loadWidgetStoreCategories(body, store);
       });
     });
 
-    if (stores.length) {
-      // don't auto-activate if my-widgets or my-themes tab is pending
-      if (!body._as._suppressWidgetStoreAutoActivate) {
-        const firstTab = tabsEl.querySelector('.as-tab');
-        if (firstTab) body._as.activateTab(firstTab);
-        const pending = body._as._pendingWidgetFilter;
-        if (pending !== undefined) {
-          delete body._as._pendingWidgetFilter;
-          _setWidgetFilter(body, stores[0], pending);
-        } else {
-          const wt = _getWidgetFilter(body, stores[0].id);
-          loadWidgetStoreCategories(body, stores[0], wt);
-          body._as.refreshCurrent = () => loadWidgetStoreCategories(body, stores[0], wt);
-        }
+    if (autoActivate && stores.length && !body._as._suppressWidgetStoreAutoActivate) {
+      const firstTab = tabsEl.querySelector('.as-tab');
+      if (firstTab) {
+        body._as.activateTab(firstTab);
+        loadWidgetStoreCategories(body, stores[0], widgetType);
+        body._as.refreshCurrent = () => loadWidgetStoreCategories(body, stores[0]);
       }
     }
   }
 
-  function _getWidgetFilter(body, storeId) {
-    const active = body.querySelector(`#as-wstore-filter-bar-${storeId} .as-wtype-btn.active`);
-    return active ? active.dataset.wtype : '';
-  }
-
-  function _setWidgetFilter(body, store, wt) {
-    const bar = body.querySelector(`#as-wstore-filter-bar-${store.id}`);
-    if (bar) {
-      bar.querySelectorAll('.as-wtype-btn').forEach(b => {
-        const match = b.dataset.wtype === wt;
-        b.classList.toggle('active', match);
-        b.style.background = match ? 'var(--accent)' : '';
-        b.style.color = match ? '#fff' : '';
-        b.style.borderColor = match ? 'var(--accent)' : '';
-      });
-    }
-    loadWidgetStoreCategories(body, store, wt);
-    body._as.refreshCurrent = () => loadWidgetStoreCategories(body, store, wt);
-  }
-
-  async function loadWidgetStoreCategories(body, store, widgetType) {
+  async function loadWidgetStoreCategories(body, store, autoEnter) {
     const list = body.querySelector(`#as-wstore-list-${store.id}`);
     if (!list) return;
     list.innerHTML = `<div class="as-loading">${t('loading')}</div>`;
-    const params = `store_id=${store.id}${widgetType ? `&widget_type=${widgetType}` : ''}`;
-    const res = await fetch(`/api/widgets/categories?${params}`);
+    const res = await fetch(`/api/widgets/categories?store_id=${store.id}`);
     const data = await res.json();
     if (data.error) { list.innerHTML = `<div class="as-loading">Error: ${data.error}</div>`; return; }
 
@@ -1113,6 +1052,7 @@ const AppStore = (() => {
     list.innerHTML = '';
     const grid = document.createElement('div');
     grid.style.cssText = 'display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;padding:4px 0';
+    const cards = [];
     cats.forEach(cat => {
       const card = document.createElement('div');
       card.style.cssText = 'background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:16px 12px;cursor:pointer;text-align:center;transition:background .15s';
@@ -1123,33 +1063,89 @@ const AppStore = (() => {
       `;
       card.addEventListener('mouseenter', () => card.style.background = 'var(--surface)');
       card.addEventListener('mouseleave', () => card.style.background = 'var(--surface2)');
-      card.addEventListener('click', () => loadWidgetCategoryItems(body, store, cat, list, widgetType));
+      card.addEventListener('click', () => loadWidgetCategoryItems(body, store, cat, list));
       grid.appendChild(card);
+      cards.push({ cat, card });
     });
     list.appendChild(grid);
+
+    if (autoEnter) {
+      const match = cards.find(({ cat }) => cat.id === autoEnter || cat.name.toLowerCase().includes(autoEnter));
+      if (match) match.card.click();
+    }
   }
 
-  async function loadWidgetCategoryItems(body, store, cat, list, widgetType) {
+  async function loadWidgetCategoryItems(body, store, cat, list, parentCat) {
     list.innerHTML = `<div class="as-loading">${t('loading')}</div>`;
-    let params = cat.manifest_url
-      ? `category_url=${encodeURIComponent(cat.manifest_url)}`
-      : `store_id=${store.id}&category_id=${encodeURIComponent(cat.id)}`;
-    if (widgetType) params += `&widget_type=${widgetType}`;
-    const res = await fetch(`/api/widgets/category-widgets?${params}`);
-    const widgets = await res.json();
-    if (widgets.error) { list.innerHTML = `<div class="as-loading">Error: ${widgets.error}</div>`; return; }
 
-    const backBar = document.createElement('div');
-    backBar.className = 'as-toolbar';
-    backBar.innerHTML = `<button class="s-btn s-btn-sm">← ${cat.name}</button>`;
-    backBar.querySelector('button').addEventListener('click', () => loadWidgetStoreCategories(body, store, widgetType));
-    list.innerHTML = '';
-    list.appendChild(backBar);
+    if (cat.manifest_url) {
+      let data;
+      try {
+        const res = await fetch(`/api/widgets/manifest?url=${encodeURIComponent(cat.manifest_url)}`);
+        data = await res.json();
+      } catch(e) { list.innerHTML = `<div class="as-loading">Error loading manifest</div>`; return; }
 
-    const el = document.createElement('div');
-    list.appendChild(el);
-    renderWidgetRows(el, widgets.map(w => ({ ...w, official: store.official ?? 0, store_id: store.id })), body);
-    body._as.refreshCurrent = () => loadWidgetCategoryItems(body, store, cat, list, widgetType);
+      // manifest has subcategories — render them
+      if (data.categories?.length) {
+        const backFn = parentCat
+          ? () => loadWidgetCategoryItems(body, store, parentCat, list)
+          : () => loadWidgetStoreCategories(body, store);
+        const backBar = document.createElement('div');
+        backBar.className = 'as-toolbar';
+        backBar.innerHTML = `<button class="s-btn s-btn-sm">← ${cat.name}</button>`;
+        backBar.querySelector('button').addEventListener('click', backFn);
+        list.innerHTML = '';
+        list.appendChild(backBar);
+        const grid = document.createElement('div');
+        grid.style.cssText = 'display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;padding:4px 0';
+        data.categories.forEach(sub => {
+          const card = document.createElement('div');
+          card.style.cssText = 'background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:16px 12px;cursor:pointer;text-align:center;transition:background .15s';
+          card.innerHTML = `
+            <div style="font-size:1.8rem;line-height:1;height:2rem;display:flex;align-items:center;justify-content:center;margin-bottom:8px">${sub.icon || '🔲'}</div>
+            <div style="font-weight:600;color:var(--text);font-size:.83rem">${sub.name}</div>
+          `;
+          card.addEventListener('mouseenter', () => card.style.background = 'var(--surface)');
+          card.addEventListener('mouseleave', () => card.style.background = 'var(--surface2)');
+          card.addEventListener('click', () => loadWidgetCategoryItems(body, store, sub, list, cat));
+          grid.appendChild(card);
+        });
+        list.appendChild(grid);
+        body._as.refreshCurrent = () => loadWidgetCategoryItems(body, store, cat, list, parentCat);
+        return;
+      }
+
+      // manifest has widgets — render them
+      const widgets = data.widgets || [];
+      const backFn = parentCat
+        ? () => loadWidgetCategoryItems(body, store, parentCat, list)
+        : () => loadWidgetStoreCategories(body, store);
+      const backBar = document.createElement('div');
+      backBar.className = 'as-toolbar';
+      backBar.innerHTML = `<button class="s-btn s-btn-sm">← ${cat.name}</button>`;
+      backBar.querySelector('button').addEventListener('click', backFn);
+      list.innerHTML = '';
+      list.appendChild(backBar);
+      const el = document.createElement('div');
+      list.appendChild(el);
+      renderWidgetRows(el, widgets.map(w => ({ ...w, official: store.official ?? 0, store_id: store.id })), body);
+      body._as.refreshCurrent = () => loadWidgetCategoryItems(body, store, cat, list, parentCat);
+    } else {
+      // no manifest_url — fetch by store + category_id
+      const res = await fetch(`/api/widgets/category-widgets?store_id=${store.id}&category_id=${encodeURIComponent(cat.id)}`);
+      const widgets = await res.json();
+      if (widgets.error) { list.innerHTML = `<div class="as-loading">Error: ${widgets.error}</div>`; return; }
+      const backBar = document.createElement('div');
+      backBar.className = 'as-toolbar';
+      backBar.innerHTML = `<button class="s-btn s-btn-sm">← ${cat.name}</button>`;
+      backBar.querySelector('button').addEventListener('click', () => loadWidgetStoreCategories(body, store));
+      list.innerHTML = '';
+      list.appendChild(backBar);
+      const el = document.createElement('div');
+      list.appendChild(el);
+      renderWidgetRows(el, widgets.map(w => ({ ...w, official: store.official ?? 0, store_id: store.id })), body);
+      body._as.refreshCurrent = () => loadWidgetCategoryItems(body, store, cat, list);
+    }
   }
 
   async function loadMyWidgets(body) {
@@ -1249,7 +1245,7 @@ const AppStore = (() => {
         <div style="display:flex;align-items:center;gap:6px;padding-left:10px;flex-shrink:0">
           ${w.update_available ? `<button class="s-btn s-btn-sm ws-update" data-widget='${JSON.stringify(w)}'>${t('um_update_btn')}</button>` : ''}
           ${w.installed
-            ? `<button class="s-btn s-btn-sm ws-settings" data-id="${w.id}" data-widget-settings-id="${w.id}">${t('wstore_settings')}</button>
+            ? `${(window.mvmOS?._widgets?.[w.id]?.settings?.length) ? `<button class="s-btn s-btn-sm ws-settings" data-id="${w.id}">${t('wstore_settings')}</button>` : ''}
                <button class="s-btn s-btn-sm s-btn-danger ws-remove" data-id="${w.id}">${t('remove')}</button>`
             : `<button class="s-btn s-btn-sm ws-install" data-widget='${JSON.stringify(w)}'>${t('appstore_install')}</button>`}
         </div>
@@ -1307,11 +1303,14 @@ const AppStore = (() => {
     const def = window.mvmOS?._widgets?.[widgetId];
     const settings = def?.settings || [];
     const useDb = !!def?.useDb;
-    const main = body.querySelector('.as-main');
-    const prevContent = main.innerHTML;
+    const prevRefresh = body._as.refreshCurrent;
+
+    // render inside the active panel's list, same as _openAppSettings
+    const activePanel = body.querySelector('.as-panel.active');
+    const list = activePanel?.querySelector('[id^="as-wstore-list-"], #as-my-widgets-list, #as-widget-installed-list') || body.querySelector('.as-main');
 
     // show loading while reading db values
-    main.innerHTML = `<div style="padding:20px;color:var(--text-dim)">${t('loading')}</div>`;
+    list.innerHTML = `<div style="padding:20px;color:var(--text-dim)">${t('loading')}</div>`;
 
     let _dbVals = {};
     if (useDb) {
@@ -1437,18 +1436,17 @@ const AppStore = (() => {
     }
 
     wrap.appendChild(content);
-    main.innerHTML = '';
-    main.appendChild(wrap);
+    list.innerHTML = '';
+    list.appendChild(wrap);
 
-    main.querySelector('#ws-settings-back')?.addEventListener('click', () => {
-      main.innerHTML = prevContent;
-      body._as.refreshCurrent?.();
-    });
-    main.querySelector('#ws-settings-cancel')?.addEventListener('click', () => {
-      main.innerHTML = prevContent;
-      body._as.refreshCurrent?.();
-    });
-    main.querySelector('#ws-settings-save')?.addEventListener('click', async () => {
+    const _goBack = () => {
+      body._as.refreshCurrent = prevRefresh;
+      prevRefresh?.();
+    };
+
+    wrap.querySelector('#ws-settings-back')?.addEventListener('click', _goBack);
+    wrap.querySelector('#ws-settings-cancel')?.addEventListener('click', _goBack);
+    wrap.querySelector('#ws-settings-save')?.addEventListener('click', async () => {
       const useDb = !!(window.mvmOS?._widgets?.[widgetId]?.useDb);
       const db = useDb ? mvmOS.widgetDb(widgetId) : null;
       if (db) await db.run('CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)');
@@ -1460,20 +1458,20 @@ const AppStore = (() => {
 
       for (const s of settings) {
         if (s.type === 'city') {
-          const cityEl = main.querySelector(`#ws-${widgetId}-${s.key}`);
-          const ccEl   = main.querySelector(`#ws-${widgetId}-country`);
+          const cityEl = wrap.querySelector(`#ws-${widgetId}-${s.key}`);
+          const ccEl   = wrap.querySelector(`#ws-${widgetId}-country`);
           if (cityEl) await _save(s.key, cityEl.value.trim());
           if (ccEl)   await _save('country', ccEl.value.trim());
         } else {
-          const el = main.querySelector(`#ws-${widgetId}-${s.key}`);
+          const el = wrap.querySelector(`#ws-${widgetId}-${s.key}`);
           if (!el) continue;
           const val = s.type === 'checkbox' ? el.checked : (s.type === 'number' ? parseFloat(el.value) : el.value);
           await _save(s.key, val);
         }
       }
       window.dispatchEvent(new CustomEvent('widget-settings-changed', { detail: { id: widgetId } }));
-      main.innerHTML = prevContent;
-      body._as.refreshCurrent?.();
+      body._as.refreshCurrent = prevRefresh;
+      prevRefresh?.();
     });
   }
 

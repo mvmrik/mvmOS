@@ -102,9 +102,20 @@ async def remove_store(store_id: int, session=Depends(get_current_session)):
 
 # ── Categories ────────────────────────────────────────────────────────────────
 
+@router.get("/manifest")
+async def get_manifest(url: str, session=Depends(get_current_session)):
+    try:
+        data = await _fetch_json(url)
+        if "widgets" in data:
+            installed = _installed_map()
+            data = {**data, "widgets": _annotate(data["widgets"], installed)}
+        return JSONResponse(data)
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=502)
+
+
 @router.get("/categories")
-async def get_categories(store_id: int = 0, widget_type: str = "",
-                         session=Depends(get_current_session)):
+async def get_categories(store_id: int = 0, session=Depends(get_current_session)):
     with get_conn() as conn:
         if store_id:
             row = conn.execute("SELECT manifest_url FROM widget_stores WHERE id=?", (store_id,)).fetchone()
@@ -116,17 +127,12 @@ async def get_categories(store_id: int = 0, widget_type: str = "",
         data = await _fetch_json(row["manifest_url"])
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=502)
-
-    cats = data.get("categories", [])
-    # filter by widget_type if requested (taskbar/desktop)
-    if widget_type:
-        cats = [c for c in cats if not c.get("widget_type") or c.get("widget_type") == widget_type]
-    return JSONResponse({"version": 2, "categories": cats})
+    return JSONResponse({"version": 2, "categories": data.get("categories", [])})
 
 
 @router.get("/category-widgets")
 async def get_category_widgets(store_id: int = 0, category_url: str = "",
-                                category_id: str = "", widget_type: str = "",
+                                category_id: str = "",
                                 session=Depends(get_current_session)):
     if category_url:
         try:
@@ -148,9 +154,6 @@ async def get_category_widgets(store_id: int = 0, category_url: str = "",
             return JSONResponse({"error": str(e)}, status_code=502)
         all_widgets = data.get("widgets", [])
         widgets = [w for w in all_widgets if w.get("category", "").lower() == category_id.lower()]
-
-    if widget_type:
-        widgets = [w for w in widgets if w.get("widget_type") == widget_type]
 
     installed = _installed_map()
     return JSONResponse(_annotate(widgets, installed))

@@ -404,7 +404,7 @@ window._i18n = {
   'backup_sched_monthly':         'Monthly (1st, {time})',
   'backup_keep':                  'Keep last N backups',
   'backup_list_title':            'Available Backups',
-  'backup_restore_info':          'To restore: download the zip, extract it on the server, and run',
+  'backup_restore_info':          'To restore: run',
   'backup_none':                  'No backups yet.',
   'backup_download':              'Download',
   'backup_delete_confirm':        'Delete backup {f}?',

@@ -406,7 +406,7 @@ window._i18n = {
   'backup_sched_monthly':         'Месечно (1-во, {time})',
   'backup_keep':                  'Запази последните N бекъпа',
   'backup_list_title':            'Налични бекъпи',
-  'backup_restore_info':          'За възстановяване: свали zip-а, разархивирай го на сървъра и изпълни',
+  'backup_restore_info':          'За възстановяване: изпълни',
   'backup_none':                  'Няма бекъпи.',
   'backup_download':              'Свали',
   'backup_delete_confirm':        'Изтрий бекъп {f}?',
