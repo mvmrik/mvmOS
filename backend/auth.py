@@ -3,6 +3,10 @@ import subprocess
 import pwd as _pwd
 import secrets
 import time
+import hmac
+import hashlib
+import struct
+import base64
 from fastapi import APIRouter, Request, HTTPException, Depends
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from pydantic import BaseModel
@@ -47,6 +51,44 @@ def _init_user_xdg(username: str):
                            capture_output=True)
     except Exception:
         pass
+
+
+# ── TOTP helpers ──────────────────────────────────────────────────────────────
+
+def _generate_totp_secret() -> str:
+    return base64.b32encode(secrets.token_bytes(20)).decode()
+
+
+def _verify_totp(secret: str, code: str) -> bool:
+    try:
+        key = base64.b32decode(secret.upper().replace(' ', ''))
+        now = int(time.time()) // 30
+        code = code.strip().replace(' ', '')
+        for offset in (-1, 0, 1):
+            step = now + offset
+            msg = struct.pack('>Q', step)
+            h = hmac.new(key, msg, hashlib.sha1).digest()
+            off = h[19] & 0xf
+            n = struct.unpack('>I', h[off:off+4])[0] & 0x7fffffff
+            if str(n % 1_000_000).zfill(6) == code:
+                return True
+        return False
+    except Exception:
+        return False
+
+
+# pending TOTP logins: pending_token -> {username, expires}
+_pending_totp: dict[str, dict] = {}
+
+
+def _cleanup_pending():
+    now = time.time()
+    expired = [k for k, v in _pending_totp.items() if v["expires"] < now]
+    for k in expired:
+        del _pending_totp[k]
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 
 
 def get_current_session(request: Request):
@@ -108,27 +150,47 @@ LOGIN_HTML = """<!DOCTYPE html>
   button.submit{width:100%;background:#2a6ee0;color:#fff;border:none;border-radius:5px;padding:.6rem;font-size:.95rem;cursor:pointer;transition:background .2s;display:none}
   button.submit.show{display:block}
   button.submit:hover{background:#1a5ec0}
+  button.submit:disabled{opacity:.5;cursor:not-allowed}
   .error{color:#e05555;font-size:.83rem;margin-bottom:.7rem;display:none}
   .error.show{display:block}
   .other-link{margin-top:.8rem;font-size:.8rem;color:#555;text-align:center;cursor:pointer}
   .other-link:hover{color:#aaa}
+  #totp-step{display:none}
+  .totp-icon{font-size:2rem;text-align:center;margin-bottom:.4rem}
+  .totp-hint{font-size:.82rem;color:#888;text-align:center;margin-bottom:1.2rem;line-height:1.4}
+  #totp-input{text-align:center;font-size:1.6rem;letter-spacing:.22em;font-family:monospace;padding:.55rem .5rem}
 </style>
 </head>
 <body>
 <div class="card">
   <h1>mvmOS</h1>
-  <p class="sub">Select your account</p>
-  <div class="error" id="err"></div>
-  <div class="users" id="user-list"></div>
-  <div class="pass-wrap" id="pass-wrap">
-    <label for="password">Password for <strong id="sel-name"></strong></label>
-    <input id="password" type="password" autocomplete="current-password" placeholder="Enter password" autofocus>
+  <p class="sub" id="card-sub">Select your account</p>
+
+  <div id="login-step">
+    <div class="error" id="err"></div>
+    <div class="users" id="user-list"></div>
+    <div class="pass-wrap" id="pass-wrap">
+      <label for="password">Password for <strong id="sel-name"></strong></label>
+      <input id="password" type="password" autocomplete="current-password" placeholder="Enter password" autofocus>
+    </div>
+    <button class="submit" id="submit-btn">Sign in</button>
+    <div class="other-link" id="other-link" style="display:none">&#8592; Choose a different user</div>
   </div>
-  <button class="submit" id="submit-btn">Sign in</button>
-  <div class="other-link" id="other-link" style="display:none">← Choose a different user</div>
+
+  <div id="totp-step">
+    <div class="totp-icon">&#128272;</div>
+    <div class="totp-hint">Enter the 6-digit code from your authenticator app for <strong id="totp-username"></strong></div>
+    <div class="error" id="totp-err"></div>
+    <label for="totp-input" style="display:block;margin-bottom:.4rem">Authenticator code</label>
+    <input id="totp-input" type="text" inputmode="numeric" pattern="[0-9 ]*" maxlength="7"
+           placeholder="000 000" autocomplete="one-time-code" style="margin-bottom:.8rem">
+    <button class="submit show" id="totp-submit">Verify</button>
+    <div class="other-link" id="totp-back">&#8592; Back to password</div>
+  </div>
 </div>
 <script>
 let selectedUser = null;
+let totpPendingToken = null;
 
 async function loadUsers() {
   const res = await fetch('/api/auth/login-users');
@@ -141,7 +203,7 @@ async function loadUsers() {
     btn.className = 'user-btn';
     btn.dataset.username = u.username;
     btn.innerHTML = `
-      <div class="user-avatar">👤</div>
+      <div class="user-avatar">&#128100;</div>
       <div class="user-info">
         <span class="user-name">${u.username}</span>
         <span class="user-uid">uid: ${u.uid}</span>
@@ -177,13 +239,24 @@ async function doLogin() {
   if (!selectedUser) return;
   const password = document.getElementById('password').value;
   const err = document.getElementById('err');
+  err.classList.remove('show');
   const res = await fetch('/login', {
     method: 'POST',
     headers: {'Content-Type': 'application/x-www-form-urlencoded'},
     body: `username=${encodeURIComponent(selectedUser)}&password=${encodeURIComponent(password)}`,
     redirect: 'manual',
   });
-  if (res.type === 'opaqueredirect' || res.status === 303 || res.ok) {
+  if (res.status === 202) {
+    const data = await res.json();
+    totpPendingToken = data.pending_token;
+    document.getElementById('totp-username').textContent = selectedUser;
+    document.getElementById('login-step').style.display = 'none';
+    document.getElementById('totp-step').style.display = 'block';
+    document.getElementById('card-sub').textContent = 'Two-factor authentication';
+    document.getElementById('totp-input').value = '';
+    document.getElementById('totp-err').classList.remove('show');
+    setTimeout(() => document.getElementById('totp-input').focus(), 50);
+  } else if (res.type === 'opaqueredirect' || res.status === 303 || res.ok) {
     window.location.href = '/';
   } else if (res.status === 429) {
     const msg = await res.text();
@@ -199,8 +272,52 @@ async function doLogin() {
   }
 }
 
+async function doTotpLogin() {
+  const code = document.getElementById('totp-input').value.trim().replace(/\\s/g, '');
+  const err = document.getElementById('totp-err');
+  err.classList.remove('show');
+  if (code.length !== 6) {
+    err.textContent = 'Enter 6-digit code.';
+    err.classList.add('show');
+    return;
+  }
+  const btn = document.getElementById('totp-submit');
+  btn.disabled = true;
+  const res = await fetch('/login/totp', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({pending_token: totpPendingToken, code}),
+    redirect: 'manual',
+  });
+  btn.disabled = false;
+  if (res.type === 'opaqueredirect' || res.status === 303) {
+    window.location.href = '/';
+  } else if (res.status === 429) {
+    const msg = await res.text();
+    err.textContent = msg;
+    err.classList.add('show');
+    btn.disabled = true;
+  } else {
+    err.textContent = 'Invalid code. Please try again.';
+    err.classList.add('show');
+    document.getElementById('totp-input').value = '';
+    document.getElementById('totp-input').focus();
+  }
+}
+
+document.getElementById('totp-back').addEventListener('click', () => {
+  totpPendingToken = null;
+  document.getElementById('totp-step').style.display = 'none';
+  document.getElementById('login-step').style.display = 'block';
+  document.getElementById('card-sub').textContent = 'Select your account';
+  document.getElementById('password').value = '';
+  document.getElementById('password').focus();
+});
+
 document.getElementById('submit-btn').addEventListener('click', doLogin);
 document.getElementById('password').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+document.getElementById('totp-submit').addEventListener('click', doTotpLogin);
+document.getElementById('totp-input').addEventListener('keydown', e => { if (e.key === 'Enter') doTotpLogin(); });
 loadUsers();
 </script>
 </body>
@@ -252,7 +369,63 @@ async def login(request: Request):
         return HTMLResponse(content="Unauthorized", status_code=401)
 
     _clear_attempts(ip)
+
+    # Check if TOTP is enabled for this user
+    with get_conn() as conn:
+        totp_row = conn.execute("SELECT secret FROM user_totp WHERE username = ?", (username,)).fetchone()
+
+    if totp_row:
+        # Return a pending token — client must complete TOTP step
+        _cleanup_pending()
+        pending_token = secrets.token_hex(32)
+        _pending_totp[pending_token] = {"username": username, "expires": time.time() + 300}
+        return JSONResponse({"totp_required": True, "pending_token": pending_token}, status_code=202)
+
     _init_user_xdg(username)
+    token = secrets.token_hex(32)
+    with get_conn() as conn:
+        conn.execute("INSERT INTO sessions (token, effective_user) VALUES (?, ?)", (token, username))
+        conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('last_login_user', ?)", (username,))
+
+    resp = RedirectResponse(url="/", status_code=303)
+    resp.set_cookie("session", token, httponly=True, samesite="lax", max_age=30*24*3600)
+    return resp
+
+
+class TotpLoginRequest(BaseModel):
+    pending_token: str
+    code: str
+
+
+@router.post("/login/totp")
+async def login_totp(body: TotpLoginRequest, request: Request):
+    ip = request.headers.get("X-Real-IP") or request.client.host
+    wait = _check_rate_limit(ip)
+    if wait > 0:
+        mins = (wait + 59) // 60
+        return HTMLResponse(content=f"Too many attempts. Try again in {mins} minute{'s' if mins != 1 else ''}.", status_code=429)
+
+    pending = _pending_totp.get(body.pending_token)
+    if not pending or pending["expires"] < time.time():
+        _pending_totp.pop(body.pending_token, None)
+        return HTMLResponse(content="Session expired. Please log in again.", status_code=401)
+
+    username = pending["username"]
+    with get_conn() as conn:
+        totp_row = conn.execute("SELECT secret FROM user_totp WHERE username = ?", (username,)).fetchone()
+
+    if not totp_row or not _verify_totp(totp_row["secret"], body.code):
+        _record_attempt(ip)
+        remaining = _MAX_ATTEMPTS - len(_login_attempts.get(ip, []))
+        if remaining <= 0:
+            _pending_totp.pop(body.pending_token, None)
+            return HTMLResponse(content="Too many attempts. Try again in 15 minutes.", status_code=429)
+        return HTMLResponse(content="Invalid code", status_code=401)
+
+    _clear_attempts(ip)
+    _pending_totp.pop(body.pending_token, None)
+    _init_user_xdg(username)
+
     token = secrets.token_hex(32)
     with get_conn() as conn:
         conn.execute("INSERT INTO sessions (token, effective_user) VALUES (?, ?)", (token, username))
@@ -338,3 +511,45 @@ async def logout(request: Request):
     resp = RedirectResponse(url="/login", status_code=303)
     resp.delete_cookie("session")
     return resp
+
+
+# ── TOTP management API ───────────────────────────────────────────────────────
+
+@router.get("/api/auth/totp/{username}")
+async def totp_status(username: str, _session=Depends(get_current_session)):
+    with get_conn() as conn:
+        row = conn.execute("SELECT secret FROM user_totp WHERE username = ?", (username,)).fetchone()
+    return JSONResponse({"enabled": row is not None})
+
+
+@router.post("/api/auth/totp/{username}/setup")
+async def totp_setup(username: str, _session=Depends(get_current_session)):
+    secret = _generate_totp_secret()
+    label = f"mvmOS:{username}"
+    issuer = "mvmOS"
+    otpauth_url = f"otpauth://totp/{label}?secret={secret}&issuer={issuer}&algorithm=SHA1&digits=6&period=30"
+    return JSONResponse({"secret": secret, "otpauth_url": otpauth_url})
+
+
+class TotpConfirmRequest(BaseModel):
+    secret: str
+    code: str
+
+
+@router.post("/api/auth/totp/{username}/confirm")
+async def totp_confirm(username: str, body: TotpConfirmRequest, _session=Depends(get_current_session)):
+    if not _verify_totp(body.secret, body.code):
+        raise HTTPException(status_code=400, detail="Invalid code. Check your authenticator and try again.")
+    with get_conn() as conn:
+        conn.execute(
+            "INSERT OR REPLACE INTO user_totp (username, secret) VALUES (?, ?)",
+            (username, body.secret)
+        )
+    return JSONResponse({"ok": True})
+
+
+@router.delete("/api/auth/totp/{username}")
+async def totp_disable(username: str, _session=Depends(get_current_session)):
+    with get_conn() as conn:
+        conn.execute("DELETE FROM user_totp WHERE username = ?", (username,))
+    return JSONResponse({"ok": True})

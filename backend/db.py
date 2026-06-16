@@ -126,6 +126,12 @@ def init_db():
                 desktop_y INTEGER,
                 size TEXT DEFAULT 'm'
             );
+
+            CREATE TABLE IF NOT EXISTS user_totp (
+                username TEXT PRIMARY KEY,
+                secret TEXT NOT NULL,
+                created_at INTEGER DEFAULT (strftime('%s','now'))
+            );
         """)
         # migrations for existing DBs
         try:

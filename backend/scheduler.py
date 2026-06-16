@@ -28,6 +28,30 @@ from .db import get_conn, APPS_DIR
 router = APIRouter()
 
 BACKENDS_DIR = os.path.join(os.path.dirname(__file__), "apps")
+_THIS_DIR = os.path.dirname(__file__)
+
+SYSTEM_SCHEDULERS = [
+    {
+        "id": "__backup__",
+        "name": "Backup",
+        "scheduler": "backup_scheduler.py",
+        "path": os.path.join(_THIS_DIR, "backup_scheduler.py"),
+    },
+]
+
+
+def _get_system_config(scheduler_id: str) -> dict:
+    if scheduler_id == "__backup__":
+        with get_conn() as conn:
+            rows = conn.execute(
+                "SELECT key, value FROM settings WHERE key IN ('backup_schedule','backup_keep')"
+            ).fetchall()
+        cfg = {r["key"]: r["value"] for r in rows}
+        return {
+            "schedule": cfg.get("backup_schedule", "disabled"),
+            "keep": int(cfg.get("backup_keep", 5)),
+        }
+    return {}
 
 
 def _get_config(app_id: str) -> dict:
@@ -92,12 +116,35 @@ async def scheduler_tick():
         except Exception as e:
             results.append({"app": app_id, "ok": False, "error": str(e)})
 
+    for sys_sched in SYSTEM_SCHEDULERS:
+        if not os.path.isfile(sys_sched["path"]):
+            continue
+        config = _get_system_config(sys_sched["id"])
+        try:
+            mod_name = f"_scheduler_{sys_sched['id']}"
+            spec = importlib.util.spec_from_file_location(mod_name, sys_sched["path"])
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+            mod.run(now, "", config)
+            results.append({"app": sys_sched["id"], "ok": True})
+        except Exception as e:
+            results.append({"app": sys_sched["id"], "ok": False, "error": str(e)})
+
     return JSONResponse({"tick": now.isoformat(), "results": results})
 
 
 @router.get("/api/scheduler/status")
 async def scheduler_status():
-    """Returns which installed apps have a scheduler defined."""
+    """Returns which installed apps have a scheduler defined, and whether the system cron is installed."""
+    import subprocess as _sp
+    r = _sp.run(["crontab", "-l", "-u", "root"], capture_output=True, text=True)
+    root_crontab = r.stdout if r.returncode == 0 else ""
+    cron_installed = any(
+        "/api/scheduler/tick" in line
+        for line in root_crontab.splitlines()
+        if not line.strip().startswith("#")
+    )
+
     apps = []
     with get_conn() as conn:
         rows = conn.execute("SELECT id, name FROM plugins").fetchall()
@@ -120,4 +167,15 @@ async def scheduler_status():
         except Exception:
             continue
 
-    return JSONResponse({"apps": apps})
+    system_apps = []
+    for sys_sched in SYSTEM_SCHEDULERS:
+        config = _get_system_config(sys_sched["id"])
+        system_apps.append({
+            "id": sys_sched["id"],
+            "name": sys_sched["name"],
+            "scheduler": sys_sched["scheduler"],
+            "file_exists": os.path.isfile(sys_sched["path"]),
+            "config": config,
+        })
+
+    return JSONResponse({"apps": apps, "system_apps": system_apps, "cron_installed": cron_installed})

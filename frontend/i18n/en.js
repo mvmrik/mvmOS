@@ -143,6 +143,7 @@ window._i18n = {
   'settings_updates':             '🔄 Updates',
   'settings_startmenu':           '🚀 Start Menu',
   'settings_about':               'ℹ️ About',
+  'settings_system':              '⚙️ System',
 
   // Settings — Display
   'display_title':                '🖥️ Display',
@@ -386,6 +387,41 @@ window._i18n = {
   // Settings — Users (status messages)
   'users_saved':                  '✓ Saved',
   'users_created':                '✓ User created',
+
+  // Settings — Backup
+  'settings_backup':              '💾 Backup',
+  'backup_title':                 'System Backup',
+  'backup_location':              'Backups are stored in',
+  'backup_create':                'Create Backup',
+  'backup_creating':              'Creating backup…',
+  'backup_created':               '✓ Backup created',
+  'backup_failed':                'Backup failed',
+  'backup_auto_title':            'Automatic Backup',
+  'backup_schedule':              'Frequency',
+  'backup_sched_disabled':        'Disabled',
+  'backup_sched_daily':           'Daily ({time})',
+  'backup_sched_weekly':          'Weekly (Sunday {time})',
+  'backup_sched_monthly':         'Monthly (1st, {time})',
+  'backup_keep':                  'Keep last N backups',
+  'backup_list_title':            'Available Backups',
+  'backup_restore_info':          'To restore: download the zip, extract it on the server, and run',
+  'backup_none':                  'No backups yet.',
+  'backup_download':              'Download',
+  'backup_delete_confirm':        'Delete backup {f}?',
+  'backup_load_failed':           'Failed to load backups.',
+
+  // Settings — Users — 2FA
+  'users_2fa':                    'Two-Factor Auth',
+  'users_2fa_on':                 '✓ Enabled',
+  'users_2fa_setup_title':        'Enable Two-Factor Authentication',
+  'users_2fa_scan':               'Scan this QR code with Google Authenticator, Authy or any TOTP app:',
+  'users_2fa_secret_label':       'Or enter the secret key manually:',
+  'users_2fa_backup_warning':     'Save this secret key somewhere safe. If you lose your authenticator app, you will need it to recover access.',
+  'users_2fa_verify_label':       'Confirm — enter the 6-digit code from your app:',
+  'users_2fa_enable_btn':         'Enable 2FA',
+  'users_2fa_code_required':      'Enter 6-digit code',
+  'users_2fa_code_invalid':       'Invalid code. Try again.',
+  'users_2fa_disable_confirm':    'Disable two-factor authentication for this user?',
 
   // Settings — Start Menu
   'sm_title':                     '🚀 Start Menu',

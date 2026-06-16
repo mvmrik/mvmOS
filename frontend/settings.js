@@ -154,7 +154,8 @@ const Settings = (() => {
           <div class="settings-tab ${activeTab==='users'?'active':''}" data-tab="users">${t('settings_users')}</div>
           <div class="settings-tab ${activeTab==='updates'?'active':''}" data-tab="updates">${t('settings_updates')}</div>
           <div class="settings-tab ${activeTab==='startmenu'?'active':''}" data-tab="startmenu">${t('settings_startmenu')}</div>
-          <div class="settings-tab ${activeTab==='system'?'active':''}" data-tab="system">System</div>
+          <div class="settings-tab ${activeTab==='system'?'active':''}" data-tab="system">${t('settings_system')}</div>
+          <div class="settings-tab ${activeTab==='backup'?'active':''}" data-tab="backup">${t('settings_backup')}</div>
           <div class="settings-tab ${activeTab==='about'?'active':''}" data-tab="about" style="margin-top:auto">${t('settings_about')}</div>
         </nav>
 
@@ -379,6 +380,9 @@ const Settings = (() => {
             </div>
           </div>
 
+          <!-- Backup panel -->
+          <div class="settings-panel ${activeTab==='backup'?'active':''}" id="sp-backup"></div>
+
           <!-- Screen Saver panel -->
           <div class="settings-panel ${activeTab==='screensaver'?'active':''}" id="sp-screensaver">
             <div class="settings-section">
@@ -442,6 +446,7 @@ const Settings = (() => {
         if (tab.dataset.tab === 'screensaver') initScreenSaver(body);
         if (tab.dataset.tab === 'wallpaper') initWallpaper(body);
         if (tab.dataset.tab === 'system') renderSystem(body);
+        if (tab.dataset.tab === 'backup') renderBackup(body);
       });
     });
 
@@ -453,6 +458,7 @@ const Settings = (() => {
     if (activeTab === 'screensaver') initScreenSaver(body);
     if (activeTab === 'wallpaper') initWallpaper(body);
     if (activeTab === 'system') renderSystem(body);
+    if (activeTab === 'backup') renderBackup(body);
 
     // Display — auto-save on slider change
     const iconSlider = body.querySelector('#s-icon-size');
@@ -543,6 +549,225 @@ const Settings = (() => {
     });
   }
 
+  function _bkSchedLabel(key) {
+    const hour12 = (window._vosSettings?.time_format || '24') === '12';
+    const time = new Date(2000, 0, 1, 3, 0).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12 });
+    return t(key).replace('{time}', time);
+  }
+
+  async function renderBackup(body) {
+    const panel = body.querySelector('#sp-backup');
+
+    async function loadList() {
+      const listEl = panel.querySelector('#bk-list');
+      listEl.innerHTML = `<div style="color:var(--text-dim);font-size:.85rem">${t('loading')}</div>`;
+      try {
+        const res = await fetch('/api/backup/list');
+        const backups = await res.json();
+        if (!backups.length) {
+          listEl.innerHTML = `<div style="color:var(--text-dim);font-size:.85rem">${t('backup_none')}</div>`;
+          return;
+        }
+        listEl.innerHTML = backups.map(b => {
+          const date = new Date(b.created_at * 1000).toLocaleString();
+          const mb = (b.size / 1024 / 1024).toFixed(1);
+          return `
+            <div style="background:var(--surface2);border-radius:8px;padding:10px 12px;margin-bottom:8px" data-file="${b.filename}">
+              <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+                <div style="flex:1;min-width:0">
+                  <div style="font-family:monospace;font-size:.85rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${b.filename}</div>
+                  <div style="font-size:.75rem;color:var(--text-dim);margin-top:3px">${date} &middot; ${mb} MB</div>
+                </div>
+                <div style="display:flex;gap:6px;flex-shrink:0">
+                  <a class="s-btn-sm" href="/api/backup/download/${b.filename}" download>${t('backup_download')}</a>
+                  <button class="s-btn-sm s-btn-danger bk-del">${t('users_delete')}</button>
+                </div>
+              </div>
+            </div>`;
+        }).join('');
+        listEl.querySelectorAll('.bk-del').forEach(btn => {
+          btn.addEventListener('click', async () => {
+            const filename = btn.closest('[data-file]').dataset.file;
+            if (!confirm(t('backup_delete_confirm').replace('{f}', filename))) return;
+            await fetch(`/api/backup/${filename}`, { method: 'DELETE' });
+            await loadList();
+          });
+        });
+      } catch (_) {
+        listEl.innerHTML = `<div style="color:#e05555;font-size:.85rem">${t('backup_load_failed')}</div>`;
+      }
+    }
+
+    if (!panel.dataset.loaded) {
+      panel.dataset.loaded = '1';
+      panel.innerHTML = `
+        <div class="settings-section">
+          <div class="settings-section-title">${t('backup_title')}</div>
+          <div style="font-size:.82rem;color:var(--text-dim);margin-bottom:12px">${t('backup_location')} <code>/var/backups/mvmos/</code></div>
+          <div>
+            <button class="s-btn" id="bk-create">${t('backup_create')}</button>
+            <span id="bk-create-msg" style="font-size:.82rem;margin-left:10px"></span>
+          </div>
+        </div>
+        <div class="settings-section">
+          <div class="settings-section-title">${t('backup_auto_title')}</div>
+          <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end">
+            <div>
+              <div style="font-size:.75rem;color:var(--text-dim);margin-bottom:4px">${t('backup_schedule')}</div>
+              <select id="bk-schedule" class="s-input" style="width:auto">
+                <option value="disabled">${t('backup_sched_disabled')}</option>
+                <option value="daily">${_bkSchedLabel('backup_sched_daily')}</option>
+                <option value="weekly">${_bkSchedLabel('backup_sched_weekly')}</option>
+                <option value="monthly">${_bkSchedLabel('backup_sched_monthly')}</option>
+              </select>
+            </div>
+            <div>
+              <div style="font-size:.75rem;color:var(--text-dim);margin-bottom:4px">${t('backup_keep')}</div>
+              <input id="bk-keep" type="number" class="s-input" min="1" max="99" value="5" style="width:70px">
+            </div>
+            <button class="s-btn" id="bk-sched-save">${t('save')}</button>
+            <span id="bk-sched-msg" style="font-size:.82rem"></span>
+          </div>
+        </div>
+        <div class="settings-section">
+          <div class="settings-section-title">${t('backup_list_title')}</div>
+          <div style="font-size:.82rem;color:var(--text-dim);margin-bottom:12px;padding:10px 12px;background:var(--surface2);border-radius:8px;line-height:1.6">
+            ${t('backup_restore_info')} <code>bash restore.sh</code>
+          </div>
+          <div id="bk-list"></div>
+        </div>`;
+
+      panel.querySelector('#bk-create').addEventListener('click', async () => {
+        const btn = panel.querySelector('#bk-create');
+        const msg = panel.querySelector('#bk-create-msg');
+        btn.disabled = true;
+        msg.style.color = 'var(--text-dim)';
+        msg.textContent = t('backup_creating');
+        try {
+          const res = await fetch('/api/backup/create', { method: 'POST' });
+          const d = await res.json();
+          if (res.ok) {
+            msg.style.color = '#50fa7b';
+            msg.textContent = t('backup_created');
+            await loadList();
+          } else {
+            msg.style.color = '#e05555';
+            msg.textContent = d.detail || t('backup_failed');
+          }
+        } catch (_) {
+          msg.style.color = '#e05555';
+          msg.textContent = t('backup_failed');
+        }
+        btn.disabled = false;
+      });
+
+      panel.querySelector('#bk-sched-save').addEventListener('click', async () => {
+        const schedule = panel.querySelector('#bk-schedule').value;
+        const keep = parseInt(panel.querySelector('#bk-keep').value) || 5;
+        const msg = panel.querySelector('#bk-sched-msg');
+        msg.style.color = 'var(--text-dim)';
+        msg.textContent = '…';
+        const res = await fetch('/api/backup/schedule', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ schedule, keep }),
+        });
+        if (res.ok) {
+          msg.style.color = '#50fa7b';
+          msg.textContent = t('saved');
+        } else {
+          msg.style.color = '#e05555';
+          msg.textContent = t('error');
+        }
+        setTimeout(() => { msg.textContent = ''; }, 2500);
+      });
+
+      fetch('/api/backup/schedule').then(r => r.json()).then(d => {
+        panel.querySelector('#bk-schedule').value = d.schedule || 'disabled';
+        panel.querySelector('#bk-keep').value = d.keep || 5;
+      });
+    }
+
+    await loadList();
+  }
+
+  function openTotpSetup(username, secret, otpauthUrl, onSuccess) {
+    const qrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${encodeURIComponent(otpauthUrl)}`;
+    const secretFmt = secret.match(/.{1,4}/g).join(' ');
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:9999;display:flex;align-items:center;justify-content:center;';
+    overlay.innerHTML = `
+      <div style="background:var(--win-bg,#1e1e2e);border:1px solid var(--border,#45475a);border-radius:12px;padding:24px;width:400px;max-width:95vw;max-height:90vh;overflow-y:auto;box-shadow:0 16px 48px rgba(0,0,0,.6)">
+        <div style="font-size:1rem;font-weight:700;margin-bottom:16px">${t('users_2fa_setup_title')}</div>
+
+        <div style="font-size:.82rem;color:var(--text-dim);margin-bottom:8px">${t('users_2fa_scan')}</div>
+        <div style="text-align:center;margin-bottom:14px">
+          <img src="${qrSrc}" width="160" height="160"
+               style="border-radius:8px;background:#fff;padding:6px;display:block;margin:0 auto"
+               onerror="this.style.display='none'">
+        </div>
+
+        <div style="font-size:.82rem;color:var(--text-dim);margin-bottom:4px">${t('users_2fa_secret_label')}</div>
+        <div style="display:flex;align-items:stretch;gap:6px;margin-bottom:12px">
+          <div style="font-family:monospace;font-size:.95rem;letter-spacing:.08em;background:var(--surface2,#313244);border:1px solid var(--border,#45475a);border-radius:6px;padding:10px 12px;flex:1;user-select:all;word-break:break-all;cursor:text">${secretFmt}</div>
+          <button id="totp-copy-secret" class="s-btn-sm" style="flex-shrink:0;white-space:nowrap">Copy</button>
+        </div>
+
+        <div style="background:rgba(255,184,108,.08);border:1px solid rgba(255,184,108,.3);border-radius:6px;padding:10px 12px;font-size:.82rem;margin-bottom:16px;color:#ffb86c;line-height:1.5">
+          &#9888; ${t('users_2fa_backup_warning')}
+        </div>
+
+        <div style="font-size:.82rem;color:var(--text-dim);margin-bottom:6px">${t('users_2fa_verify_label')}</div>
+        <input id="totp-setup-code" type="text" inputmode="numeric" maxlength="6" placeholder="000000"
+               class="s-input" style="text-align:center;font-size:1.3rem;letter-spacing:.2em;font-family:monospace;margin-bottom:6px">
+        <div id="totp-setup-err" style="color:#e05555;font-size:.82rem;min-height:18px;margin-bottom:12px"></div>
+        <div style="display:flex;gap:8px">
+          <button id="totp-setup-cancel" class="s-btn" style="flex:1;background:var(--surface2,#45475a);color:var(--text)">${t('cancel')}</button>
+          <button id="totp-setup-confirm" class="s-btn" style="flex:1">${t('users_2fa_enable_btn')}</button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+
+    const codeInput = overlay.querySelector('#totp-setup-code');
+    const errEl = overlay.querySelector('#totp-setup-err');
+    setTimeout(() => codeInput.focus(), 60);
+
+    const copyBtn = overlay.querySelector('#totp-copy-secret');
+    copyBtn.addEventListener('click', async () => {
+      await navigator.clipboard.writeText(secret).catch(() => {});
+      const orig = copyBtn.textContent;
+      copyBtn.textContent = '✓ Copied';
+      copyBtn.style.color = '#50fa7b';
+      setTimeout(() => { copyBtn.textContent = orig; copyBtn.style.color = ''; }, 1800);
+    });
+
+    overlay.querySelector('#totp-setup-cancel').onclick = () => overlay.remove();
+
+    const confirmBtn = overlay.querySelector('#totp-setup-confirm');
+    confirmBtn.onclick = async () => {
+      const code = codeInput.value.trim().replace(/\s/g, '');
+      if (code.length !== 6) { errEl.textContent = t('users_2fa_code_required'); return; }
+      errEl.textContent = '';
+      confirmBtn.disabled = true;
+      const res = await fetch(`/api/auth/totp/${username}/confirm`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ secret, code }),
+      });
+      if (res.ok) {
+        overlay.remove();
+        onSuccess();
+      } else {
+        const e = await res.json().catch(() => ({}));
+        errEl.textContent = e.detail || t('users_2fa_code_invalid');
+        confirmBtn.disabled = false;
+        codeInput.value = '';
+        codeInput.focus();
+      }
+    };
+    codeInput.addEventListener('keydown', e => { if (e.key === 'Enter') confirmBtn.click(); });
+  }
+
   async function renderUsers(body) {
     const container = body.querySelector('#users-content');
     container.innerHTML = `<div style="padding:12px 0;color:var(--text-dim);font-size:.85rem">${t('loading')}</div>`;
@@ -613,6 +838,13 @@ const Settings = (() => {
             </select>
           </div>
           <div class="settings-row">
+            <label>${t('users_2fa')}</label>
+            <div style="display:flex;align-items:center;gap:10px">
+              <label class="toggle"><input type="checkbox" class="user-totp-chk"><span class="toggle-slider"></span></label>
+              <span class="user-totp-label" style="font-size:.82rem;color:#50fa7b"></span>
+            </div>
+          </div>
+          <div class="settings-row">
             <label>${t('users_new_password')}</label>
             <input class="s-input user-pass-inp" type="password" placeholder="${t('users_password_ph')}">
           </div>
@@ -624,9 +856,38 @@ const Settings = (() => {
         </div>
       `;
 
-      row.querySelector('.user-edit-btn').addEventListener('click', () => {
+      row.querySelector('.user-edit-btn').addEventListener('click', async () => {
         const panel = row.querySelector('.user-edit-panel');
-        panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+        const opening = panel.style.display === 'none';
+        panel.style.display = opening ? 'block' : 'none';
+        if (opening) {
+          try {
+            const res = await fetch(`/api/auth/totp/${u.username}`);
+            const data = await res.json();
+            const chk = row.querySelector('.user-totp-chk');
+            chk.checked = data.enabled;
+            row.querySelector('.user-totp-label').textContent = data.enabled ? t('users_2fa_on') : '';
+          } catch (_) {}
+        }
+      });
+
+      row.querySelector('.user-totp-chk').addEventListener('change', async function() {
+        const chk = this;
+        const label = row.querySelector('.user-totp-label');
+        if (chk.checked) {
+          chk.checked = false;
+          const res = await fetch(`/api/auth/totp/${u.username}/setup`, { method: 'POST' });
+          if (!res.ok) return;
+          const setup = await res.json();
+          openTotpSetup(u.username, setup.secret, setup.otpauth_url, () => {
+            chk.checked = true;
+            label.textContent = t('users_2fa_on');
+          });
+        } else {
+          if (!confirm(t('users_2fa_disable_confirm'))) { chk.checked = true; return; }
+          await fetch(`/api/auth/totp/${u.username}`, { method: 'DELETE' });
+          label.textContent = '';
+        }
       });
 
       if (u.username !== 'root') {

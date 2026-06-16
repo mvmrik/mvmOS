@@ -143,6 +143,7 @@ window._i18n = {
   'settings_updates':             '🔄 Актуализации',
   'settings_startmenu':           '🚀 Старт меню',
   'settings_about':               'ℹ️ За системата',
+  'settings_system':              '⚙️ Система',
 
   // Settings — Display
   'display_title':                '🖥️ Изглед',
@@ -388,6 +389,41 @@ window._i18n = {
   // Settings — Users (status messages)
   'users_saved':                  '✓ Запазено',
   'users_created':                '✓ Потребителят е създаден',
+
+  // Settings — Backup
+  'settings_backup':              '💾 Бекъп',
+  'backup_title':                 'Системен бекъп',
+  'backup_location':              'Бекъпите се пазят в',
+  'backup_create':                'Създай бекъп',
+  'backup_creating':              'Създаване на бекъп…',
+  'backup_created':               '✓ Бекъпът е създаден',
+  'backup_failed':                'Грешка при създаване',
+  'backup_auto_title':            'Автоматичен бекъп',
+  'backup_schedule':              'Честота',
+  'backup_sched_disabled':        'Изключен',
+  'backup_sched_daily':           'Ежедневно ({time})',
+  'backup_sched_weekly':          'Седмично (неделя, {time})',
+  'backup_sched_monthly':         'Месечно (1-во, {time})',
+  'backup_keep':                  'Запази последните N бекъпа',
+  'backup_list_title':            'Налични бекъпи',
+  'backup_restore_info':          'За възстановяване: свали zip-а, разархивирай го на сървъра и изпълни',
+  'backup_none':                  'Няма бекъпи.',
+  'backup_download':              'Свали',
+  'backup_delete_confirm':        'Изтрий бекъп {f}?',
+  'backup_load_failed':           'Грешка при зареждане.',
+
+  // Settings — Users — 2FA
+  'users_2fa':                    'Двуфакторна верификация',
+  'users_2fa_on':                 '✓ Активна',
+  'users_2fa_setup_title':        'Активиране на двуфакторна верификация',
+  'users_2fa_scan':               'Сканирай QR кода с Google Authenticator, Authy или друго TOTP приложение:',
+  'users_2fa_secret_label':       'Или въведи ключа ръчно:',
+  'users_2fa_backup_warning':     'Запази този таен ключ на сигурно място. Ако загубиш достъп до приложението, ще ти трябва за възстановяване.',
+  'users_2fa_verify_label':       'Потвърди — въведи 6-цифрения код от приложението:',
+  'users_2fa_enable_btn':         'Активирай 2FA',
+  'users_2fa_code_required':      'Въведи 6-цифрен код',
+  'users_2fa_code_invalid':       'Невалиден код. Опитай пак.',
+  'users_2fa_disable_confirm':    'Деактивиране на двуфакторната верификация за този потребител?',
 
   // Settings — Start Menu
   'sm_title':                     '🚀 Старт меню',
