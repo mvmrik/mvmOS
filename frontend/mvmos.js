@@ -1145,6 +1145,42 @@ var mvmOS = (() => {
         pw.addEventListener('keydown', e => { if (e.key === 'Enter') confirm(); });
       });
     },
+    confirm(message, opts) {
+      opts = opts || {};
+      return new Promise(resolve => {
+        const ov = document.createElement('div');
+        ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center';
+        ov.innerHTML = `<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius,6px);padding:24px;max-width:380px;width:90%;box-shadow:var(--shadow);display:flex;flex-direction:column;gap:14px">
+          <div style="font-size:.92rem;line-height:1.5">${message}</div>
+          <div style="display:flex;gap:8px;justify-content:flex-end">
+            <button id="_mc-cancel" class="s-btn s-btn-sm">${opts.cancel || 'Отказ'}</button>
+            <button id="_mc-ok" class="s-btn s-btn-sm" style="${opts.danger !== false ? 'background:#f38ba8;color:#1e1e2e;border-color:#f38ba8' : 'background:var(--accent);color:#fff;border-color:var(--accent)'}">${opts.ok || 'Потвърди'}</button>
+          </div></div>`;
+        document.body.appendChild(ov);
+        ov.querySelector('#_mc-cancel').onclick = () => { ov.remove(); resolve(false); };
+        ov.querySelector('#_mc-ok').onclick = () => { ov.remove(); resolve(true); };
+      });
+    },
+    prompt(message, placeholder, defaultValue) {
+      return new Promise(resolve => {
+        const ov = document.createElement('div');
+        ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center';
+        ov.innerHTML = `<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius,6px);padding:24px;max-width:380px;width:90%;box-shadow:var(--shadow);display:flex;flex-direction:column;gap:12px">
+          <div style="font-size:.92rem">${message}</div>
+          <input id="_mp-input" class="s-input" placeholder="${placeholder || ''}" value="${defaultValue || ''}" style="width:100%;box-sizing:border-box">
+          <div style="display:flex;gap:8px;justify-content:flex-end">
+            <button id="_mp-cancel" class="s-btn s-btn-sm">Отказ</button>
+            <button id="_mp-ok" class="s-btn s-btn-sm s-btn-primary">OK</button>
+          </div></div>`;
+        document.body.appendChild(ov);
+        const input = ov.querySelector('#_mp-input');
+        input.focus(); input.select();
+        const ok = () => { const v = input.value; ov.remove(); resolve(v || null); };
+        ov.querySelector('#_mp-cancel').onclick = () => { ov.remove(); resolve(null); };
+        ov.querySelector('#_mp-ok').onclick = ok;
+        input.addEventListener('keydown', e => { if (e.key === 'Enter') ok(); if (e.key === 'Escape') { ov.remove(); resolve(null); } });
+      });
+    },
     _loadPlugin,
     _loadWidget,
     _removeFromStartMenu,
