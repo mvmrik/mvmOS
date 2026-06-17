@@ -24,6 +24,7 @@ const FileManager = (() => {
             fetch('/api/files/places').then(r => r.json()).then(d => fm.navigate(d.home)).catch(() => fm.navigate('/'));
           }
           fm.autoCleanTrash();
+          fm.autoCleanChunks();
           Desktop.initMobileSidebar(body);
         });
       },
@@ -64,10 +65,6 @@ const FileManager = (() => {
           </div>
           <div class="fm-footer">
             <span class="fm-footer-status"></span>
-            <div class="fm-progress-wrap" style="display:none">
-              <span class="fm-progress-label"></span>
-              <div class="fm-progress-bar"><div class="fm-progress-fill"></div></div>
-            </div>
           </div>
         </div>
       `;
@@ -131,9 +128,6 @@ const FileManager = (() => {
         this.previewEl.style.display = 'none';
       });
       this.footerStatus  = body.querySelector('.fm-footer-status');
-      this.progressWrap  = body.querySelector('.fm-progress-wrap');
-      this.progressLabel = body.querySelector('.fm-progress-label');
-      this.progressFill  = body.querySelector('.fm-progress-fill');
 
       this.mkdirBtn       = body.querySelector('.fm-mkdir');
       this.uploadBtn2     = body.querySelector('.fm-upload-btn');
@@ -792,6 +786,10 @@ const FileManager = (() => {
       this.navigate(this.currentPath);
     }
 
+    async autoCleanChunks() {
+      fetch('/api/files/upload-chunk/cleanup', { method: 'POST' }).catch(() => {});
+    }
+
     async autoCleanTrash() {
       const prefs = loadPrefs();
       const days = prefs.trashDays !== undefined ? prefs.trashDays : 30;
@@ -982,56 +980,45 @@ const FileManager = (() => {
 
     uploadFileList(list) {
       const MAX_SIZE = 2 * 1024 * 1024 * 1024;
-      let i = 0;
+      let remaining = [...list];
       const total = list.length;
+      let uploaded = 0;
+
       const uploadNext = () => {
-        if (i >= total) return;
-        const { file, destDir } = list[i++];
+        if (!remaining.length) return;
+        const { file, destDir } = remaining.shift();
         if (file.size > MAX_SIZE) {
-          this.progressWrap.style.display = 'none';
           this.footerStatus.style.color = '#f38ba8';
-          this.footerStatus.textContent = t('fm_file_too_large', {name: file.name});
+          this.footerStatus.textContent = t('fm_file_too_large', { name: file.name });
           setTimeout(() => { this.footerStatus.textContent = ''; this.footerStatus.style.color = ''; }, 5000);
-          if (i < total) uploadNext(); else this.navigate(this.currentPath);
+          uploadNext();
           return;
         }
-        this.progressWrap.style.display = '';
-        this.progressLabel.textContent = t('fm_uploading', {i, total, name: file.name});
-        this.progressFill.style.width = '0%';
-
-        const xhr = new XMLHttpRequest();
-        xhr.open('POST', '/api/files/upload');
-        xhr.upload.addEventListener('progress', e => {
-          if (e.lengthComputable) this.progressFill.style.width = Math.round(e.loaded / e.total * 100) + '%';
-        });
-        xhr.addEventListener('load', () => {
-          if (xhr.status === 0 || xhr.status >= 400) {
-            const msg = xhr.status === 413 || xhr.status === 0 ? 'File too large' : `Error ${xhr.status}`;
-            this.progressWrap.style.display = 'none';
+        mvmOS.upload.start({
+          file,
+          chunkEndpoint: '/api/files/upload-chunk',
+          cancelEndpoint: '/api/files/upload-chunk',
+          fields: { path: destDir },
+          onDone: () => {
+            uploaded++;
+            if (remaining.length) { uploadNext(); return; }
+            this.footerStatus.style.color = '#50fa7b';
+            this.footerStatus.textContent = t('fm_uploaded', { n: total, s: total > 1 ? 's' : '' });
+            setTimeout(() => { this.footerStatus.textContent = ''; this.footerStatus.style.color = ''; }, 3000);
+            this.navigate(this.currentPath);
+          },
+          onError: (msg) => {
             this.footerStatus.style.color = '#f38ba8';
-            this.footerStatus.textContent = t('fm_upload_failed_file', {name: file.name, msg});
+            this.footerStatus.textContent = t('fm_upload_failed_file', { name: file.name, msg });
             setTimeout(() => { this.footerStatus.textContent = ''; this.footerStatus.style.color = ''; }, 5000);
-            if (i < total) uploadNext(); else this.navigate(this.currentPath);
-            return;
-          }
-          if (i < total) { uploadNext(); return; }
-          this.progressWrap.style.display = 'none';
-          this.footerStatus.style.color = '#50fa7b';
-          this.footerStatus.textContent = t('fm_uploaded', {n: total, s: total > 1 ? 's' : ''});
-          setTimeout(() => { this.footerStatus.textContent = ''; this.footerStatus.style.color = ''; }, 3000);
-          this.navigate(this.currentPath);
+            if (remaining.length) uploadNext(); else this.navigate(this.currentPath);
+          },
+          onCancel: () => {
+            this.footerStatus.style.color = '#a6adc8';
+            this.footerStatus.textContent = t('fm_upload_cancelled');
+            setTimeout(() => { this.footerStatus.textContent = ''; this.footerStatus.style.color = ''; }, 3000);
+          },
         });
-        xhr.addEventListener('error', () => {
-          this.progressWrap.style.display = 'none';
-          this.footerStatus.style.color = '#f38ba8';
-          this.footerStatus.textContent = t('fm_upload_failed', {name: file.name});
-          setTimeout(() => { this.footerStatus.textContent = ''; this.footerStatus.style.color = ''; }, 5000);
-          if (i < total) uploadNext(); else this.navigate(this.currentPath);
-        });
-        const form = new FormData();
-        form.append('path', destDir);
-        form.append('file', file);
-        xhr.send(form);
       };
       uploadNext();
     }

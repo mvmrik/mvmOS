@@ -268,6 +268,7 @@ window._i18n = {
   'fm_upload_failed_file':        '✗ {name}: {msg}',
   'fm_uploaded':                  '✓ Качени {n} файл{s}',
   'fm_upload_failed':             '✗ Грешка: {name}',
+  'fm_upload_cancelled':          'Качването е отменено',
   'fm_perms_title':               'Кликни за промяна',
   'fm_info_name':                 'Име',
   'fm_info_type':                 'Тип',

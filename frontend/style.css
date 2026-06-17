@@ -733,10 +733,6 @@ html, body {
   min-height: 26px;
 }
 .fm-footer-status { flex-shrink: 0; }
-.fm-progress-wrap { display: flex; align-items: center; gap: 8px; flex: 1; }
-.fm-progress-label { flex-shrink: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 200px; }
-.fm-progress-bar { flex: 1; height: 6px; background: var(--surface2); border-radius: 3px; overflow: hidden; }
-.fm-progress-fill { height: 100%; width: 0%; background: var(--accent); border-radius: 3px; transition: width .1s; }
 .fm-list.fm-drop-hover { outline: 2px dashed var(--accent); outline-offset: -4px; background: rgba(42,110,224,0.05); }
 .fm-places {
   width: 130px;

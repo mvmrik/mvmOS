@@ -268,6 +268,7 @@ window._i18n = {
   'fm_upload_failed_file':        '✗ {name}: {msg}',
   'fm_uploaded':                  '✓ Uploaded {n} file{s}',
   'fm_upload_failed':             '✗ Failed: {name}',
+  'fm_upload_cancelled':          'Upload cancelled',
   'fm_perms_title':               'Click to change',
   'fm_info_name':                 'Name',
   'fm_info_type':                 'Type',

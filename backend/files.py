@@ -190,6 +190,101 @@ async def upload_file(
     return {"ok": True, "name": file.filename}
 
 
+_CHUNK_TMP_DIR = "/tmp/mvmos-uploads"
+
+
+@router.post("/upload-chunk")
+async def upload_chunk(
+    upload_id: str = Form(...),
+    chunk_index: int = Form(...),
+    total_chunks: int = Form(...),
+    filename: str = Form(...),
+    path: str = Form("/"),
+    no_finalize: str = Form("0"),
+    file: UploadFile = File(...),
+    session=Depends(get_current_session),
+):
+    import re, time
+    eu = session["effective_user"]
+    if not filename or os.path.basename(filename) != filename:
+        raise HTTPException(400, "Invalid filename")
+    safe_id = re.sub(r"[^a-zA-Z0-9_-]", "", upload_id)
+    if not safe_id:
+        raise HTTPException(400, "Invalid upload_id")
+
+    os.makedirs(_CHUNK_TMP_DIR, exist_ok=True)
+
+    # Clean up stale uploads older than 24h
+    try:
+        cutoff = time.time() - 86400
+        for f in os.listdir(_CHUNK_TMP_DIR):
+            fp = os.path.join(_CHUNK_TMP_DIR, f)
+            if os.path.isfile(fp) and os.path.getmtime(fp) < cutoff:
+                os.unlink(fp)
+    except Exception:
+        pass
+
+    tmp_path = os.path.join(_CHUNK_TMP_DIR, f"{safe_id}_{filename}.mvmostmp")
+
+    chunk_data = await file.read()
+    mode = "ab" if chunk_index > 0 else "wb"
+    with open(tmp_path, mode) as f:
+        f.write(chunk_data)
+
+    if chunk_index < total_chunks - 1:
+        return {"ok": True, "done": False, "chunk": chunk_index}
+
+    # Last chunk assembled
+    if no_finalize == "1":
+        # Caller will handle the file (e.g. YourSQL import) and delete it
+        return {"ok": True, "done": True, "tmp_path": tmp_path, "name": filename}
+
+    # Move to destination
+    dest = safe_path(os.path.join(path, filename))
+    os.chmod(tmp_path, 0o644)
+    try:
+        r = run_as(eu, ["cp", tmp_path, dest])
+    finally:
+        try:
+            os.unlink(tmp_path)
+        except Exception:
+            pass
+    if r.returncode != 0:
+        raise HTTPException(403, "Permission denied")
+    return {"ok": True, "done": True, "name": filename}
+
+
+@router.delete("/upload-chunk")
+async def cancel_upload(upload_id: str, session=Depends(get_current_session)):
+    import re
+    safe_id = re.sub(r"[^a-zA-Z0-9_-]", "", upload_id)
+    if os.path.isdir(_CHUNK_TMP_DIR):
+        for f in os.listdir(_CHUNK_TMP_DIR):
+            if f.startswith(safe_id + "_"):
+                try:
+                    os.unlink(os.path.join(_CHUNK_TMP_DIR, f))
+                except Exception:
+                    pass
+    return {"ok": True}
+
+
+@router.post("/upload-chunk/cleanup")
+async def cleanup_uploads(session=Depends(get_current_session)):
+    import time
+    cleaned = 0
+    cutoff = time.time() - 86400  # only delete files older than 24h
+    if os.path.isdir(_CHUNK_TMP_DIR):
+        for f in os.listdir(_CHUNK_TMP_DIR):
+            fp = os.path.join(_CHUNK_TMP_DIR, f)
+            if os.path.isfile(fp) and os.path.getmtime(fp) < cutoff:
+                try:
+                    os.unlink(fp)
+                    cleaned += 1
+                except Exception:
+                    pass
+    return {"ok": True, "cleaned": cleaned}
+
+
 class RenameRequest(BaseModel):
     path: str
     new_name: str
