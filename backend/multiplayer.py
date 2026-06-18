@@ -3,6 +3,7 @@ mvmOS Multiplayer — generic WebSocket relay.
 No game logic. Server only tracks connections and relays messages.
 Games handle all logic themselves.
 """
+import asyncio
 import json
 import random
 import string
@@ -47,6 +48,7 @@ async def create_room(request: Request, body: dict):
         "max_players": max_players,
         "created_at": time.time(),
         "players": [],
+        "reconnect_tokens": {},   # token → player_index
         "state": "waiting",
     }
     return {"room_id": room_id, "game_id": game_id}
@@ -63,32 +65,121 @@ async def room_ws(websocket: WebSocket, room_id: str):
         return
 
     await websocket.accept()
-    player_index = len(room["players"])
-    room["players"].append(websocket)
 
-    # Tell this player who they are
-    await _send(websocket, {
-        "type": "joined",
-        "player": player_index,
-        "game_id": room["game_id"],
-        "players": len(room["players"]),
-        "max_players": room["max_players"],
-    })
+    # Wait briefly for a reconnect claim before assigning a new slot
+    try:
+        first_raw = await asyncio.wait_for(websocket.receive_text(), timeout=0.6)
+        first_msg = json.loads(first_raw)
+    except asyncio.TimeoutError:
+        first_msg = None
+    except Exception:
+        return
 
-    # Tell all others a new player joined
-    await _broadcast(room, exclude=player_index, data={
-        "type": "player_joined",
-        "player": player_index,
-        "players": len(room["players"]),
-        "max_players": room["max_players"],
-    })
+    # Check if this is a reconnect attempt
+    claimed_index = None
+    if first_msg and first_msg.get("type") == "reconnect":
+        old_token = first_msg.get("token", "")
+        old_idx = room.get("reconnect_tokens", {}).get(old_token)
+        if old_idx is not None and old_idx < len(room["players"]) and room["players"][old_idx] is None:
+            claimed_index = old_idx
+
+    if claimed_index is not None:
+        # Reconnect: restore to original slot
+        player_index = claimed_index
+        token = next((t for t, i in room["reconnect_tokens"].items() if i == claimed_index), _make_id(16))
+        room["players"][player_index] = websocket
+        active = sum(1 for p in room["players"] if p is not None)
+        await _send(websocket, {
+            "type": "joined",
+            "player": player_index,
+            "reconnect": True,
+            "reconnect_token": token,
+            "game_id": room["game_id"],
+            "players": active,
+            "max_players": room["max_players"],
+        })
+        await _broadcast(room, exclude=player_index, data={
+            "type": "player_rejoined",
+            "player": player_index,
+            "players": active,
+        })
+    else:
+        # New player
+        player_index = len(room["players"])
+        token = _make_id(16)
+        room["reconnect_tokens"][token] = player_index
+        room["players"].append(websocket)
+        active = sum(1 for p in room["players"] if p is not None)
+        await _send(websocket, {
+            "type": "joined",
+            "player": player_index,
+            "reconnect": False,
+            "reconnect_token": token,
+            "game_id": room["game_id"],
+            "players": active,
+            "max_players": room["max_players"],
+        })
+        await _broadcast(room, exclude=player_index, data={
+            "type": "player_joined",
+            "player": player_index,
+            "players": active,
+            "max_players": room["max_players"],
+        })
+        # Relay the first non-reconnect message (e.g., guest's hello)
+        if first_msg:
+            await _broadcast(room, exclude=player_index, data={**first_msg, "from": player_index})
 
     try:
         while True:
             raw = await websocket.receive_text()
-            msg = json.loads(raw)
-            # Relay to all other players, add sender index
+            try:
+                msg = json.loads(raw)
+            except Exception:
+                continue
+
+            msg_type = msg.get("type")
+
+            # Heartbeat — respond directly, don't relay
+            if msg_type == "ping":
+                await _send(websocket, {"type": "pong"})
+                continue
+
+            # Reconnect mid-loop: move from ghost slot to original slot
+            if msg_type == "reconnect":
+                old_token = msg.get("token", "")
+                old_idx = room.get("reconnect_tokens", {}).get(old_token)
+                if old_idx is not None and old_idx != player_index and old_idx < len(room["players"]) and room["players"][old_idx] is None:
+                    # Free current ghost slot
+                    room["players"][player_index] = None
+                    ghost_idx = player_index
+                    # Restore to original slot
+                    room["players"][old_idx] = websocket
+                    player_index = old_idx
+                    active = sum(1 for p in room["players"] if p is not None)
+                    await _send(websocket, {
+                        "type": "joined",
+                        "player": player_index,
+                        "reconnect": True,
+                        "reconnect_token": old_token,
+                        "game_id": room["game_id"],
+                        "players": active,
+                    })
+                    # Clean up ghost slot visibility
+                    await _broadcast(room, exclude=player_index, data={
+                        "type": "player_left",
+                        "player": ghost_idx,
+                        "players": active,
+                    })
+                    await _broadcast(room, exclude=player_index, data={
+                        "type": "player_rejoined",
+                        "player": player_index,
+                        "players": active,
+                    })
+                continue
+
+            # Regular message — relay to all other players
             await _broadcast(room, exclude=player_index, data={**msg, "from": player_index})
+
     except (WebSocketDisconnect, Exception):
         room["players"][player_index] = None
         active = sum(1 for p in room["players"] if p is not None)
