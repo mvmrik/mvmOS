@@ -40,7 +40,6 @@ from .cron import router as cron_router
 from .domains import router as domains_router
 from .projects import router as projects_router
 from .backup import router as backup_router
-from .multiplayer import router as multiplayer_router
 from .scheduler import router as scheduler_router
 from .db import APPS_DIR, WIDGETS_DIR, THEMES_DIR
 from . import app_backends, public_loader, projects
@@ -65,7 +64,6 @@ app.include_router(cron_router)
 app.include_router(domains_router)
 app.include_router(projects_router)
 app.include_router(backup_router)
-app.include_router(multiplayer_router)
 app.include_router(scheduler_router)
 
 app_backends.load_all(app)
@@ -104,7 +102,7 @@ async def auth_middleware(request: Request, call_next):
         return Response(status_code=404)
 
     public = {"/login", "/login/totp", "/favicon.ico", "/api/auth/login-users"}
-    if path in public or path.startswith("/api/scheduler/") or path.startswith("/static") or path.startswith("/pub/") or path.startswith("/api/pub/") or path.startswith("/api/multiplayer/") or path.endswith((".js", ".css", ".ico", ".png", ".svg", ".woff", ".woff2", ".webmanifest")) or "/public/" in path or path.endswith("/public"):
+    if path in public or path.startswith("/api/scheduler/") or path.startswith("/static") or path.startswith("/pub/") or path.startswith("/api/pub/") or path.endswith((".js", ".css", ".ico", ".png", ".svg", ".woff", ".woff2", ".webmanifest")) or "/public/" in path or path.endswith("/public"):
         return await call_next(request)
     token = request.cookies.get("session")
     if not token:

@@ -328,51 +328,123 @@ window.GameHub.recordSession({
 });
 ```
 
-### Multiplayer lobby — GH widget for join screen
+## Multiplayer Framework (Game Hub)
 
-Use `window.GameHub.renderWidget(container, opts)` on join screens that need a Ready button. Use the compact `_renderGhSection` pattern (show who is logged in, no Ready button) on host setup screens.
+**Multiplayer is hosted entirely by the Game Hub.** A game never writes its own
+WebSocket server, room manager, reconnect logic, lobby or invite flow — it
+provides ONLY its game logic. The hub owns everything generic; the hub knows
+nothing about any specific game.
+
+```
+Game Hub (backend/apps/gamehub/mp.py + widget.js GameHub.mp)
+  rooms · sockets · player identity (GH token) · reconnect · roster
+  lobby UI · invites · start/finish · session recording · generic play page
+        ▲ contract
+        │
+Game (backend/apps/<id>/mp_game.py  +  apps/<id>/mp.js)
+  rounds · moves · scoring · win conditions — nothing else
+```
+
+Single-player stays inside the app in mvmOS as before; only multiplayer goes
+through the hub. The game's in-mvmOS "Multiplayer" button simply opens the
+public hub (`window.open('/apps/gamehub/public/')`).
+
+### Discovery (no hardcoded game list)
+
+The hub lists a game as multiplayer-capable **iff** `backend/apps/<id>/mp_game.py`
+exists. Name/icon come from the plugins table; `max_players` from the game's
+`manifest.json`. There is no per-game code anywhere in the hub.
+
+### Server contract — `backend/apps/<id>/mp_game.py`
+
+Expose a class `Game(ctx)`. The hub instantiates it when the host presses Start.
+All callbacks are async:
+
+| Callback | When |
+|---|---|
+| `on_start(settings)` | host started — initialise game state from opaque `settings` |
+| `on_join(player)` | a player connected or **reconnected** — send them current state |
+| `on_leave(player)` | a player disconnected |
+| `on_message(player, msg)` | a move/action from a player (the game logic) |
+
+`ctx` (the hub API the game calls back into):
+
+| Member | Purpose |
+|---|---|
+| `ctx.settings` | opaque settings dict from room creation (hub never reads it) |
+| `ctx.room_id` / `ctx.host_id` | identifiers |
+| `ctx.players()` | connected roster entries `{id, display_name, avatar_svg, avatar_color, slot}` |
+| `ctx.all_players()` | full roster incl. disconnected |
+| `await ctx.broadcast(msg, exclude=None)` | send to all (or all but one) |
+| `await ctx.send(player_id, msg)` | send to one |
+| `ctx.schedule(delay, coro_factory)` | run an async fn after `delay` s (e.g. round timer) |
+| `await ctx.finish(records, metadata=…)` | end game → writes `game_sessions` → broadcasts `game_over` |
+
+`records` for `ctx.finish` is a list of `{player_id, score, rank, is_winner, guest_name?}`.
+The hub writes the session — **the game never calls `/session` itself in multiplayer.**
+
+Player identity and avatars come from the GH token at connect time; the game
+does **not** read the Game Hub database.
+
+### Client contract — `apps/<id>/mp.js`
+
+Loaded by the hub's generic play page alongside `widget.js`. Register once at
+load:
 
 ```javascript
-// Join screen — shows login/profile + Ready button
-window.GameHub.renderWidget(container, {
-  onReady: (player) => {
-    // player is null if joining as guest
-    connectToRoom(player);
+window.GameHub.mp.registerGame({
+  id: 'mygame',
+  name: 'My Game',
+  renderSetup(box, settings) {   // host-only lobby settings form
+    box.innerHTML = '…';
+    return function collect() { return { /* opaque settings */ }; };  // or null to block start
   },
-  onGuest: (name) => connectToRoom(null, name),
+  renderGame(root) {             // builds the in-game UI; takes over `root`
+    // use GameHub.mp.on(...) handlers (registered at load) to drive it
+  },
 });
 ```
 
-### Sending multiplayer invitations
+`window.GameHub.mp` API for the game:
 
-Favourites are stored per-player in localStorage under the key `gh_favs_<player_id>` as a JSON array:
+| Member | Purpose |
+|---|---|
+| `mp.on(type, cb)` | subscribe to a game message type (register at load) |
+| `mp.send(msg)` | send a move to the server |
+| `mp.players()` / `mp.me()` / `mp.youId()` | roster / self |
+| `mp.isHost()` / `mp.hostId()` | host checks |
+| `mp.settings()` / `mp.roomId()` / `mp.gameId()` | room info |
+| `mp.renderAvatar(player, size)` | SVG avatar |
 
-```json
-[
-  { "id": "abc123", "username": "martin", "display_name": "Martin", "avatar_color": "#89b4fa" }
-]
-```
+The hub handles the socket, join/auth, **reconnect** (the GH token is the slot
+key — reconnecting reclaims the same slot and `on_join` resends state),
+heartbeat, the lobby (roster + invites + Start button), and switching to the
+in-game view on start.
 
-In the host lobby, after creating a room, you can invite Game Hub favourites:
+### How to make a game multiplayer (3 steps)
 
-```javascript
-const me = window.GameHub.currentPlayer();
-if (me) {
-  const favs = JSON.parse(localStorage.getItem('gh_favs_' + me.id) || '[]');
-  // show checkboxes for each fav, then:
-  await fetch('/api/pub/gamehub/invite', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-GH-Token': window.GameHub.getToken() },
-    body: JSON.stringify({
-      to_ids:   ['player-id-1', 'player-id-2'],  // selected fav ids
-      game_id:  'mygame',
-      room_url: link,   // the room join URL from mvmOS.multiplayer.createRoom()
-    }),
-  });
-}
-```
+1. `backend/apps/<id>/mp_game.py` — a `Game` class with the callbacks above.
+2. `apps/<id>/mp.js` — `registerGame({id, name, renderSetup, renderGame})` + `mp.on/mp.send`.
+3. `apps/<id>/manifest.json` — add `"multiplayer": true` and `"max_players": N`.
 
-Invitations expire after 2 hours. Recipients see them in Game Hub → Games tab with a 🔔 badge and a "Join ▶" button. Dismissing removes the invite from the DB.
+That's all. The hub discovers it, lists it on the public page, creates rooms,
+connects players, manages reconnect, and records results. Reference
+implementation: **FindYourself** (`backend/apps/findyourself/mp_game.py`,
+`apps/findyourself/mp.js`).
+
+### Multiplayer endpoints (all under `/api/pub/gamehub/mp/`)
+
+| Method | Path | Description |
+|---|---|---|
+| POST | `/rooms` | create a room `{game_id, settings?}` → `{room_id, play_url}` |
+| GET | `/rooms?game_id=` | open lobbies for a game |
+| GET | `/games` | multiplayer-capable games (discovered via `mp_game.py`) |
+| POST | `/rooms/{id}/start` | host starts `{settings}` |
+| GET | `/play/{id}` | generic play page (loads `widget.js` + the game's `mp.js`) |
+| WS | `/rooms/{id}/ws` | join with `{type:'join', gh_token}`; hub assigns/reclaims slot |
+
+Invites reuse the existing `/api/pub/gamehub/invite` table (room_url =
+`/api/pub/gamehub/mp/play/{room_id}`); the hub lobby sends them automatically.
 
 ### Public endpoints (no mvmOS session required)
 
@@ -393,11 +465,22 @@ All endpoints are under `/api/pub/gamehub/`. The caller passes `X-GH-Token: <tok
 | DELETE | `/api/pub/gamehub/invites/{id}` | token | Dismiss an invitation (recipient) |
 | DELETE | `/api/pub/gamehub/invites?room_url=…` | token | Cancel all invites sent for a room (host) |
 
-### Checklist for adding Game Hub support to a new game
+### Checklist — single-player Game Hub support
 
 1. Use `_loadGameHub(cb, errCb)` — `errCb` must unlock any locked UI so the game works without GH
-2. Use `window.GameHub.renderWidget()` on join screens; use compact profile display on host setup screens
-3. Call `recordSession()` once per completed game — host-only in multiplayer (use a `sessionRecorded` flag to avoid duplicates)
-4. Pass `gh_player_id` through the multiplayer hello protocol so the host has it when recording the session
-5. Use `game_id` that exactly matches the app's `id` in the plugins DB — this is what links sessions to the game's name and icon in Game Hub
-6. In the host lobby, if `currentPlayer()` is not null, read `gh_favs_<id>` from localStorage and show the invite UI; skip silently if no favourites
+2. Use `window.GameHub.renderWidget()` on the setup screen for login/profile
+3. Call `recordSession({mode:'singleplayer', …})` once per finished game
+4. Use `game_id` that exactly matches the app's `id` in the plugins DB — this links sessions to the game's name and icon
+
+### Checklist — multiplayer
+
+Do **not** write any of the multiplayer plumbing yourself. Follow the
+**Multiplayer Framework** section above:
+
+1. `backend/apps/<id>/mp_game.py` with a `Game` class (game logic only)
+2. `apps/<id>/mp.js` calling `GameHub.mp.registerGame(...)` (UI + `mp.on`/`mp.send`)
+3. `manifest.json`: `"multiplayer": true`, `"max_players": N`
+4. The in-mvmOS Multiplayer button just opens `/apps/gamehub/public/`
+
+The hub records the session via `ctx.finish(records)` — the game must **not**
+call `recordSession()` in multiplayer.
