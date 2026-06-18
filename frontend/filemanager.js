@@ -1131,7 +1131,6 @@ const FileManager = (() => {
     }
 
     updateFooterSelection() {
-      if (this.progressWrap.style.display !== 'none') return;
       const names = [...this.selectedSet];
       if (names.length === 0) { this.footerStatus.textContent = ''; return; }
       const entries = (this._lastEntries || []).filter(e => names.includes(e.name));
