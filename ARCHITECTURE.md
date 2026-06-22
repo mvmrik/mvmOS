@@ -167,6 +167,137 @@ Adds a ☰ button on mobile if `body` contains an element with class `.as-sideba
 
 Opens system settings. Tabs: `'apps'`, `'about'`, `'widgets'`, `'themes'`.
 
+### mvmOS.openApp(id)
+
+Launches an installed app by its plugin ID. Safe to call from widgets (taskbar or desktop).
+
+---
+
+## Widgets
+
+An app can ship one or more widgets in a single `apps/<id>/widget.js` file. The file registers widgets via `mvmOS.registerWidget()` and is served directly — no build step.
+
+### Widget types
+
+| type | Where it appears |
+|---|---|
+| `'desktop'` | Draggable overlay on the desktop, resizable (S/M/L) |
+| `'taskbar'` | Inline in the taskbar; on mobile shown in the clock/calendar popup |
+
+### registerWidget — desktop
+
+```js
+mvmOS.registerWidget({
+  id:          'my-app-widget',       // unique ID stored in DB
+  name:        'My Widget',
+  icon:        '📊',
+  type:        'desktop',
+  defaultSize: 'm',
+  sizes:       ['s', 'm', 'l'],       // which sizes to offer
+  defaultX:    20,
+  defaultY:    80,
+  init(container, size) {
+    // Called once per mount (also on size change — container is re-used).
+    // Build DOM here. container already has correct pixel dimensions.
+    // Start polling here; store timer on container to avoid leaks:
+    //   container._myTimer = setInterval(refresh, 60000);
+  },
+});
+```
+
+`container` is a plain `<div>` sized by the system. Set `container.style.cssText =` (not `+=`) on every `init` call to avoid style bleed on size changes.
+
+### registerWidget — taskbar
+
+```js
+mvmOS.registerWidget({
+  id:   'my-app-taskbar',
+  name: 'My Widget (taskbar)',
+  icon: '📊',
+  type: 'taskbar',
+  init(wrap) {
+    // wrap is a flex div, height:100%, already in the taskbar DOM.
+    wrap.innerHTML = `...`;
+    // Click to open the parent app:
+    wrap.addEventListener('click', () => mvmOS.openApp('my-app'));
+  },
+});
+```
+
+On mobile, taskbar widgets are hidden from the bar and shown instead in the calendar popup when the user taps the clock.
+
+### One file, two widgets
+
+Both types can live in one file. Use a `_registered` guard so the file is safe to load multiple times (re-install, hot-reload):
+
+```js
+(function () {
+  if (window._myWidgetRegistered) return;
+  window._myWidgetRegistered = true;
+
+  let _lastData = null;   // shared cache — instant display on size change
+
+  mvmOS.registerWidget({ id: 'my-app-widget',   type: 'desktop', ... });
+  mvmOS.registerWidget({ id: 'my-app-taskbar',  type: 'taskbar', ... });
+})();
+```
+
+### Installing from inside the app
+
+Add a button in the app's UI that calls `/api/widgets/install`:
+
+```js
+await fetch('/api/widgets/install', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    id:          'my-app-widget',
+    name:        'My Widget',
+    icon:        '📊',
+    category:    'System',
+    version:     '1.0.0',
+    description: '...',
+    widget_type: 'desktop',           // or 'taskbar'
+    js_url:      location.origin + '/apps/my-app/widget.js',
+  }),
+});
+```
+
+The backend fetches `js_url`, saves it to `/widgets/<id>/main.js`, and registers the widget in the DB. On next page load the system loads it automatically from `/widgets/<id>/main.js`.
+
+After a successful install, hot-load immediately without page reload:
+
+```js
+window._myWidgetRegistered = false;
+const s = document.createElement('script');
+s.src = '/apps/my-app/widget.js?_=' + Date.now();
+document.head.appendChild(s);
+```
+
+### No-flicker pattern (desktop widgets)
+
+Split DOM building from value updates:
+
+```js
+function buildSkeleton(container, size) {
+  if (container._built) return;
+  container._built = true;
+  container.innerHTML = `<div id="my-val">—</div>`;
+}
+
+function updateValues(container, data) {
+  const el = container.querySelector('#my-val');
+  if (el) el.textContent = data.value;
+}
+
+// In init():
+buildSkeleton(container, size);
+if (_lastData) updateValues(container, _lastData);
+refresh();
+```
+
+Reset `container._built = false` at the top of `init()` **before** calling `buildSkeleton` — `init` is called again on size change with the same container element.
+
 ---
 
 ## App Backends (backend/apps/)

@@ -1060,6 +1060,7 @@ var mvmOS = (() => {
     },
     initMobileSidebar: (body) => Desktop.initMobileSidebar(body),
     openSettings: (tab) => Settings.openWindow(tab),
+    openApp: (id) => { const a = _apps[id]; if (a) { fetch(`/api/plugins/${id}/open`,{method:'POST'}).catch(()=>{}); a.launch(); } },
     notify,
     storage,
     multiplayer: {
