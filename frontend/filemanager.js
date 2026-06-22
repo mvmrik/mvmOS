@@ -55,7 +55,17 @@ const FileManager = (() => {
           </div>
           <div class="fm-body">
             <nav class="fm-places"></nav>
-            <div class="fm-list"></div>
+            <div class="fm-main">
+              <div class="fm-col-header">
+                <span class="fch-icon fch-reset" title="Reset sort">✕</span>
+                <span class="fch-name" data-col="name">${t('fm_col_name')}</span>
+                <span class="fch-size" data-col="size">${t('fm_col_size')}</span>
+                <span class="fch-perms fm-col-perms" data-col="perms" style="display:none">${t('fm_col_perms')}</span>
+                <span class="fch-owner fm-col-owner" data-col="owner" style="display:none">${t('fm_col_owner')}</span>
+                <span class="fch-date" data-col="date">${t('fm_col_date')}</span>
+              </div>
+              <div class="fm-list"></div>
+            </div>
             <div class="fm-preview" style="display:none">
               <button class="fm-preview-close">✕</button>
               <img class="fm-preview-img" src="" alt="">
@@ -73,6 +83,38 @@ const FileManager = (() => {
       this.breadEl    = body.querySelector('.fm-breadcrumb');
       this.placesEl   = body.querySelector('.fm-places');
       this.searchEl   = body.querySelector('.fm-search');
+      this.colHeader  = body.querySelector('.fm-col-header');
+      this._sortBy    = null;   // null = default (dirs first, then name)
+      this._sortDir   = 'asc';
+
+      // column header click → sort
+      this.colHeader.querySelectorAll('[data-col]').forEach(el => {
+        el.addEventListener('click', () => {
+          const col = el.dataset.col;
+          if (this._sortBy === col) {
+            this._sortDir = this._sortDir === 'asc' ? 'desc' : 'asc';
+          } else {
+            this._sortBy  = col;
+            this._sortDir = 'asc';
+          }
+          if (this._currentPath) {
+            try { localStorage.setItem('fm-sort:' + this._currentPath, JSON.stringify({ by: this._sortBy, dir: this._sortDir })); } catch(_) {}
+          }
+          this._updateSortHeader();
+          this.render(this._lastEntries || []);
+        });
+      });
+
+      // reset button → back to default sort
+      this.colHeader.querySelector('.fch-reset')?.addEventListener('click', () => {
+        this._sortBy  = null;
+        this._sortDir = 'asc';
+        if (this._currentPath) {
+          try { localStorage.removeItem('fm-sort:' + this._currentPath); } catch(_) {}
+        }
+        this._updateSortHeader();
+        this.render(this._lastEntries || []);
+      });
 
       this.searchEl.addEventListener('input', () => {
         const q = this.searchEl.value.trim().toLowerCase();
@@ -356,6 +398,7 @@ const FileManager = (() => {
       if (this._navigating) return;
       this._navigating = true;
       this.currentPath = path;
+      this._currentPath = path;
       this.selected = null;
       this.selectedSet.clear();
       this._lastClickedName = null;
@@ -363,6 +406,14 @@ const FileManager = (() => {
       this.searchEl.value = '';
       this.updatePreview(null);
       this.updateActivePlacea(path);
+
+      // restore sort preference for this path
+      try {
+        const saved = localStorage.getItem('fm-sort:' + path);
+        if (saved) { const p = JSON.parse(saved); this._sortBy = p.by || null; this._sortDir = p.dir || 'asc'; }
+        else { this._sortBy = null; this._sortDir = 'asc'; }
+      } catch(_) { this._sortBy = null; this._sortDir = 'asc'; }
+      this._updateSortHeader();
 
       // ── Trash view ──
       if (path === '__trash__') {
@@ -552,13 +603,40 @@ const FileManager = (() => {
       this.navigate('__trash__');
     }
 
+    _updateSortHeader() {
+      if (!this.colHeader) return;
+      const arrow = this._sortDir === 'asc' ? ' ↑' : ' ↓';
+      const labels = { name: t('fm_col_name'), size: t('fm_col_size'), date: t('fm_col_date'), perms: t('fm_col_perms'), owner: t('fm_col_owner') };
+      const hasManual = this._sortBy !== null;
+      // show/hide reset X
+      const resetBtn = this.colHeader.querySelector('.fch-reset');
+      if (resetBtn) resetBtn.style.visibility = hasManual ? 'visible' : 'hidden';
+      this.colHeader.querySelectorAll('[data-col]').forEach(el => {
+        const col = el.dataset.col;
+        const active = hasManual && col === this._sortBy;
+        el.classList.toggle('fm-sort-active', active);
+        el.textContent = labels[col] + (active ? arrow : '');
+      });
+    }
+
     render(entries, fromSearch = false) {
       if (!fromSearch) this._lastEntries = entries;
       if (!loadPrefs().showHidden) entries = entries.filter(e => !e.name.startsWith('.'));
+      const sd = this._sortDir === 'desc' ? -1 : 1;
       entries = [...entries].sort((a, b) => {
-        if (a.type === 'dir' && b.type !== 'dir') return -1;
-        if (a.type !== 'dir' && b.type === 'dir') return 1;
-        return a.name.localeCompare(b.name);
+        if (this._sortBy === null) {
+          // default: dirs first, then by name asc
+          if (a.type === 'dir' && b.type !== 'dir') return -1;
+          if (a.type !== 'dir' && b.type === 'dir') return 1;
+          return a.name.localeCompare(b.name);
+        }
+        switch (this._sortBy) {
+          case 'size':  return sd * ((a.size || 0) - (b.size || 0));
+          case 'date':  return sd * ((a.modified || '') < (b.modified || '') ? -1 : (a.modified || '') > (b.modified || '') ? 1 : 0);
+          case 'perms': return sd * (a.permissions || '').localeCompare(b.permissions || '');
+          case 'owner': return sd * ((a.owner || '') + (a.group || '')).localeCompare((b.owner || '') + (b.group || ''));
+          default:      return sd * a.name.localeCompare(b.name);
+        }
       });
       if (entries.length === 0) {
         this.listEl.innerHTML = '<div class="fm-empty">Empty folder</div>';
@@ -566,6 +644,13 @@ const FileManager = (() => {
       }
 
       const prefs = loadPrefs();
+      // sync optional header columns with prefs
+      if (this.colHeader) {
+        const oc = this.colHeader.querySelector('.fm-col-owner');
+        const pc = this.colHeader.querySelector('.fm-col-perms');
+        if (oc) oc.style.display = prefs.showOwner ? '' : 'none';
+        if (pc) pc.style.display = prefs.showPerms ? '' : 'none';
+      }
       this.listEl.innerHTML = '';
       entries.forEach(entry => {
         const row = document.createElement('div');

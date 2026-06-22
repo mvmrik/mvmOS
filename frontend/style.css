@@ -786,6 +786,39 @@ html, body {
 }
 .fm-place:hover .fm-bookmark-remove { opacity: 1; }
 .fm-bookmark-remove:hover { color: #e05555; }
+.fm-main {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  overflow: hidden;
+}
+.fm-col-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 12px;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  user-select: none;
+  flex-shrink: 0;
+}
+.fm-col-header span {
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.fm-col-header span:hover { color: var(--text); }
+.fm-col-header span.fm-sort-active { color: var(--accent); }
+.fm-col-header .fch-icon { width: 20px; flex-shrink: 0; cursor: default; }
+.fm-col-header .fch-reset { cursor: pointer; visibility: hidden; color: var(--text-dim); font-size: .65rem; }
+.fm-col-header .fch-reset:hover { color: var(--danger); }
+.fm-col-header .fch-name { flex: 1; }
+.fm-col-header .fch-size { width: 70px; text-align: right; flex-shrink: 0; }
+.fm-col-header .fch-date { width: 130px; text-align: right; flex-shrink: 0; }
+.fm-col-header .fch-perms { width: 50px; text-align: right; flex-shrink: 0; font-family: monospace; }
+.fm-col-header .fch-owner { width: 100px; text-align: right; flex-shrink: 0; }
 .fm-list {
   flex: 1;
   overflow-y: auto;
