@@ -64,7 +64,7 @@ var mvmOS = (() => {
       { id: 'filemanager',      name: t('app_filemanager'),      icon: '🗂️', system: true, launch: () => FileManager.openWindow() },
       { id: 'msc',              name: t('app_msc'),              icon: '🛠️', system: true, launch: () => Sites.openWindow() },
       { id: 'appstore',         name: t('app_appstore'),         icon: '📦', system: true, launch: () => AppStore.openWindow() },
-      { id: 'startup-manager',  name: t('start_startup'),        icon: '🚀', system: true, launch: () => { const a = _apps['startup-manager']; if (a) a.launch(); } },
+      { id: 'startup-manager',  name: t('start_startup'),        icon: '🚀', system: true, launch: () => StartupManager.openWindow() },
       { id: 'settings',         name: t('app_settings'),         icon: '⚙️', system: true, launch: () => Settings.openWindow() },
     ];
     const sysEl = document.createElement('div');
