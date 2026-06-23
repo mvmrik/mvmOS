@@ -60,11 +60,12 @@ var mvmOS = (() => {
     }
     // System category — always first
     const SYSTEM_APPS = [
-      { id: 'terminal',    name: t('app_terminal'),     icon: '🖥️', system: true, launch: () => Terminal.openWindow() },
-      { id: 'filemanager', name: t('app_filemanager'), icon: '🗂️', system: true, launch: () => FileManager.openWindow() },
-      { id: 'msc',        name: t('app_msc'),         icon: '🛠️', system: true, launch: () => Sites.openWindow() },
-      { id: 'appstore',    name: t('app_appstore'),    icon: '📦', system: true, launch: () => AppStore.openWindow() },
-      { id: 'settings',   name: t('app_settings'),    icon: '⚙️', system: true, launch: () => Settings.openWindow() },
+      { id: 'terminal',         name: t('app_terminal'),         icon: '🖥️', system: true, launch: () => Terminal.openWindow() },
+      { id: 'filemanager',      name: t('app_filemanager'),      icon: '🗂️', system: true, launch: () => FileManager.openWindow() },
+      { id: 'msc',              name: t('app_msc'),              icon: '🛠️', system: true, launch: () => Sites.openWindow() },
+      { id: 'appstore',         name: t('app_appstore'),         icon: '📦', system: true, launch: () => AppStore.openWindow() },
+      { id: 'startup-manager',  name: t('start_startup'),        icon: '🚀', system: true, launch: () => { const a = _apps['startup-manager']; if (a) a.launch(); } },
+      { id: 'settings',         name: t('app_settings'),         icon: '⚙️', system: true, launch: () => Settings.openWindow() },
     ];
     const sysEl = document.createElement('div');
     sysEl.className = 'start-submenu-item';

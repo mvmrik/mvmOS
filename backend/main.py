@@ -41,12 +41,14 @@ from .domains import router as domains_router
 from .projects import router as projects_router
 from .backup import router as backup_router
 from .scheduler import router as scheduler_router
+from .startup import router as startup_router, _init_startup_db, run_startup_apps
 from .db import APPS_DIR, WIDGETS_DIR, THEMES_DIR
 from . import app_backends, public_loader, projects
 
 app = FastAPI(title="mvmOS", redirect_slashes=False)
 
 init_db()
+_init_startup_db()
 
 app.include_router(auth_router)
 app.include_router(terminal_router)
@@ -65,8 +67,13 @@ app.include_router(domains_router)
 app.include_router(projects_router)
 app.include_router(backup_router)
 app.include_router(scheduler_router)
+app.include_router(startup_router)
 
 app_backends.load_all(app)
+
+@app.on_event("startup")
+async def _run_startup_apps():
+    await run_startup_apps()
 public_loader.load_all(app)
 projects.init(app)
 

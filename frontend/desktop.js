@@ -1052,6 +1052,8 @@ const Desktop = (() => {
     }
   }
   window._mvmosShowRestartOverlay = () => _showPowerOverlay('restart');
+  window._mvmosGetWindows = () => Object.entries(windows).map(([id, w]) => ({ id, title: w.title, icon: w.icon, minimized: w.minimized, tray: !!_trayItems[id] }));
+  window._mvmosCloseWindow = (id) => closeWindow(id);
 
   function _openPowerFlyout(anchorEl) {
     _closePowerFlyout();
@@ -1101,6 +1103,7 @@ const Desktop = (() => {
     _closeUserFlyout();
     _openPowerFlyout(e.currentTarget);
   });
+
   document.addEventListener('click', e => {
     if (_powerFlyout && !e.target.closest('#start-power-btn') && !_powerFlyout.contains(e.target)) {
       _closePowerFlyout();

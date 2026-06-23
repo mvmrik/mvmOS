@@ -102,3 +102,10 @@ def uninstall(app_id: str) -> None:
 
 def has_backend(app_id: str) -> bool:
     return os.path.isfile(os.path.join(BACKENDS_DIR, app_id, "backend.py"))
+
+
+def list_backends() -> list[str]:
+    if not os.path.isdir(BACKENDS_DIR):
+        return []
+    return [d for d in os.listdir(BACKENDS_DIR)
+            if os.path.isfile(os.path.join(BACKENDS_DIR, d, "backend.py"))]

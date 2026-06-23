@@ -187,6 +187,23 @@ def _install_from_zip(zip_bytes: bytes, plugin_id: str, install_backend: bool) -
 
         if install_backend and be_code:
             app_backends.install(plugin_id, be_code)
+            # auto-enable startup if the backend defines on_startup()
+            import sys as _sys
+            mod = _sys.modules.get(f"app_backend_{plugin_id}")
+            if mod is not None and hasattr(mod, "on_startup"):
+                from .startup import _init_startup_db, run_startup_apps
+                from .db import get_conn as _get_conn
+                _init_startup_db()
+                with _get_conn() as _c:
+                    _c.execute(
+                        "INSERT OR IGNORE INTO startup_apps(app_id,enabled) VALUES(?,1)",
+                        (plugin_id,)
+                    )
+                import asyncio as _asyncio
+                try:
+                    _asyncio.get_running_loop().create_task(mod.on_startup())
+                except RuntimeError:
+                    pass
         if install_backend and pub_code:
             from . import public_loader
             public_loader.install(plugin_id, pub_code)

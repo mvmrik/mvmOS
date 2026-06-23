@@ -8,6 +8,8 @@ window._i18n = {
   'start_logout':                 'Изход',
   'start_user':                   'Потребител',
   'start_power':                  'Захранване',
+  'start_startup':                'Стартиране',
+  'startup_no_hook':              'Няма startup hook',
   'power_restart':                'Рестартиране на mvmOS',
   'power_stop':                   'Спиране на mvmOS',
   'power_restarting':             'Рестартиране, моля изчакайте…',
