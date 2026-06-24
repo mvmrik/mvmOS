@@ -171,6 +171,25 @@ Opens system settings. Tabs: `'apps'`, `'about'`, `'widgets'`, `'themes'`.
 
 Launches an installed app by its plugin ID. Safe to call from widgets (taskbar or desktop).
 
+### window._vosSettings — user preferences
+
+Read-only object with the current user's regional settings. Available in all apps and widgets.
+
+```js
+window._vosSettings?.timezone      // IANA timezone, e.g. "Europe/Sofia"
+window._vosSettings?.time_format   // "24" or "12"
+window._vosSettings?.date_format   // "DD/MM/YYYY", "MM/DD/YYYY", "YYYY-MM-DD"
+window._vosSettings?.week_starts   // "monday" or "sunday"
+window._vosSettings?.language      // "en" or "bg"
+```
+
+Updates when the user changes settings — listen with `window.addEventListener('settings-changed', e => { ... })` if you need to react.
+
+Time formatting pattern:
+```js
+date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: (window._vosSettings?.time_format === '12') })
+```
+
 ---
 
 ## Widgets

@@ -7,8 +7,11 @@ from .db import get_conn
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
 
+import datetime
+_server_tz = str(datetime.datetime.now().astimezone().tzinfo)
+
 DEFAULTS = {
-    "timezone": "UTC",
+    "timezone": _server_tz,
     "time_format": "24",       # "12" or "24"
     "date_format": "DD/MM/YYYY",  # "DD/MM/YYYY", "MM/DD/YYYY", "YYYY-MM-DD"
     "week_starts": "monday",   # "monday" or "sunday"
