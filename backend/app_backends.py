@@ -48,6 +48,11 @@ def _load_one(app: FastAPI, app_id: str) -> bool:
         return False
     mod_name = f"app_backend_{app_id}"
     try:
+        old_mod = sys.modules.get(mod_name)
+        if old_mod is not None:
+            task = getattr(old_mod, "_loop_task", None)
+            if task and not task.done():
+                task.cancel()
         app.routes[:] = [r for r in app.routes if not getattr(r, "_app_backend", None) == app_id]
 
         # exec the source directly — importlib would reuse a stale .pyc when
