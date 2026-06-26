@@ -65,6 +65,7 @@ var mvmOS = (() => {
       { id: 'msc',              name: t('app_msc'),              icon: '🛠️', system: true, launch: () => Sites.openWindow() },
       { id: 'appstore',         name: t('app_appstore'),         icon: '📦', system: true, launch: () => AppStore.openWindow() },
       { id: 'startup-manager',  name: t('start_startup'),        icon: '🚀', system: true, launch: () => StartupManager.openWindow() },
+      { id: 'apphub',           name: t('app_apphub'),           icon: '🧩', system: true, launch: () => AppHub.openWindow() },
       { id: 'settings',         name: t('app_settings'),         icon: '⚙️', system: true, launch: () => Settings.openWindow() },
     ];
     const sysEl = document.createElement('div');
@@ -799,7 +800,8 @@ var mvmOS = (() => {
       { id: 'filemanager', name: t('app_filemanager'), icon: '🗂️', system: true, launch: () => FileManager.openWindow() },
       { id: 'appstore',    name: t('app_appstore'),    icon: '📦', system: true, launch: () => AppStore.openWindow() },
       { id: 'settings',   name: t('app_settings'),    icon: '⚙️', system: true, launch: () => Settings.openWindow() },
-      { id: 'msc',        name: t('app_msc'),         icon: '🛠️', system: true, launch: () => Sites.openWindow() },
+      { id: 'apphub',    name: t('app_apphub'),      icon: '🧩', system: true, launch: () => AppHub.openWindow() },
+      { id: 'msc',       name: t('app_msc'),         icon: '🛠️', system: true, launch: () => Sites.openWindow() },
     ].forEach(def => { _apps[def.id] = def; });
 
     const btn   = document.getElementById('notif-btn');

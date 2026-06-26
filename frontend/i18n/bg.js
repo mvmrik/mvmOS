@@ -221,6 +221,7 @@ window._i18n = {
   'app_terminal':                 'Терминал',
   'app_filemanager':              'Файлов мениджър',
   'app_appstore':                 'Магазин за приложения',
+  'app_apphub':                   'Apps Hub',
   'app_settings':                 'Настройки',
   'app_sites':                    'Сайтове',
   'app_msc':                      'mvmOS Studio Code',

@@ -221,6 +221,7 @@ window._i18n = {
   'app_terminal':                 'Terminal',
   'app_filemanager':              'File Manager',
   'app_appstore':                 'App Store',
+  'app_apphub':                   'Apps Hub',
   'app_settings':                 'Settings',
   'app_sites':                    'Sites',
   'app_msc':                      'mvmOS Studio Code',
