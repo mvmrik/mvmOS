@@ -49,7 +49,10 @@ const AppHub = (() => {
     }
   }
 
+  let _pendingCancel = null;
+
   function _openForLogin(cb) {
+    if (_pendingCancel) _pendingCancel();
     openWindow('account');
     let _done = false;
     const finish = (token, user) => {
@@ -57,6 +60,7 @@ const AppHub = (() => {
       _done = true;
       window.removeEventListener('storage', storageHandler);
       window.removeEventListener('apphub_login', loginHandler);
+      if (_pendingCancel === cancel) _pendingCancel = null;
       if (user) { cb(user); return; }
       fetch('/api/pub/apphub/me', { headers: { 'X-Pub-Token': token } })
         .then(r => r.ok ? r.json() : null)
@@ -66,8 +70,14 @@ const AppHub = (() => {
       if (e.key === 'apphub_token' && e.newValue) finish(e.newValue, null);
     };
     const loginHandler = e => finish(e.detail.token, e.detail.user);
+    const cancel = () => {
+      _done = true;
+      window.removeEventListener('storage', storageHandler);
+      window.removeEventListener('apphub_login', loginHandler);
+    };
     window.addEventListener('storage', storageHandler);
     window.addEventListener('apphub_login', loginHandler);
+    _pendingCancel = cancel;
   }
 
   // ── Window ─────────────────────────────────────────────────────

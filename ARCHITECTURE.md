@@ -76,6 +76,7 @@ mvmOS.registerApp({
   category: 'Utilities',
   trayable: true,          // optional — System Tray support
   settings: [...],         // must match manifest.json
+  requires_apphub: true,   // optional — gates launch() behind Apps Hub login (see Apps Hub integration in store DEVELOPER.md)
   launch() { ... },
 });
 ```

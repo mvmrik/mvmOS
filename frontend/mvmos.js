@@ -238,6 +238,13 @@ var mvmOS = (() => {
   function registerApp(def) {
     if (!def.id || !def.launch) { console.warn('mvmOS.registerApp: missing id or launch'); return; }
     def.storage = _makeStorage(def.id);
+    if (def.requires_apphub) {
+      const _launch = def.launch;
+      def.launch = (...args) => {
+        if (typeof AppHub !== 'undefined') AppHub.requireLogin(() => _launch(...args));
+        else _launch(...args);
+      };
+    }
     _apps[def.id] = def;
     _ensureAppsMenuItem();
   }

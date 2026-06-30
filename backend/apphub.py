@@ -320,6 +320,8 @@ async def list_public_apps():
     apps_dir = os.path.join(os.path.dirname(__file__), "..", "apps")
     result = []
     for app_id in enabled:
+        if app_id == "apphub":
+            continue
         if not is_app_public(app_id):
             continue
         mpath = os.path.join(apps_dir, app_id, "manifest.json")
@@ -327,6 +329,8 @@ async def list_public_apps():
             m = json.load(open(mpath)) if os.path.isfile(mpath) else {}
         except Exception:
             m = {}
+        if m.get("public_directory") is False:
+            continue
         result.append({
             "id":          app_id,
             "name":        m.get("name", app_id),

@@ -615,11 +615,7 @@ const Desktop = (() => {
       const pluginApp = window.mvmOS?._apps?.[app];
       if (pluginApp?.launch) {
         fetch(`/api/plugins/${app}/open`, { method: 'POST' }).catch(() => {});
-        if (pluginApp.requires_apphub && typeof AppHub !== 'undefined') {
-          AppHub.requireLogin(() => pluginApp.launch());
-        } else {
-          pluginApp.launch();
-        }
+        pluginApp.launch();
       } else if (attempts > 0) {
         setTimeout(() => tryLaunch(attempts - 1), 300);
       }
