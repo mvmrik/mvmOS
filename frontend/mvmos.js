@@ -126,7 +126,7 @@ var mvmOS = (() => {
   async function _renderQuickAccess() {
     const startMenu = document.getElementById('start-menu');
     if (!startMenu) return;
-    const prefs = Settings.loadStartMenuPrefs?.() || Settings.defaultStartMenuPrefs?.() || { order: ['recent','frequent','custom'], recent: 0, frequent: 0, custom: [] };
+    const prefs = (await Settings.loadStartMenuPrefs?.()) || Settings.defaultStartMenuPrefs?.() || { order: ['recent','frequent','custom'], recent: 0, frequent: 0, custom: [] };
     Settings.applyStartMenuOpacity?.(prefs.opacity ?? 80);
 
     // fetch recent/frequent from API if needed
@@ -1151,14 +1151,15 @@ var mvmOS = (() => {
     },
     confirm(message, opts) {
       opts = opts || {};
+      const _t = k => window._i18n?.[k] || window.mvmOS?.t?.(k) || k;
       return new Promise(resolve => {
         const ov = document.createElement('div');
         ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center';
         ov.innerHTML = `<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius,6px);padding:24px;max-width:380px;width:90%;box-shadow:var(--shadow);display:flex;flex-direction:column;gap:14px">
           <div style="font-size:.92rem;line-height:1.5">${message}</div>
           <div style="display:flex;gap:8px;justify-content:flex-end">
-            <button id="_mc-cancel" class="s-btn s-btn-sm">${opts.cancel || 'Отказ'}</button>
-            <button id="_mc-ok" class="s-btn s-btn-sm" style="${opts.danger !== false ? 'background:#f38ba8;color:#1e1e2e;border-color:#f38ba8' : 'background:var(--accent);color:#fff;border-color:var(--accent)'}">${opts.ok || 'Потвърди'}</button>
+            <button id="_mc-cancel" class="s-btn s-btn-sm">${opts.cancel || _t('cancel') || 'Cancel'}</button>
+            <button id="_mc-ok" class="s-btn s-btn-sm" style="${opts.danger !== false ? 'background:#f38ba8;color:#1e1e2e;border-color:#f38ba8' : 'background:var(--accent);color:#fff;border-color:var(--accent)'}">${opts.ok || _t('confirm') || 'Confirm'}</button>
           </div></div>`;
         document.body.appendChild(ov);
         ov.querySelector('#_mc-cancel').onclick = () => { ov.remove(); resolve(false); };
@@ -1166,6 +1167,7 @@ var mvmOS = (() => {
       });
     },
     prompt(message, placeholder, defaultValue) {
+      const _t = k => window._i18n?.[k] || window.mvmOS?.t?.(k) || k;
       return new Promise(resolve => {
         const ov = document.createElement('div');
         ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center';
@@ -1173,8 +1175,8 @@ var mvmOS = (() => {
           <div style="font-size:.92rem">${message}</div>
           <input id="_mp-input" class="s-input" placeholder="${placeholder || ''}" value="${defaultValue || ''}" style="width:100%;box-sizing:border-box">
           <div style="display:flex;gap:8px;justify-content:flex-end">
-            <button id="_mp-cancel" class="s-btn s-btn-sm">Отказ</button>
-            <button id="_mp-ok" class="s-btn s-btn-sm s-btn-primary">OK</button>
+            <button id="_mp-cancel" class="s-btn s-btn-sm">${_t('cancel') || 'Cancel'}</button>
+            <button id="_mp-ok" class="s-btn s-btn-sm s-btn-primary">${_t('ok') || 'OK'}</button>
           </div></div>`;
         document.body.appendChild(ov);
         const input = ov.querySelector('#_mp-input');

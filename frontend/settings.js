@@ -1204,15 +1204,16 @@ const Settings = (() => {
     }
   }
 
-  // ── Start Menu settings ───────────────────────────────────────────────────
-  const SM_KEY = 'mvmos_start_menu';
+  // ── Start Menu settings (stored server-side via /api/settings) ─────────────
 
-  function loadStartMenuPrefs() {
-    try { return JSON.parse(localStorage.getItem(SM_KEY)); } catch (_) { return null; }
+  async function loadStartMenuPrefs() {
+    if (!Object.keys(currentSettings).length) await loadSettings();
+    return currentSettings.start_menu || null;
   }
 
-  function saveStartMenuPrefs(prefs) {
-    localStorage.setItem(SM_KEY, JSON.stringify(prefs));
+  async function saveStartMenuPrefs(prefs) {
+    currentSettings.start_menu = prefs;
+    await saveSettings(currentSettings);
     _applyStartMenuOpacity(prefs.opacity ?? 80);
     window.dispatchEvent(new CustomEvent('startmenu-changed', { detail: prefs }));
   }
@@ -1245,10 +1246,10 @@ const Settings = (() => {
     }
   }
 
-  function renderStartMenu(body) {
+  async function renderStartMenu(body) {
     const panel = body.querySelector('#sp-startmenu');
     if (!panel) return;
-    const prefs = loadStartMenuPrefs() || defaultStartMenuPrefs();
+    const prefs = (await loadStartMenuPrefs()) || defaultStartMenuPrefs();
     const allApps = Object.values(window.mvmOS?._apps || {}).sort((a, b) => a.name.localeCompare(b.name));
 
     function _saveAndRedraw() { saveStartMenuPrefs(prefs); _draw(); }

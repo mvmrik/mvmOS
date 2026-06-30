@@ -503,6 +503,7 @@ window._i18n = {
   'uninstall_wrong_password':     'Wrong password',
   'uninstall_error':              'Error',
   'confirm':                      'Confirm',
+  'ok':                           'OK',
   'require_root_title':           'Confirmation required',
   'require_root_password':        'Your password',
   'require_root_ph':              'Enter your password…',

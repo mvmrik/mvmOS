@@ -505,6 +505,7 @@ window._i18n = {
   'uninstall_wrong_password':     'Грешна парола',
   'uninstall_error':              'Грешка',
   'confirm':                      'Потвърди',
+  'ok':                           'ОК',
   'require_root_title':           'Потвърждение',
   'require_root_password':        'Твоята парола',
   'require_root_ph':              'Въведи паролата си…',
