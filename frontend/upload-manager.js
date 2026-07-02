@@ -234,6 +234,15 @@
 
       /* ── Simple XHR ── */
       const fd = new FormData();
+      if (task.chunkEndpoint) {
+        // chunkEndpoint expects the same chunk-protocol fields even for a single-shot upload
+        uploadId = Math.random().toString(36).slice(2) + Date.now().toString(36);
+        fd.append('upload_id', uploadId);
+        fd.append('chunk_index', 0);
+        fd.append('total_chunks', 1);
+        fd.append('filename', file.name);
+        if (task.noFinalize) fd.append('no_finalize', '1');
+      }
       for (const [k, v] of Object.entries(fields)) fd.append(k, v);
       fd.append('file', file);
 
