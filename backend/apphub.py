@@ -3,6 +3,7 @@ Apps Hub — central public identity for all public-facing apps.
 
 Exports (used by other modules via sys.modules["backend.apphub"]):
   get_pub_session(token)  -> dict | None
+  get_users_by_ids(ids)   -> list[dict]
   issue_pub_token(uid)    -> str
   revoke_token(token)     -> None
   migrate_from_gamehub(players, tokens) -> int
@@ -107,6 +108,23 @@ def get_pub_session(token: Optional[str]) -> Optional[dict]:
             (token, now)
         ).fetchone()
     return dict(row) if row else None
+
+
+def get_users_by_ids(ids: list) -> list:
+    """Bulk-lookup public profile fields for a list of user ids. Used by other
+    app backends to render display name/avatar for ids they've stored but
+    don't hold a session token for."""
+    ids = [i for i in dict.fromkeys(ids) if i]
+    if not ids:
+        return []
+    placeholders = ",".join("?" for _ in ids)
+    with _db() as conn:
+        rows = conn.execute(
+            f"SELECT id, username, display_name, avatar_color, avatar_svg FROM public_users "
+            f"WHERE id IN ({placeholders})",
+            ids
+        ).fetchall()
+    return [dict(r) for r in rows]
 
 
 def issue_pub_token(user_id: str) -> str:
