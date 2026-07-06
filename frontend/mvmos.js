@@ -2,6 +2,30 @@
 var mvmOS = (() => {
   const _apps = {};
 
+  // Tracks an app open server-side, then refreshes the Start Menu's
+  // Recent/Most-used lists so they reflect it immediately (no page reload needed).
+  function _trackOpen(id) {
+    fetch(`/api/plugins/${id}/open`, { method: 'POST' })
+      .then(() => _renderQuickAccess())
+      .catch(() => {});
+  }
+
+  // Single source of truth for built-in system apps (id, name, icon, launch).
+  // Names/icons/categories are also seeded server-side (backend/db.py SYSTEM_APPS)
+  // so they participate in Start Menu recent/most-used tracking; this list only
+  // needs to add the `launch` binding, which must live in JS.
+  function _SYSTEM_APP_DEFS() {
+    return [
+      { id: 'terminal',         name: t('app_terminal'),  icon: '🖥️', system: true, launch: () => Terminal.openWindow() },
+      { id: 'filemanager',      name: t('app_filemanager'), icon: '🗂️', system: true, launch: () => FileManager.openWindow() },
+      { id: 'msc',              name: t('app_msc'),       icon: '🛠️', system: true, launch: () => Sites.openWindow() },
+      { id: 'appstore',         name: t('app_appstore'),  icon: '📦', system: true, launch: () => AppStore.openWindow() },
+      { id: 'startup-manager',  name: t('start_startup'), icon: '🚀', system: true, launch: () => StartupManager.openWindow() },
+      { id: 'apphub',           name: t('app_apphub'),    icon: '🧩', system: true, launch: () => AppHub.openWindow() },
+      { id: 'settings',         name: t('app_settings'),  icon: '⚙️', system: true, launch: () => Settings.openWindow() },
+    ];
+  }
+
   // ── Storage (namespaced localStorage) ────────────────────────────────────
   function _makeStorage(ns) {
     const prefix = `mvmos_app_${ns}_`;
@@ -59,15 +83,7 @@ var mvmOS = (() => {
       _flyout.appendChild(sep);
     }
     // System category — always first
-    const SYSTEM_APPS = [
-      { id: 'terminal',         name: t('app_terminal'),         icon: '🖥️', system: true, launch: () => Terminal.openWindow() },
-      { id: 'filemanager',      name: t('app_filemanager'),      icon: '🗂️', system: true, launch: () => FileManager.openWindow() },
-      { id: 'msc',              name: t('app_msc'),              icon: '🛠️', system: true, launch: () => Sites.openWindow() },
-      { id: 'appstore',         name: t('app_appstore'),         icon: '📦', system: true, launch: () => AppStore.openWindow() },
-      { id: 'startup-manager',  name: t('start_startup'),        icon: '🚀', system: true, launch: () => StartupManager.openWindow() },
-      { id: 'apphub',           name: t('app_apphub'),           icon: '🧩', system: true, launch: () => AppHub.openWindow() },
-      { id: 'settings',         name: t('app_settings'),         icon: '⚙️', system: true, launch: () => Settings.openWindow() },
-    ];
+    const SYSTEM_APPS = _SYSTEM_APP_DEFS();
     const sysEl = document.createElement('div');
     sysEl.className = 'start-submenu-item';
     sysEl.innerHTML = `<span class="emoji">🖥️</span>${t('start_system')}<span class="start-menu-item-arrow">›</span>`;
@@ -108,7 +124,7 @@ var mvmOS = (() => {
         e.stopPropagation();
         _closeFlyout();
         document.getElementById('start-menu').classList.remove('open');
-        if (!app.system) fetch(`/api/plugins/${app.id}/open`, { method: 'POST' }).catch(() => {});
+        _trackOpen(app.id);
         app.launch();
       });
       el.addEventListener('contextmenu', e => {
@@ -183,7 +199,7 @@ var mvmOS = (() => {
           startMenu.classList.remove('open');
           _closeFlyout();
           const appDef = _apps[app.id];
-          if (appDef) { fetch(`/api/plugins/${app.id}/open`, { method: 'POST' }).catch(() => {}); appDef.launch(); }
+          if (appDef) { _trackOpen(app.id); appDef.launch(); }
         });
         block.appendChild(el);
       });
@@ -802,14 +818,7 @@ var mvmOS = (() => {
 
   function _init() {
     // register built-in apps so desktop icons can find their icons
-    [
-      { id: 'terminal',    name: t('app_terminal'),    icon: '🖥️', system: true, launch: () => Terminal.openWindow() },
-      { id: 'filemanager', name: t('app_filemanager'), icon: '🗂️', system: true, launch: () => FileManager.openWindow() },
-      { id: 'appstore',    name: t('app_appstore'),    icon: '📦', system: true, launch: () => AppStore.openWindow() },
-      { id: 'settings',   name: t('app_settings'),    icon: '⚙️', system: true, launch: () => Settings.openWindow() },
-      { id: 'apphub',    name: t('app_apphub'),      icon: '🧩', system: true, launch: () => AppHub.openWindow() },
-      { id: 'msc',       name: t('app_msc'),         icon: '🛠️', system: true, launch: () => Sites.openWindow() },
-    ].forEach(def => { _apps[def.id] = def; });
+    _SYSTEM_APP_DEFS().forEach(def => { _apps[def.id] = def; });
 
     const btn   = document.getElementById('notif-btn');
     const panel = document.getElementById('notif-panel');
@@ -864,20 +873,24 @@ var mvmOS = (() => {
     _ctxMenu.style.cssText = `position:fixed;left:${x}px;top:${y}px;z-index:99999;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:4px 0;min-width:140px;box-shadow:0 4px 16px rgba(0,0,0,.4)`;
     const onDesktop = window._desktopIsOn?.(app.id) ?? false;
     const items = [
-      { label: `▶ Open`, action: () => { _closeFlyout(); document.getElementById('start-menu').classList.remove('open'); fetch(`/api/plugins/${app.id}/open`, { method: 'POST' }).catch(() => {}); app.launch(); } },
+      { label: `▶ Open`, action: () => { _closeFlyout(); document.getElementById('start-menu').classList.remove('open'); _trackOpen(app.id); app.launch(); } },
       { sep: true },
       onDesktop
         ? { label: `🗑️ Remove from Desktop`, action: () => { window._desktopRemoveApp?.(app.id); } }
         : { label: `➕ Add to Desktop`, action: () => { window._desktopAddApp?.({ id: app.id, label: app.name, emoji: app.icon || '📦', app: app.id, x: 20, y: 20 }); } },
-      { sep: true },
-      { label: `🗑 Uninstall`, danger: true, action: async () => {
-        if (!confirm(`Uninstall "${app.name}"?`)) return;
-        await fetch(`/api/plugins/${app.id}`, { method: 'DELETE' });
-        _removeFromStartMenu(app.id);
-        _closeFlyout();
-        document.getElementById('start-menu').classList.remove('open');
-      }},
     ];
+    if (!app.system) {
+      items.push(
+        { sep: true },
+        { label: `🗑 Uninstall`, danger: true, action: async () => {
+          if (!confirm(`Uninstall "${app.name}"?`)) return;
+          await fetch(`/api/plugins/${app.id}`, { method: 'DELETE' });
+          _removeFromStartMenu(app.id);
+          _closeFlyout();
+          document.getElementById('start-menu').classList.remove('open');
+        }},
+      );
+    }
     items.forEach(item => {
       if (item.sep) {
         const sep = document.createElement('div');
@@ -1070,7 +1083,7 @@ var mvmOS = (() => {
     },
     initMobileSidebar: (body) => Desktop.initMobileSidebar(body),
     openSettings: (tab) => Settings.openWindow(tab),
-    openApp: (id) => { const a = _apps[id]; if (a) { fetch(`/api/plugins/${id}/open`,{method:'POST'}).catch(()=>{}); a.launch(); } },
+    openApp: (id) => { const a = _apps[id]; if (a) { _trackOpen(id); a.launch(); } },
     notify,
     storage,
     multiplayer: {

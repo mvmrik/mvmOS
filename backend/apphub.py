@@ -4,6 +4,9 @@ Apps Hub — central public identity for all public-facing apps.
 Exports (used by other modules via sys.modules["backend.apphub"]):
   get_pub_session(token)  -> dict | None
   get_users_by_ids(ids)   -> list[dict]
+  get_favourites(uid)     -> list[dict]
+  add_favourite(uid, fav_id) -> None (raises ValueError)
+  remove_favourite(uid, fav_id) -> None
   issue_pub_token(uid)    -> str
   revoke_token(token)     -> None
   migrate_from_gamehub(players, tokens) -> int
@@ -54,6 +57,12 @@ def _init_db():
             CREATE TABLE IF NOT EXISTS public_apps (
                 app_id     TEXT PRIMARY KEY,
                 enabled    INTEGER NOT NULL DEFAULT 0
+            );
+            CREATE TABLE IF NOT EXISTS favourites (
+                user_id      TEXT NOT NULL REFERENCES public_users(id) ON DELETE CASCADE,
+                favourite_id TEXT NOT NULL REFERENCES public_users(id) ON DELETE CASCADE,
+                created_at   TEXT NOT NULL,
+                PRIMARY KEY (user_id, favourite_id)
             );
         """)
         conn.commit()
@@ -125,6 +134,40 @@ def get_users_by_ids(ids: list) -> list:
             ids
         ).fetchall()
     return [dict(r) for r in rows]
+
+
+def get_favourites(user_id: str) -> list:
+    """Full profile list of user_id's favourites, ordered by display_name.
+    Shared by every app (Game Hub, Chat, ...) so favourites are one list."""
+    with _db() as conn:
+        rows = conn.execute(
+            "SELECT pu.id, pu.username, pu.display_name, pu.avatar_color, pu.avatar_svg "
+            "FROM favourites f JOIN public_users pu ON pu.id = f.favourite_id "
+            "WHERE f.user_id=? ORDER BY pu.display_name",
+            (user_id,)
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def add_favourite(user_id: str, favourite_id: str) -> None:
+    """Raises ValueError with a user-facing message on invalid input."""
+    if favourite_id == user_id:
+        raise ValueError("Cannot favourite yourself")
+    with _db() as conn:
+        target = conn.execute("SELECT id FROM public_users WHERE id=?", (favourite_id,)).fetchone()
+        if not target:
+            raise ValueError("User not found")
+        conn.execute(
+            "INSERT OR IGNORE INTO favourites(user_id,favourite_id,created_at) VALUES(?,?,?)",
+            (user_id, favourite_id, datetime.now(timezone.utc).isoformat())
+        )
+        conn.commit()
+
+
+def remove_favourite(user_id: str, favourite_id: str) -> None:
+    with _db() as conn:
+        conn.execute("DELETE FROM favourites WHERE user_id=? AND favourite_id=?", (user_id, favourite_id))
+        conn.commit()
 
 
 def issue_pub_token(user_id: str) -> str:
@@ -328,6 +371,35 @@ async def search_users(q: str = ""):
             (like, like)
         ).fetchall()
     return JSONResponse([dict(r) for r in rows])
+
+
+@_pub.get("/favourites")
+async def get_favourites_pub(x_pub_token: Optional[str] = Header(default=None)):
+    u = get_pub_session(x_pub_token)
+    if not u:
+        raise HTTPException(401)
+    return JSONResponse(get_favourites(u["id"]))
+
+
+@_pub.post("/favourites/{fav_id}")
+async def add_favourite_pub(fav_id: str, x_pub_token: Optional[str] = Header(default=None)):
+    u = get_pub_session(x_pub_token)
+    if not u:
+        raise HTTPException(401)
+    try:
+        add_favourite(u["id"], fav_id)
+    except ValueError as e:
+        raise HTTPException(400, detail=str(e))
+    return JSONResponse({"ok": True})
+
+
+@_pub.delete("/favourites/{fav_id}")
+async def remove_favourite_pub(fav_id: str, x_pub_token: Optional[str] = Header(default=None)):
+    u = get_pub_session(x_pub_token)
+    if not u:
+        raise HTTPException(401)
+    remove_favourite(u["id"], fav_id)
+    return JSONResponse({"ok": True})
 
 
 @_pub.get("/apps")

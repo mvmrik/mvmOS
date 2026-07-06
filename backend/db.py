@@ -10,6 +10,20 @@ OFFICIAL_STORE_URL         = "https://raw.githubusercontent.com/mvmrik/mvmos-sto
 OFFICIAL_WIDGETS_STORE_URL = "https://raw.githubusercontent.com/mvmrik/mvmos-store/main/widgets/manifest.json"
 OFFICIAL_THEMES_STORE_URL  = "https://raw.githubusercontent.com/mvmrik/mvmos-store/main/themes/manifest.json"
 
+# Single source of truth for built-in system apps (id, name, icon, category).
+# Adding a new system app only requires adding an entry here — it is auto-seeded
+# into the `plugins` table on every backend startup so it participates in
+# Start Menu recent/most-used tracking like any store app.
+SYSTEM_APPS = [
+    {"id": "terminal",        "name": "Terminal",         "icon": "🖥️", "category": "System"},
+    {"id": "filemanager",     "name": "File Manager",     "icon": "🗂️", "category": "System"},
+    {"id": "msc",             "name": "Sites",            "icon": "🛠️", "category": "System"},
+    {"id": "appstore",        "name": "App Store",        "icon": "📦", "category": "System"},
+    {"id": "startup-manager", "name": "Startup Manager",  "icon": "🚀", "category": "System"},
+    {"id": "apphub",          "name": "Apps Hub",         "icon": "🧩", "category": "System"},
+    {"id": "settings",        "name": "Settings",         "icon": "⚙️", "category": "System"},
+]
+
 
 def get_conn():
     conn = sqlite3.connect(DB_PATH)
@@ -71,7 +85,8 @@ def init_db():
                 store_id INTEGER REFERENCES stores(id),
                 installed_at INTEGER DEFAULT (strftime('%s','now')),
                 last_opened_at INTEGER,
-                open_count INTEGER NOT NULL DEFAULT 0
+                open_count INTEGER NOT NULL DEFAULT 0,
+                is_system INTEGER NOT NULL DEFAULT 0
             );
 
             CREATE TABLE IF NOT EXISTS widget_stores (
@@ -142,6 +157,16 @@ def init_db():
             conn.execute("ALTER TABLE domains ADD COLUMN path TEXT")
         except Exception:
             pass
+        try:
+            conn.execute("ALTER TABLE plugins ADD COLUMN is_system INTEGER NOT NULL DEFAULT 0")
+        except Exception:
+            pass
+        for app in SYSTEM_APPS:
+            conn.execute(
+                "INSERT OR IGNORE INTO plugins (id, name, icon, category, version, description, is_system) "
+                "VALUES (?, ?, ?, ?, '1.0.0', '', 1)",
+                (app["id"], app["name"], app["icon"], app["category"]),
+            )
         conn.execute(
             "INSERT OR IGNORE INTO stores (name, manifest_url, official) VALUES (?, ?, 1)",
             ("mvmOS Store", OFFICIAL_STORE_URL),

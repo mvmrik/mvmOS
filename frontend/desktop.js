@@ -605,17 +605,11 @@ const Desktop = (() => {
 
   // ── App launcher ──
   function openApp(app) {
-    if (app === 'terminal') { Terminal.openWindow(); return; }
-    if (app === 'filemanager') { FileManager.openWindow(); return; }
-    if (app === 'settings') { Settings.openWindow(); return; }
-    if (app === 'appstore') { AppStore.openWindow(); return; }
-    if (app === 'msc') { Sites.openWindow(); return; }
-    // mvmOS plugin app
+    // routes through mvmOS.openApp so both system and store apps get
+    // /open tracking and an immediate Start Menu recent/most-used refresh
     const tryLaunch = (attempts) => {
-      const pluginApp = window.mvmOS?._apps?.[app];
-      if (pluginApp?.launch) {
-        fetch(`/api/plugins/${app}/open`, { method: 'POST' }).catch(() => {});
-        pluginApp.launch();
+      if (window.mvmOS?._apps?.[app]) {
+        window.mvmOS.openApp(app);
       } else if (attempts > 0) {
         setTimeout(() => tryLaunch(attempts - 1), 300);
       }

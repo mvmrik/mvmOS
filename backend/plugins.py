@@ -11,7 +11,7 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from .auth import get_current_session
-from .db import get_conn, APPS_DIR
+from .db import get_conn, APPS_DIR, SYSTEM_APPS
 from . import app_backends
 
 router = APIRouter(prefix="/api/plugins", tags=["plugins"])
@@ -599,6 +599,8 @@ async def install_plugin(body: InstallRequest, session=Depends(get_current_sessi
 
 @router.delete("/{plugin_id}")
 async def uninstall_plugin(plugin_id: str, session=Depends(get_current_session)):
+    if any(a["id"] == plugin_id for a in SYSTEM_APPS):
+        return JSONResponse({"error": "System apps cannot be uninstalled"}, status_code=400)
     app_dir = _app_dir(plugin_id)
     if os.path.isdir(app_dir):
         shutil.rmtree(app_dir)
@@ -638,8 +640,16 @@ async def app_db(plugin_id: str, body: DbRequest, session=Depends(get_current_se
 @router.post("/{plugin_id}/open")
 async def track_open(plugin_id: str, session=Depends(get_current_session)):
     with get_conn() as conn:
-        conn.execute(
+        cur = conn.execute(
             "UPDATE plugins SET open_count=open_count+1, last_opened_at=strftime('%s','now') WHERE id=?",
             (plugin_id,),
         )
+        if cur.rowcount == 0:
+            sys_app = next((a for a in SYSTEM_APPS if a["id"] == plugin_id), None)
+            if sys_app:
+                conn.execute(
+                    "INSERT OR IGNORE INTO plugins (id, name, icon, category, version, description, is_system, open_count, last_opened_at) "
+                    "VALUES (?, ?, ?, ?, '1.0.0', '', 1, 1, strftime('%s','now'))",
+                    (sys_app["id"], sys_app["name"], sys_app["icon"], sys_app["category"]),
+                )
     return JSONResponse({"ok": True})

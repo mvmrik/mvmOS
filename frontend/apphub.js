@@ -100,9 +100,10 @@ const AppHub = (() => {
     let _activeTab = startTab;
 
     const tabs = [
-      { id: 'account', label: '👤 My Account' },
-      { id: 'apps',    label: '🔲 Public Apps', adminOnly: true },
-      { id: 'users',   label: '👥 Users',        adminOnly: true },
+      { id: 'account',    label: '👤 My Account' },
+      { id: 'favourites', label: '⭐ Favourites' },
+      { id: 'apps',       label: '🔲 Public Apps', adminOnly: true },
+      { id: 'users',      label: '👥 Users',        adminOnly: true },
     ];
 
     body.innerHTML = `
@@ -122,6 +123,7 @@ const AppHub = (() => {
       });
       const c = body.querySelector('#ah-body');
       if (id === 'account') renderAccount(c);
+      else if (id === 'favourites') renderFavourites(c);
       else if (id === 'apps')  renderApps(c);
       else if (id === 'users') renderUsers(c);
     }
@@ -268,6 +270,102 @@ const AppHub = (() => {
       };
     }
 
+    // ── Favourites tab ─────────────────────────────────────────
+    // Single shared list, also used by Game Hub and Chat — this is
+    // where people are searched for and added/removed.
+    let _favs = null;
+
+    async function _loadFavs() {
+      try {
+        const r = await fetch('/api/pub/apphub/favourites', {headers:{'X-Pub-Token':getToken()}});
+        _favs = r.ok ? await r.json() : [];
+      } catch (_) {
+        _favs = [];
+      }
+    }
+    function _isFav(userId) { return !!(_favs && _favs.some(f=>f.id===userId)); }
+    async function _toggleFav(p) {
+      const isFav = _isFav(p.id);
+      await fetch(`/api/pub/apphub/favourites/${p.id}`, {method: isFav ? 'DELETE' : 'POST', headers:{'X-Pub-Token':getToken()}}).catch(()=>{});
+      if (isFav) { _favs = (_favs||[]).filter(f=>f.id!==p.id); }
+      else { _favs = [p, ...(_favs||[]).filter(f=>f.id!==p.id)]; }
+    }
+
+    function _favRow(p, onFavChange) {
+      const fav = _isFav(p.id);
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex;align-items:center;gap:12px;justify-content:space-between;padding:8px 0';
+      row.innerHTML = `
+        <div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0">
+          ${renderAvatar(p, 32)}
+          <div style="min-width:0">
+            <div style="font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(p.display_name||p.username||'?')}</div>
+            ${p.username?`<div style="font-size:11px;color:var(--text-dim)">@${esc(p.username)}</div>`:''}
+          </div>
+        </div>
+        <button class="s-btn-sm" style="padding:5px 10px;font-size:12px;flex-shrink:0;cursor:pointer">${fav?'★ Saved':'☆ Favourite'}</button>`;
+      row.querySelector('button').onclick = async () => {
+        await _toggleFav(p);
+        if (onFavChange) onFavChange();
+      };
+      return row;
+    }
+
+    async function renderFavourites(c) {
+      c.innerHTML = '<div style="padding:20px;color:var(--text-dim);font-size:.85rem">…</div>';
+      if (!_pubUser) _pubUser = await getUser();
+      if (!_pubUser) { _renderLogin(c); return; }
+
+      if (_favs === null) await _loadFavs();
+
+      c.innerHTML = `
+        <div style="padding:16px;display:flex;flex-direction:column;gap:14px;max-width:480px">
+          <div>
+            <div style="font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:var(--text-dim);margin-bottom:8px">Find people</div>
+            <input class="s-inp" id="fav-search" placeholder="Search by name or username…" autocomplete="off" style="width:100%">
+            <div id="fav-results" style="display:flex;flex-direction:column;margin-top:8px"></div>
+          </div>
+          <div style="border-top:1px solid var(--border);padding-top:14px">
+            <div style="font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:var(--text-dim);margin-bottom:8px">Saved favourites</div>
+            <div id="fav-saved" style="display:flex;flex-direction:column"></div>
+          </div>
+        </div>`;
+
+      const resultsEl = c.querySelector('#fav-results');
+      const savedEl   = c.querySelector('#fav-saved');
+      let _searchTimer = null;
+
+      function renderSaved() {
+        savedEl.innerHTML = '';
+        if (!_favs || !_favs.length) {
+          savedEl.innerHTML = `<div style="color:var(--text-dim);font-size:13px">No favourites yet. Search for someone above.</div>`;
+          return;
+        }
+        _favs.forEach(f => savedEl.appendChild(_favRow(f, renderSaved)));
+      }
+      renderSaved();
+
+      async function renderSearch(q) {
+        resultsEl.innerHTML = '';
+        if (q.length < 2) return;
+        resultsEl.innerHTML = `<div style="color:var(--text-dim);font-size:13px">Searching…</div>`;
+        const r = await fetch(`/api/pub/apphub/search?q=${encodeURIComponent(q)}`).catch(()=>null);
+        const hits = r?.ok ? (await r.json()).filter(p => p.id !== _pubUser?.id) : [];
+        resultsEl.innerHTML = '';
+        if (!hits.length) {
+          resultsEl.innerHTML = `<div style="color:var(--text-dim);font-size:13px">No people found.</div>`;
+          return;
+        }
+        hits.forEach(p => resultsEl.appendChild(_favRow(p, () => { renderSaved(); renderSearch(q); })));
+      }
+
+      c.querySelector('#fav-search').oninput = e => {
+        clearTimeout(_searchTimer);
+        const q = e.target.value.trim();
+        _searchTimer = setTimeout(() => renderSearch(q), 300);
+      };
+    }
+
     // ── Public Apps tab ────────────────────────────────────────
     async function renderApps(c) {
       c.innerHTML = '<div style="padding:20px;color:var(--text-dim);font-size:.85rem">…</div>';
@@ -318,6 +416,8 @@ const AppHub = (() => {
     // ── Users tab ──────────────────────────────────────────────
     async function renderUsers(c) {
       c.innerHTML = '<div style="padding:20px;color:var(--text-dim);font-size:.85rem">…</div>';
+      if (!_pubUser) _pubUser = await getUser();
+      if (_favs === null) await _loadFavs();
       const [statsRes, usersRes] = await Promise.all([
         fetch('/api/apphub/stats').catch(()=>null),
         fetch('/api/apphub/users').catch(()=>null),
@@ -352,9 +452,20 @@ const AppHub = (() => {
             <div style="font-size:.88rem;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(u.display_name)}</div>
             <div style="font-size:.72rem;color:var(--text-dim)">@${esc(u.username)} · ${new Date(u.created_at).toLocaleDateString()}</div>
           </div>
+          ${_pubUser && u.id !== _pubUser.id ? `<button class="ah-fav" data-id="${u.id}"
+                  style="border:none;background:none;color:var(--accent);font-size:1rem;cursor:pointer;padding:4px 8px;border-radius:6px">${_isFav(u.id)?'★':'☆'}</button>` : ''}
           <button class="ah-del" data-id="${u.id}" data-name="${esc(u.display_name)}"
                   style="border:none;background:none;color:#f38ba8;font-size:.78rem;cursor:pointer;padding:4px 8px;border-radius:6px">Delete</button>
         </div>`).join('');
+
+      c.querySelectorAll('.ah-fav').forEach(btn => {
+        btn.onclick = async () => {
+          const id = btn.dataset.id;
+          const u = users.find(x => x.id === id);
+          await _toggleFav(u);
+          btn.textContent = _isFav(id) ? '★' : '☆';
+        };
+      });
 
       c.querySelectorAll('.ah-del').forEach(btn => {
         btn.onclick = async () => {
