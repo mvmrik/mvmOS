@@ -2,7 +2,7 @@
 Apps Hub — central public identity for all public-facing apps.
 
 Exports (used by other modules via sys.modules["backend.apphub"]):
-  get_pub_session(token)  -> dict | None
+  get_pub_session(token)  -> dict | None   (includes "is_admin": 0|1)
   get_users_by_ids(ids)   -> list[dict]
   get_favourites(uid)     -> list[dict]
   add_favourite(uid, fav_id) -> None (raises ValueError)
@@ -46,6 +46,7 @@ def _init_db():
                 avatar_data   TEXT,
                 avatar_svg    TEXT,
                 password_hash TEXT,
+                is_admin      INTEGER NOT NULL DEFAULT 0,
                 created_at    TEXT NOT NULL
             );
             CREATE TABLE IF NOT EXISTS pub_tokens (
@@ -65,6 +66,9 @@ def _init_db():
                 PRIMARY KEY (user_id, favourite_id)
             );
         """)
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(public_users)")}
+        if "is_admin" not in cols:
+            conn.execute("ALTER TABLE public_users ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0")
         conn.commit()
 
 
@@ -217,6 +221,23 @@ def sync_user_from_backend(user: dict) -> None:
         conn.commit()
 
 
+def search_users(q: str, exclude_id: Optional[str] = None, limit: int = 20) -> list:
+    """Search public users by username/display_name substring. Shared by the
+    REST /search endpoint and other in-process callers (e.g. Telegram Hub
+    adapters) so there is one matching rule."""
+    q = q.strip()
+    if len(q) < 2:
+        return []
+    like = f"%{q}%"
+    with _db() as conn:
+        rows = conn.execute(
+            "SELECT id, username, display_name, avatar_color, avatar_svg FROM public_users "
+            "WHERE (username LIKE ? OR display_name LIKE ?) AND id != ? LIMIT ?",
+            (like, like, exclude_id or "", limit)
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
 def migrate_from_gamehub(players: list, tokens: list) -> int:
     """Copy GameHub players and tokens into apphub (INSERT OR IGNORE). Returns new user count."""
     count = 0
@@ -359,18 +380,8 @@ async def update_me_pub(body: MeUpdateBody, x_pub_token: Optional[str] = Header(
 
 
 @_pub.get("/search")
-async def search_users(q: str = ""):
-    q = q.strip()
-    if len(q) < 2:
-        return JSONResponse([])
-    like = f"%{q}%"
-    with _db() as conn:
-        rows = conn.execute(
-            "SELECT id, username, display_name, avatar_color, avatar_svg FROM public_users "
-            "WHERE username LIKE ? OR display_name LIKE ? LIMIT 20",
-            (like, like)
-        ).fetchall()
-    return JSONResponse([dict(r) for r in rows])
+async def search_users_pub(q: str = ""):
+    return JSONResponse(search_users(q))
 
 
 @_pub.get("/favourites")
@@ -478,7 +489,7 @@ async def toggle_public_app(app_id: str, body: PublicAppToggle, session=Depends(
 async def list_users(session=Depends(get_current_session)):
     with _db() as conn:
         rows = conn.execute(
-            "SELECT id,username,display_name,avatar_color,created_at FROM public_users ORDER BY created_at DESC"
+            "SELECT id,username,display_name,avatar_color,is_admin,created_at FROM public_users ORDER BY created_at DESC"
         ).fetchall()
     return JSONResponse([dict(r) for r in rows])
 
@@ -529,6 +540,20 @@ async def update_user_admin(uid: str, body: UserBody, session=Depends(get_curren
 async def delete_user_admin(uid: str, session=Depends(get_current_session)):
     with _db() as conn:
         conn.execute("DELETE FROM public_users WHERE id=?", (uid,))
+        conn.commit()
+    return JSONResponse({"ok": True})
+
+
+class AdminToggle(BaseModel):
+    is_admin: bool
+
+
+@_admin.put("/users/{uid}/admin")
+async def toggle_user_admin(uid: str, body: AdminToggle, session=Depends(get_current_session)):
+    """Marks a public profile as an mvmOS admin — other modules (e.g. Telegram
+    Hub) can gate owner-only features on user["is_admin"] from get_pub_session()."""
+    with _db() as conn:
+        conn.execute("UPDATE public_users SET is_admin=? WHERE id=?", (1 if body.is_admin else 0, uid))
         conn.commit()
     return JSONResponse({"ok": True})
 

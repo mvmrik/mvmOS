@@ -454,9 +454,24 @@ const AppHub = (() => {
           </div>
           ${_pubUser && u.id !== _pubUser.id ? `<button class="ah-fav" data-id="${u.id}"
                   style="border:none;background:none;color:var(--accent);font-size:1rem;cursor:pointer;padding:4px 8px;border-radius:6px">${_isFav(u.id)?'★':'☆'}</button>` : ''}
+          <label style="display:flex;align-items:center;gap:5px;cursor:pointer;flex-shrink:0" title="Admin rights — used by other apps (e.g. Telegram Hub) to gate owner-only features">
+            <input type="checkbox" class="ah-admin" data-id="${u.id}" ${u.is_admin?'checked':''} style="width:15px;height:15px;cursor:pointer">
+            <span style="font-size:.78rem;color:${u.is_admin?'var(--accent)':'var(--text-dim)'}">Admin</span>
+          </label>
           <button class="ah-del" data-id="${u.id}" data-name="${esc(u.display_name)}"
                   style="border:none;background:none;color:#f38ba8;font-size:.78rem;cursor:pointer;padding:4px 8px;border-radius:6px">Delete</button>
         </div>`).join('');
+
+      c.querySelectorAll('.ah-admin').forEach(cb => {
+        cb.onchange = async () => {
+          await fetch(`/api/apphub/users/${cb.dataset.id}/admin`, {
+            method: 'PUT',
+            headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({ is_admin: cb.checked }),
+          }).catch(()=>null);
+          renderUsers(c);
+        };
+      });
 
       c.querySelectorAll('.ah-fav').forEach(btn => {
         btn.onclick = async () => {
