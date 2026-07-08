@@ -23,6 +23,7 @@ var mvmOS = (() => {
       { id: 'startup-manager',  name: t('start_startup'), icon: '🚀', system: true, launch: () => StartupManager.openWindow() },
       { id: 'apphub',           name: t('app_apphub'),    icon: '🧩', system: true, launch: () => AppHub.openWindow() },
       { id: 'settings',         name: t('app_settings'),  icon: '⚙️', system: true, launch: () => Settings.openWindow() },
+      { id: 'notifications',   name: t('app_notifications'), icon: '🔔', system: true, launch: () => Notifications.openWindow() },
     ];
   }
 
@@ -702,6 +703,7 @@ var mvmOS = (() => {
 
   let _projectIds = new Set();
   let _projectNoApp = new Set();
+  let _pluginsCache = [];
 
   async function _loadAllPlugins() {
     try {
@@ -715,7 +717,12 @@ var mvmOS = (() => {
     try {
       const res = await fetch('/api/plugins');
       const plugins = await res.json();
+      _pluginsCache = plugins;
       for (const plugin of plugins) {
+        // system apps (terminal, filemanager, ...) live inline in _SYSTEM_APP_DEFS()
+        // and have no apps/<id>/main.js file — loading them here would always 404
+        // and falsely trigger the "needs reinstall" notification.
+        if (plugin.is_system) continue;
         await _loadPlugin(plugin.id);
       }
       // re-render desktop icons now that all apps are registered
@@ -724,40 +731,117 @@ var mvmOS = (() => {
   }
 
   // ── Notifications ─────────────────────────────────────────────────────────
-  const _notifs = [];
+  // Persisted server-side (backend/notifications.py) so the Notifications
+  // system app can show full history/read state; this bell panel is just a
+  // recent-activity view on top of the same data.
+  let _notifs = [];
+
+  // In-memory only: lets mvmOS.notify(title, body, action, actionLabel) keep
+  // working exactly like before the backend-persisted rewrite. A JS closure
+  // can't be stored in SQLite, so callback-based notifications only run
+  // their action within the session that created them (same lifetime as the
+  // old fully in-memory notification system); across a reload the row is
+  // still there (title/body/read state persist) but clicking it does nothing.
+  const _notifCallbacks = new Map(); // id -> { fn, label }
+
+  function _hasNotifAction(id, actionApp) {
+    return _notifCallbacks.has(id) || (!!actionApp && actionApp !== '_callback');
+  }
+
+  function _runNotifAction(id, actionApp) {
+    const cb = _notifCallbacks.get(id);
+    if (cb) { cb.fn(); return; }
+    if (!actionApp || actionApp === '_callback') return;
+    if (actionApp === 'appstore') { AppStore.openWindow('store-1'); return; }
+    if (actionApp === 'updates') { UpdateManager.openWindow(); return; }
+    if (actionApp.startsWith('settings:')) { Settings.openWindow(actionApp.slice('settings:'.length)); return; }
+    const app = _apps[actionApp];
+    if (app) { _trackOpen(actionApp); app.launch(); }
+    else { _loadPlugin(actionApp).then(() => _apps[actionApp]?.launch?.()); }
+  }
+
+  // A browser session can carry an Apps Hub identity (e.g. a Chat login)
+  // alongside the mvmOS OS session — two separate account systems. Send both
+  // to the backend so notifications addressed to either identity are found;
+  // see backend/notifications.py's _identities().
+  function _pubHeaders(extra) {
+    const token = localStorage.getItem('apphub_token');
+    return Object.assign(token ? { 'X-Pub-Token': token } : {}, extra || {});
+  }
+
+  async function _loadNotifs() {
+    try {
+      const res = await fetch('/api/notifications', { headers: _pubHeaders() });
+      if (!res.ok) return;
+      _notifs = await res.json();
+      _renderNotifPanel();
+    } catch (_) {}
+  }
+
+  // Polls for notifications created by someone/something else (e.g. another
+  // user's chat message) while this session is already open — _pushNotif's
+  // toast only fires for the tab that itself made the POST, so without this
+  // a "push" notification from another source would silently sit unread
+  // until the next reload or bell click.
+  async function _pollNotifs() {
+    try {
+      const res = await fetch('/api/notifications', { headers: _pubHeaders() });
+      if (!res.ok) return;
+      const rows = await res.json();
+      const knownIds = new Set(_notifs.map(n => n.id));
+      const arrived = rows.filter(n => !knownIds.has(n.id) && n.kind === 'push' && !n.is_read);
+      _notifs = rows;
+      _renderNotifPanel();
+      arrived.forEach(n => _showToast(n.title, n.body, n.id, n.action_app));
+    } catch (_) {}
+  }
 
   function _renderNotifPanel() {
     const panel = document.getElementById('notif-panel');
     const badge = document.getElementById('notif-badge');
     if (!panel) return;
+    const recent = _notifs.slice(0, 20);
     panel.innerHTML = `
       <div class="notif-header">
         ${t('notif_title')}
         <span class="notif-clear" id="notif-clear-all">${t('notif_clear_all')}</span>
       </div>
-      ${_notifs.length === 0
+      ${recent.length === 0
         ? `<div class="notif-empty">${t('notif_empty')}</div>`
-        : _notifs.map((n, i) => `
-          <div class="notif-item">
-            <div class="notif-item-title">${n.title}</div>
+        : recent.map(n => `
+          <div class="notif-item${n.is_read ? '' : ' notif-unread'}" data-id="${n.id}">
+            <div class="notif-item-title">${n.title}${n.kind === 'push' ? `<span class="notif-type-badge">${t('notif_push_badge')}</span>` : ''}</div>
             <div class="notif-item-body">${n.body}</div>
-            ${n.action ? `<span class="notif-item-action" data-notif-action="${i}">${n.actionLabel || t('notif_open')}</span>` : ''}
+            ${_hasNotifAction(n.id, n.action_app) ? `<span class="notif-item-action" data-notif-action="${n.id}">${_notifCallbacks.get(n.id)?.label || t('notif_open')}</span>` : ''}
           </div>`).join('')}
+      <div class="notif-footer" id="notif-view-all">${t('notif_view_all')}</div>
     `;
-    panel.querySelector('#notif-clear-all')?.addEventListener('click', () => {
-      _notifs.length = 0; _renderNotifPanel();
+    panel.querySelector('#notif-clear-all')?.addEventListener('click', async () => {
+      // Opening the bell already marks everything read (below), so a button
+      // that also just marked-read would never have a visible effect. "Clear
+      // all" instead removes the notifications outright.
+      await fetch('/api/notifications', { method: 'DELETE', headers: _pubHeaders() });
+      _notifs = [];
+      _renderNotifPanel();
+    });
+    panel.querySelector('#notif-view-all')?.addEventListener('click', () => {
+      panel.classList.remove('open');
+      Notifications.openWindow();
     });
     panel.querySelectorAll('[data-notif-action]').forEach(el => {
-      el.addEventListener('click', () => {
-        const idx = parseInt(el.dataset.notifAction);
-        const n = _notifs[idx];
-        n?.action?.();
-        _notifs.splice(idx, 1);
+      el.addEventListener('click', async e => {
+        e.stopPropagation();
+        const id = parseInt(el.dataset.notifAction);
+        const n = _notifs.find(x => x.id === id);
+        if (!n) return;
+        await fetch(`/api/notifications/${id}/read`, { method: 'POST', headers: _pubHeaders() });
+        n.is_read = 1;
         panel.classList.remove('open');
+        _runNotifAction(n.id, n.action_app);
         _renderNotifPanel();
       });
     });
-    const count = _notifs.length;
+    const count = _notifs.filter(n => !n.is_read).length;
     badge.textContent = count;
     badge.style.display = count ? 'flex' : 'none';
     const icon = document.getElementById('notif-icon');
@@ -768,15 +852,89 @@ var mvmOS = (() => {
     document.title = count ? `(${count}) ${baseTitle}` : baseTitle;
   }
 
-  function _pushNotif(title, body, action, actionLabel) {
-    if (_notifs.find(n => n.title === title)) return;
-    _notifs.push({ title, body, action, actionLabel });
-    _renderNotifPanel();
+  async function _pushNotif(title, body, actionApp, kind, source, ref) {
+    kind = kind || 'persistent';
+    source = source || 'system';
+    // avoid re-notifying about the same still-open issue on every check
+    if (_notifs.find(n => n.title === title && !n.is_read)) return null;
+    try {
+      const res = await fetch('/api/notifications', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title, body: body || '', kind, source, action_app: actionApp || null, ref: ref || null }),
+      });
+      if (!res.ok) return null;
+      const row = await res.json();
+      _notifs.unshift(row);
+      _renderNotifPanel();
+      if (kind === 'push') _showToast(title, body, row.id, actionApp);
+      return row;
+    } catch (_) { return null; }
   }
 
-  // public notify for plugins
-  function notify(title, body, action, actionLabel) {
-    _pushNotif(title, body, action, actionLabel);
+  // public notify for plugins — always persistent, matches pre-existing
+  // behavior (title, body, and an optional callback + label run on click).
+  async function notify(title, body, action, actionLabel) {
+    const row = await _pushNotif(title, body, action ? '_callback' : null, 'persistent', 'app');
+    if (row && action) _notifCallbacks.set(row.id, { fn: action, label: actionLabel });
+  }
+
+  // Lets an app clear its own unread notifications for the current user when
+  // they view the underlying content directly (e.g. opening a chat thread),
+  // instead of making them go through the bell icon. `source`/`ref` must
+  // match what the notification (or backend.notifications.create_notification)
+  // was created with.
+  async function markNotifsRead(source, ref) {
+    try {
+      await fetch('/api/notifications/read-by-ref', {
+        method: 'POST',
+        headers: _pubHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ source, ref: String(ref) }),
+      });
+      await _loadNotifs();
+    } catch (_) {}
+  }
+
+  // ── Push toasts (auto-dismissing, separate from the persistent bell panel) ──
+  let _toastContainer = null;
+  let _pushDurationSec = 5;
+  let _pushPosition = 'top-right';
+
+  function _ensureToastContainer() {
+    if (_toastContainer) return _toastContainer;
+    _toastContainer = document.createElement('div');
+    _toastContainer.id = 'toast-container';
+    document.body.appendChild(_toastContainer);
+    _applyToastPosition();
+    return _toastContainer;
+  }
+
+  function _applyToastPosition() {
+    if (!_toastContainer) return;
+    _toastContainer.className = `toast-pos-${_pushPosition}`;
+  }
+
+  async function _loadPushDuration() {
+    try {
+      const rows = await _makeDb('notifications').query("SELECT key, value FROM cfg WHERE key IN ('push_duration','push_position')");
+      rows.forEach(r => {
+        if (r.key === 'push_duration') _pushDurationSec = Number(JSON.parse(r.value)) || 5;
+        if (r.key === 'push_position') _pushPosition = JSON.parse(r.value) || 'top-right';
+      });
+      _applyToastPosition();
+    } catch (_) {}
+  }
+  window.addEventListener('settings-changed', e => { if (e.detail?.app === 'notifications') _loadPushDuration(); });
+
+  function _showToast(title, body, id, actionApp) {
+    const container = _ensureToastContainer();
+    const el = document.createElement('div');
+    el.className = 'toast-item';
+    el.innerHTML = `<div class="toast-title">${title}</div>${body ? `<div class="toast-body">${body}</div>` : ''}`;
+    const remove = () => { el.classList.add('toast-out'); setTimeout(() => el.remove(), 200); };
+    el.addEventListener('click', () => { _runNotifAction(id, actionApp); remove(); });
+    container.appendChild(el);
+    setTimeout(remove, _pushDurationSec * 1000);
   }
 
   async function _checkOsUpdate() {
@@ -788,8 +946,7 @@ var mvmOS = (() => {
         _pushNotif(
           'mvmOS update available',
           t('os_update_body', { behind: d.commits_behind, s: d.commits_behind !== 1 ? 's' : '', local: d.local, remote: d.remote }),
-          () => Settings.openWindow('about'),
-          t('os_update_open')
+          'settings:about'
         );
       }
     } catch (_) {}
@@ -805,8 +962,7 @@ var mvmOS = (() => {
       _pushNotif(
         t('updates_available', { n: count, s: count !== 1 ? 's' : '' }),
         t('updates_body'),
-        () => UpdateManager.openWindow(),
-        t('updates_open')
+        'updates'
       );
     } catch (_) {}
   }
@@ -824,7 +980,19 @@ var mvmOS = (() => {
     const panel = document.getElementById('notif-panel');
     if (btn && panel) {
       _renderNotifPanel();
-      btn.addEventListener('click', e => { e.stopPropagation(); panel.classList.toggle('open'); });
+      _loadNotifs();
+      _loadPushDuration();
+      setInterval(_pollNotifs, 10000);
+      btn.addEventListener('click', async e => {
+        e.stopPropagation();
+        const opening = !panel.classList.contains('open');
+        panel.classList.toggle('open');
+        if (opening && _notifs.some(n => !n.is_read)) {
+          await fetch('/api/notifications/read-all', { method: 'POST', headers: _pubHeaders() });
+          _notifs.forEach(n => n.is_read = 1);
+          _renderNotifPanel();
+        }
+      });
       document.addEventListener('click', e => {
         if (!e.target.closest('#notif-btn') && !e.target.closest('#notif-panel')) panel.classList.remove('open');
       });
@@ -1084,6 +1252,12 @@ var mvmOS = (() => {
     initMobileSidebar: (body) => Desktop.initMobileSidebar(body),
     openSettings: (tab) => Settings.openWindow(tab),
     openApp: (id) => { const a = _apps[id]; if (a) { _trackOpen(id); a.launch(); } },
+    // Generic "which installed app claims this core widget slot" lookup —
+    // e.g. the taskbar clock's calendar popup opens the Calendar app instead
+    // of its built-in popup if one is installed, without core ever
+    // hardcoding a specific app id. See apps/calendar/manifest.json's
+    // "replaces_widget" key and backend/plugins.py's list_plugins().
+    getWidgetApp: (slot) => _pluginsCache.find(p => p.replaces_widget === slot)?.id || null,
     notify,
     storage,
     multiplayer: {
@@ -1214,6 +1388,15 @@ var mvmOS = (() => {
     _loadAllPlugins,
     _setEditMode,
     _applyTheme,
+    _runNotifAction,
+    _hasNotifAction,
+    markNotifsRead,
+    // Notifications app mutates notifications directly via fetch; call this
+    // afterwards so the bell badge/panel reflect the change immediately.
+    _refreshNotifs: _loadNotifs,
+    // Notifications app's own fetch calls need the same X-Pub-Token header
+    // as the bell (see _identities() in backend/notifications.py).
+    _pubHeaders,
     get _apps() { return _apps; },
     get _widgets() { return _widgets; },
     get _editMode() { return _editMode; },

@@ -22,6 +22,7 @@ SYSTEM_APPS = [
     {"id": "startup-manager", "name": "Startup Manager",  "icon": "🚀", "category": "System"},
     {"id": "apphub",          "name": "Apps Hub",         "icon": "🧩", "category": "System"},
     {"id": "settings",        "name": "Settings",         "icon": "⚙️", "category": "System"},
+    {"id": "notifications",  "name": "Notifications",    "icon": "🔔", "category": "System"},
 ]
 
 
@@ -147,6 +148,20 @@ def init_db():
                 secret TEXT NOT NULL,
                 created_at INTEGER DEFAULT (strftime('%s','now'))
             );
+
+            CREATE TABLE IF NOT EXISTS notifications (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT NOT NULL,
+                kind TEXT NOT NULL DEFAULT 'persistent',
+                source TEXT NOT NULL DEFAULT 'system',
+                title TEXT NOT NULL,
+                body TEXT NOT NULL DEFAULT '',
+                action_app TEXT,
+                ref TEXT,
+                is_read INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_notifications_username ON notifications(username, created_at DESC);
         """)
         # migrations for existing DBs
         try:
@@ -161,6 +176,11 @@ def init_db():
             conn.execute("ALTER TABLE plugins ADD COLUMN is_system INTEGER NOT NULL DEFAULT 0")
         except Exception:
             pass
+        try:
+            conn.execute("ALTER TABLE notifications ADD COLUMN ref TEXT")
+        except Exception:
+            pass
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_notifications_ref ON notifications(username, source, ref)")
         for app in SYSTEM_APPS:
             conn.execute(
                 "INSERT OR IGNORE INTO plugins (id, name, icon, category, version, description, is_system) "

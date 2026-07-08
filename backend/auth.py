@@ -102,6 +102,21 @@ def get_current_session(request: Request):
     return {"token": row["token"], "effective_user": row["effective_user"]}
 
 
+def get_current_session_optional(request: Request):
+    """Like get_current_session, but returns None instead of raising when
+    there's no (or an invalid) OS session cookie — for routes reachable by
+    a pure Apps Hub visitor (no mvmOS desktop session at all), which still
+    accept an OS session as an alternative identity when one is present."""
+    token = request.cookies.get("session")
+    if not token:
+        return None
+    with get_conn() as conn:
+        row = conn.execute("SELECT token, effective_user FROM sessions WHERE token = ?", (token,)).fetchone()
+    if not row:
+        return None
+    return {"token": row["token"], "effective_user": row["effective_user"]}
+
+
 def require_root_session(session=Depends(get_current_session)):
     """Dependency for actions that only the root mvmOS user may perform.
 

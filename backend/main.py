@@ -44,6 +44,7 @@ from .backup import router as backup_router
 from .scheduler import router as scheduler_router
 from .startup import router as startup_router, _init_startup_db, run_startup_apps
 from .apphub import router as apphub_router, _init_db as _init_apphub_db
+from .notifications import router as notifications_router
 from .db import APPS_DIR, WIDGETS_DIR, THEMES_DIR
 from . import app_backends, public_loader, projects
 
@@ -72,6 +73,7 @@ app.include_router(backup_router)
 app.include_router(scheduler_router)
 app.include_router(startup_router)
 app.include_router(apphub_router)
+app.include_router(notifications_router)
 
 app_backends.load_all(app)
 

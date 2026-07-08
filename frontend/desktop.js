@@ -72,6 +72,8 @@ const Desktop = (() => {
     let calPopup = null;
 
     function openCalendar() {
+      const widgetAppId = window.mvmOS?.getWidgetApp?.('calendar');
+      if (widgetAppId) { window.mvmOS.openApp(widgetAppId); return; }
       if (calPopup) {
         if (isMobile()) {
           const bar = document.getElementById('taskbar-widgets');

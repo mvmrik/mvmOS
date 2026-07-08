@@ -42,3 +42,20 @@ async def save_settings(body: SettingsBody, _session=Depends(get_current_session
             (json.dumps(body.settings),)
         )
     return {"ok": True}
+
+
+@router.get("/display")
+async def get_display_settings():
+    """Read-only subset of settings (date/time format, week start, timezone) with
+    no OS session required — mvmOS is a single-owner box, so these display prefs
+    are the same for everyone. Lets public-facing app pages without an OS session
+    (Apps Hub profiles, Telegram mini-apps) render dates the same way the desktop does."""
+    with get_conn() as conn:
+        row = conn.execute("SELECT value FROM settings WHERE key = 'main'").fetchone()
+    saved = json.loads(row["value"]) if row else {}
+    merged = {**DEFAULTS, **saved}
+    keys = ("timezone", "time_format", "date_format", "week_starts")
+    return JSONResponse({k: merged[k] for k in keys})
+
+
+get_display_settings.no_session_auth = True
