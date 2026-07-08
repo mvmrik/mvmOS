@@ -194,6 +194,7 @@ window._i18n = {
   // Settings — Regional
   'regional_title':               '🌐 Регионални',
   'regional_language':            'Език',
+  'regional_currency':            'Валута',
   'regional_timezone':            'Часова зона',
   'regional_time_format':         'Формат на часа',
   'regional_date_format':         'Формат на датата',

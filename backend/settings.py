@@ -16,6 +16,7 @@ DEFAULTS = {
     "date_format": "DD/MM/YYYY",  # "DD/MM/YYYY", "MM/DD/YYYY", "YYYY-MM-DD"
     "week_starts": "monday",   # "monday" or "sunday"
     "language": "en",
+    "currency": "EUR",         # ISO 4217 code, symbol-only display, no FX conversion
 }
 
 
@@ -54,7 +55,7 @@ async def get_display_settings():
         row = conn.execute("SELECT value FROM settings WHERE key = 'main'").fetchone()
     saved = json.loads(row["value"]) if row else {}
     merged = {**DEFAULTS, **saved}
-    keys = ("timezone", "time_format", "date_format", "week_starts")
+    keys = ("timezone", "time_format", "date_format", "week_starts", "currency")
     return JSONResponse({k: merged[k] for k in keys})
 
 

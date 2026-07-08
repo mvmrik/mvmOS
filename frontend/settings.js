@@ -41,6 +41,31 @@ const Settings = (() => {
     { value: "ar", label: "العربية" },
   ];
 
+  // Fixed list — symbol-only display, never real FX conversion. Kept in
+  // sync manually with apps/budget/budget-widget.js's own copy, since
+  // public/Telegram app surfaces never load this file.
+  const CURRENCIES = [
+    { value: "EUR", label: "€ EUR — Euro" },
+    { value: "USD", label: "$ USD — US Dollar" },
+    { value: "GBP", label: "£ GBP — British Pound" },
+    { value: "CHF", label: "CHF — Swiss Franc" },
+    { value: "JPY", label: "¥ JPY — Japanese Yen" },
+    { value: "CNY", label: "¥ CNY — Chinese Yuan" },
+    { value: "TRY", label: "₺ TRY — Turkish Lira" },
+    { value: "UAH", label: "₴ UAH — Ukrainian Hryvnia" },
+    { value: "PLN", label: "zł PLN — Polish Zloty" },
+    { value: "RON", label: "lei RON — Romanian Leu" },
+    { value: "CZK", label: "Kč CZK — Czech Koruna" },
+    { value: "HUF", label: "Ft HUF — Hungarian Forint" },
+    { value: "CAD", label: "$ CAD — Canadian Dollar" },
+    { value: "AUD", label: "$ AUD — Australian Dollar" },
+    { value: "SEK", label: "kr SEK — Swedish Krona" },
+    { value: "NOK", label: "kr NOK — Norwegian Krone" },
+    { value: "DKK", label: "kr DKK — Danish Krone" },
+    { value: "RUB", label: "₽ RUB — Russian Ruble" },
+    { value: "INR", label: "₹ INR — Indian Rupee" },
+  ];
+
   let currentSettings = {};
 
   async function loadSettings() {
@@ -317,6 +342,15 @@ const Settings = (() => {
                   ).join('')}
                 </select>
               </div>
+
+              <div class="settings-row">
+                <label>${t('regional_currency')}</label>
+                <select id="s-currency">
+                  ${CURRENCIES.map(c =>
+                    `<option value="${c.value}" ${(s.currency || 'EUR') === c.value ? 'selected' : ''}>${c.label}</option>`
+                  ).join('')}
+                </select>
+              </div>
             </div>
 
           </div>
@@ -521,6 +555,7 @@ const Settings = (() => {
           show_date:   body.querySelector('#s-show-date').checked,
           week_starts: body.querySelector('input[name="week_starts"]:checked').value,
           language:    body.querySelector('#s-language').value,
+          currency:    body.querySelector('#s-currency').value,
         });
       }, 400);
     };
@@ -530,6 +565,7 @@ const Settings = (() => {
     body.querySelectorAll('input[name="week_starts"]').forEach(el => el.addEventListener('change', saveRegional));
     body.querySelector('#s-show-date').addEventListener('change', saveRegional);
     body.querySelector('#s-language').addEventListener('change', saveRegional);
+    body.querySelector('#s-currency').addEventListener('change', saveRegional);
 
     // File Manager — instant
     body.querySelector('#s-fm-hidden').addEventListener('change', e => {

@@ -194,6 +194,7 @@ window._i18n = {
   // Settings — Regional
   'regional_title':               '🌐 Regional',
   'regional_language':            'Language',
+  'regional_currency':            'Currency',
   'regional_timezone':            'Time Zone',
   'regional_time_format':         'Time Format',
   'regional_date_format':         'Date Format',
