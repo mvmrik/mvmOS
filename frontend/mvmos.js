@@ -800,7 +800,10 @@ var mvmOS = (() => {
     const panel = document.getElementById('notif-panel');
     const badge = document.getElementById('notif-badge');
     if (!panel) return;
-    const recent = _notifs.slice(0, 20);
+    // The bell is an unread inbox, not a history feed — once something is
+    // read it disappears from here (it still exists in the DB and in the
+    // full Notifications app, which shows everything regardless of state).
+    const recent = _notifs.filter(n => !n.is_read).slice(0, 20);
     panel.innerHTML = `
       <div class="notif-header">
         ${t('notif_title')}
@@ -817,9 +820,11 @@ var mvmOS = (() => {
       <div class="notif-footer" id="notif-view-all">${t('notif_view_all')}</div>
     `;
     panel.querySelector('#notif-clear-all')?.addEventListener('click', async () => {
-      // Opening the bell already marks everything read (below), so a button
-      // that also just marked-read would never have a visible effect. "Clear
-      // all" instead removes the notifications outright.
+      // This deletes the notifications outright (same destructive action as
+      // "Delete all" in the full Notifications app), so it needs the same
+      // confirmation — otherwise a stray click wipes history with no warning.
+      const ok = await confirm(t('notif_delete_all_confirm'));
+      if (!ok) return;
       await fetch('/api/notifications', { method: 'DELETE', headers: _pubHeaders() });
       _notifs = [];
       _renderNotifPanel();
@@ -855,8 +860,14 @@ var mvmOS = (() => {
   async function _pushNotif(title, body, actionApp, kind, source, ref) {
     kind = kind || 'persistent';
     source = source || 'system';
-    // avoid re-notifying about the same still-open issue on every check
-    if (_notifs.find(n => n.title === title && !n.is_read)) return null;
+    // A one-off event with no `ref` (e.g. a plugin's mvmOS.notify()) dedupes
+    // by title text on the client so a burst of identical calls doesn't spam
+    // — same as before. A `ref` means the caller is reporting an ongoing
+    // condition (e.g. "N updates available") whose title can shift between
+    // polls (the count changes); the backend upserts that in place by
+    // (source, ref) regardless of read state, so no client-side pre-check is
+    // needed or correct here (read state must not gate it — see backend).
+    if (!ref && _notifs.some(n => n.title === title && !n.is_read)) return null;
     try {
       const res = await fetch('/api/notifications', {
         method: 'POST',
@@ -865,9 +876,13 @@ var mvmOS = (() => {
       });
       if (!res.ok) return null;
       const row = await res.json();
+      const existingIdx = _notifs.findIndex(n => n.id === row.id);
+      if (existingIdx !== -1) _notifs.splice(existingIdx, 1);
       _notifs.unshift(row);
       _renderNotifPanel();
-      if (kind === 'push') _showToast(title, body, row.id, actionApp);
+      // Only toast for a genuinely new/changed row, not a no-op upsert that
+      // returned an already-read row untouched.
+      if (kind === 'push' && (existingIdx === -1 || !row.is_read)) _showToast(title, body, row.id, actionApp);
       return row;
     } catch (_) { return null; }
   }
@@ -946,7 +961,7 @@ var mvmOS = (() => {
         _pushNotif(
           'mvmOS update available',
           t('os_update_body', { behind: d.commits_behind, s: d.commits_behind !== 1 ? 's' : '', local: d.local, remote: d.remote }),
-          'settings:about'
+          'settings:about', 'persistent', 'system', 'os-update'
         );
       }
     } catch (_) {}
@@ -962,7 +977,7 @@ var mvmOS = (() => {
       _pushNotif(
         t('updates_available', { n: count, s: count !== 1 ? 's' : '' }),
         t('updates_body'),
-        'updates'
+        'updates', 'persistent', 'system', 'app-updates'
       );
     } catch (_) {}
   }
@@ -983,15 +998,13 @@ var mvmOS = (() => {
       _loadNotifs();
       _loadPushDuration();
       setInterval(_pollNotifs, 10000);
-      btn.addEventListener('click', async e => {
+      // Merely opening the panel to glance at it does not mark anything
+      // read — only clicking an individual notification (or "Mark all read"
+      // in the full Notifications app) does. Otherwise the badge/highlight
+      // would vanish the instant you looked, before you could act on it.
+      btn.addEventListener('click', e => {
         e.stopPropagation();
-        const opening = !panel.classList.contains('open');
         panel.classList.toggle('open');
-        if (opening && _notifs.some(n => !n.is_read)) {
-          await fetch('/api/notifications/read-all', { method: 'POST', headers: _pubHeaders() });
-          _notifs.forEach(n => n.is_read = 1);
-          _renderNotifPanel();
-        }
       });
       document.addEventListener('click', e => {
         if (!e.target.closest('#notif-btn') && !e.target.closest('#notif-panel')) panel.classList.remove('open');

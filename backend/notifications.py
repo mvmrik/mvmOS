@@ -1,5 +1,6 @@
 import sys
 from datetime import datetime, timezone
+from typing import Optional
 
 from fastapi import APIRouter, Depends, Header
 from fastapi.responses import JSONResponse
@@ -64,8 +65,8 @@ class CreateBody(BaseModel):
     body: str = ""
     kind: str = "persistent"
     source: str = "app"
-    action_app: str = None
-    ref: str = None
+    action_app: Optional[str] = None
+    ref: Optional[str] = None
 
 
 @router.get("/badges")
@@ -106,6 +107,31 @@ async def list_notifications(session=Depends(get_current_session), x_pub_token: 
 @router.post("")
 async def post_notification(body: CreateBody, session=Depends(get_current_session)):
     username = session["effective_user"]
+    # Callers that pass a `ref` are reporting an ongoing condition (e.g. "N
+    # updates available"), not a discrete event — upsert in place instead of
+    # inserting a new row every poll, regardless of read state, otherwise
+    # re-opening the bell (which marks everything read) lets the next
+    # periodic check spawn a duplicate. Callers with no ref (e.g. a plugin's
+    # mvmOS.notify() for a one-off event) always insert, same as before.
+    if body.ref:
+        with get_conn() as conn:
+            existing = conn.execute(
+                "SELECT * FROM notifications WHERE username = ? AND source = ? AND ref = ? "
+                "ORDER BY created_at DESC LIMIT 1",
+                (username, body.source, body.ref),
+            ).fetchone()
+            if existing:
+                if existing["title"] == body.title and existing["body"] == body.body:
+                    return JSONResponse(dict(existing))
+                now = datetime.now(timezone.utc).isoformat()
+                conn.execute(
+                    "UPDATE notifications SET title = ?, body = ?, kind = ?, action_app = ?, "
+                    "is_read = 0, created_at = ? WHERE id = ?",
+                    (body.title, body.body, body.kind, body.action_app, now, existing["id"]),
+                )
+                conn.commit()
+                row = conn.execute("SELECT * FROM notifications WHERE id = ?", (existing["id"],)).fetchone()
+                return JSONResponse(dict(row))
     row = create_notification(username, body.title, body.body, body.kind, body.source, body.action_app, body.ref)
     return JSONResponse(row)
 

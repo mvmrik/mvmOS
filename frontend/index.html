@@ -100,26 +100,30 @@
   </div>
 </div>
 
-<script src="/i18n/i18n.js"></script>
+<!-- ?v= must be bumped alongside version.txt on every core release — core
+     scripts have no build step, and browsers/Cloudflare cache .js by
+     extension (Cache-Control: max-age=14400) with no other cache-busting,
+     so without this a release can silently not reach already-open clients. -->
+<script src="/i18n/i18n.js?v=0.18.1"></script>
 <script src="/lib/xterm.js"></script>
 <script src="/lib/xterm-addon-fit.js"></script>
-<script src="/mvmos.js"></script>
-<script src="/upload-manager.js"></script>
-<script src="/settings.js"></script>
-<script src="/appstore.js"></script>
-<script src="/desktop.js"></script>
-<script src="/sites.js"></script>
-<script src="/terminal.js"></script>
-<script src="/mediaviewer.js"></script>
-<script src="/filemanager.js"></script>
-<script src="/startup-manager.js"></script>
-<script src="/apphub.js"></script>
-<script src="/notifications.js"></script>
-<script src="/codeeditor.js"></script>
-<script src="/folderpicker.js"></script>
-<script src="/screensaver.js"></script>
+<script src="/mvmos.js?v=0.18.1"></script>
+<script src="/upload-manager.js?v=0.18.1"></script>
+<script src="/settings.js?v=0.18.1"></script>
+<script src="/appstore.js?v=0.18.1"></script>
+<script src="/desktop.js?v=0.18.1"></script>
+<script src="/sites.js?v=0.18.1"></script>
+<script src="/terminal.js?v=0.18.1"></script>
+<script src="/mediaviewer.js?v=0.18.1"></script>
+<script src="/filemanager.js?v=0.18.1"></script>
+<script src="/startup-manager.js?v=0.18.1"></script>
+<script src="/apphub.js?v=0.18.1"></script>
+<script src="/notifications.js?v=0.18.1"></script>
+<script src="/codeeditor.js?v=0.18.1"></script>
+<script src="/folderpicker.js?v=0.18.1"></script>
+<script src="/screensaver.js?v=0.18.1"></script>
 <script>ScreenSaver.init();</script>
-<script src="/wallpaper.js"></script>
+<script src="/wallpaper.js?v=0.18.1"></script>
 <script>
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('/sw.js').catch(() => {});
