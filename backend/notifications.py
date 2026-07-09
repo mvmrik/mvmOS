@@ -121,7 +121,7 @@ async def post_notification(body: CreateBody, session=Depends(get_current_sessio
                 (username, body.source, body.ref),
             ).fetchone()
             if existing:
-                if existing["title"] == body.title and existing["body"] == body.body:
+                if existing["title"] == body.title and existing["body"] == body.body and not existing["is_read"]:
                     return JSONResponse(dict(existing))
                 now = datetime.now(timezone.utc).isoformat()
                 conn.execute(
