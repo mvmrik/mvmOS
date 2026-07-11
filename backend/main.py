@@ -171,6 +171,55 @@ async def domain_middleware(request: Request, call_next):
     return await _dispatch_public(app_id, path, request)
 
 
+_PUB_APP_RE = re.compile(r"^/pub/([a-zA-Z0-9_-]+)/")
+_APPS_PUBLIC_RE = re.compile(r"^/apps/[a-zA-Z0-9_-]+/public(/|$)")
+
+
+@app.middleware("http")
+async def block_apps_public_middleware(request: Request, call_next):
+    """/apps/<id>/public/... is a static-file backdoor into the same pages
+    served properly at /pub/<id>/ (auth checks, layout injection). Block it
+    so /pub/<id>/ is the only real entry point."""
+    if _APPS_PUBLIC_RE.match(request.url.path):
+        return Response(status_code=404)
+    return await call_next(request)
+
+
+
+@app.middleware("http")
+async def layout_inject_middleware(request: Request, call_next):
+    """Auto-inject the shared header/footer chrome (backend/apps/apphub/public/layout.js)
+    into every /pub/<app>/ HTML page. Apps never include this themselves — it's
+    added centrally here so every public app gets it for free, including future ones."""
+    response = await call_next(request)
+    m = _PUB_APP_RE.match(request.url.path)
+    if not m or not response.headers.get("content-type", "").startswith("text/html"):
+        return response
+    app_id = m.group(1)
+
+    body = b""
+    async for chunk in response.body_iterator:
+        body += chunk if isinstance(chunk, bytes) else chunk.encode()
+
+    html = body.decode("utf-8", errors="ignore")
+    if "/pub/apphub/layout.js" in html:
+        snippet = ""
+    else:
+        layout_js_path = os.path.join(os.path.dirname(__file__), "apps", "apphub", "public", "layout.js")
+        try:
+            v = int(os.path.getmtime(layout_js_path))
+        except OSError:
+            v = 0
+        snippet = f'<script src="/pub/apphub/layout.js?v={v}" data-mvm-app="{app_id}"></script>'
+    if snippet:
+        html = html.replace("</body>", snippet + "</body>", 1) if "</body>" in html else html + snippet
+
+    headers = dict(response.headers)
+    for h in ("content-length", "etag", "last-modified", "accept-ranges"):
+        headers.pop(h, None)
+    return Response(content=html, status_code=response.status_code, headers=headers, media_type="text/html")
+
+
 def _versioned_html():
     index_path = os.path.join(FRONTEND_DIR, "index.html")
     html = open(index_path).read()
