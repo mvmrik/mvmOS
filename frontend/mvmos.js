@@ -1271,6 +1271,17 @@ var mvmOS = (() => {
     // hardcoding a specific app id. See apps/calendar/manifest.json's
     // "replaces_widget" key and backend/plugins.py's list_plugins().
     getWidgetApp: (slot) => _pluginsCache.find(p => p.replaces_widget === slot)?.id || null,
+    // Window-id -> app-id can carry a "-N" instance suffix (filemanager-1,
+    // filemanager-2, ...), so match the exact id first, then the plugin
+    // whose id is the prefix before the dash. Used by Desktop.createWindow's
+    // shared footer to show a "public page" link without every app wiring
+    // it up itself.
+    getPluginPublicUrl: (winId) => {
+      const exact = _pluginsCache.find(p => p.id === winId);
+      if (exact) return exact.public_url || null;
+      const base = winId.includes('-') ? winId.slice(0, winId.lastIndexOf('-')) : null;
+      return base ? (_pluginsCache.find(p => p.id === base)?.public_url || null) : null;
+    },
     notify,
     storage,
     multiplayer: {

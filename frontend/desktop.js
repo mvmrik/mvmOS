@@ -662,11 +662,42 @@ const Desktop = (() => {
         ${appSettings ? `<button class="wbtn-appsettings" title="${t('settings_title')}">⚙</button>` : ''}
       </div>`}
       <div class="window-body"></div>
+      ${mobileFullscreen ? '' : `<div class="window-footer">
+        <span class="window-footer-brand">mvmOS</span>
+        <span class="window-footer-custom"></span>
+      </div>`}
       ${!mobile ? '<div class="window-resize"></div>' : ''}
     `;
 
     const titlebar = el.querySelector('.window-titlebar');
     const body     = el.querySelector('.window-body');
+    const footer   = el.querySelector('.window-footer');
+    const footerCustom = el.querySelector('.window-footer-custom');
+
+    if (footer) {
+      const publicUrl = window.mvmOS?.getPluginPublicUrl?.(id);
+      if (publicUrl) {
+        const a = document.createElement('a');
+        a.className = 'window-footer-link';
+        a.href = publicUrl;
+        a.target = '_blank';
+        a.rel = 'noopener';
+        a.title = t('win_public_page');
+        a.textContent = '🔗';
+        footer.appendChild(a);
+      }
+    }
+
+    // Apps can put their own content (status text, a link, anything) in the
+    // shared footer without owning the whole element — setContent overwrites
+    // only .window-footer-custom, leaving the mvmOS brand and public-page
+    // link (if any) untouched. Call it as many times as you like (e.g. on
+    // every progress update), same pattern as File Manager's status bar but
+    // in the shared footer instead of app-owned space.
+    el.footer = {
+      setContent(html) { if (footerCustom) footerCustom.innerHTML = html; },
+      clear() { if (footerCustom) footerCustom.innerHTML = ''; },
+    };
 
     if (!mobile) {
       makeWindowDraggable(el, titlebar);

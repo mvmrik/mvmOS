@@ -233,7 +233,7 @@ def _versioned_html():
             return f'"{src}?v={mtime}"'
         return m.group(0)
 
-    html = re.sub(r'"(/[^"]+\.(?:js|css))"', add_version, html)
+    html = re.sub(r'"(/[^"?]+\.(?:js|css))(?:\?[^"]*)?"', add_version, html)
 
     # Inject mvmOS version as meta tag
     try:

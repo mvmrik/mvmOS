@@ -408,9 +408,11 @@ async def list_plugins(session=Depends(get_current_session)):
                 mf = json.load(f)
             item["settings"] = mf.get("settings", [])
             item["replaces_widget"] = mf.get("replaces_widget")
+            item["public_url"] = mf.get("public_url")
         except Exception:
             item["settings"] = []
             item["replaces_widget"] = None
+            item["public_url"] = None
         result.append(item)
     return JSONResponse(result)
 

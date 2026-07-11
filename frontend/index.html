@@ -100,10 +100,8 @@
   </div>
 </div>
 
-<!-- ?v= must be bumped alongside version.txt on every core release — core
-     scripts have no build step, and browsers/Cloudflare cache .js by
-     extension (Cache-Control: max-age=14400) with no other cache-busting,
-     so without this a release can silently not reach already-open clients. -->
+<!-- ?v= is rewritten to each file's mtime by _versioned_html() in main.py,
+     so edits are cache-busted automatically — no manual bump needed. -->
 <script src="/i18n/i18n.js?v=0.18.2"></script>
 <script src="/lib/xterm.js"></script>
 <script src="/lib/xterm-addon-fit.js"></script>

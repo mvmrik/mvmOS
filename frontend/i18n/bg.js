@@ -52,6 +52,7 @@ window._i18n = {
   'win_maximize':                 'Максимизиране',
   'win_close':                    'Затваряне',
   'win_menu':                     'Меню',
+  'win_public_page':              'Публична страница',
 
   // ── Context menu (desktop) ────────────────────────────────────────────────
   'ctx_paste':                    'Постави',

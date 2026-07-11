@@ -52,6 +52,7 @@ window._i18n = {
   'win_maximize':                 'Maximize',
   'win_close':                    'Close',
   'win_menu':                     'Menu',
+  'win_public_page':              'Public page',
 
   // ── Context menu (desktop) ────────────────────────────────────────────────
   'ctx_paste':                    'Paste',

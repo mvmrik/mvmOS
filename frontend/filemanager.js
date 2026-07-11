@@ -9,7 +9,7 @@ const FileManager = (() => {
     fmCount++;
     const id = 'filemanager-' + fmCount;
 
-    Desktop.createWindow({
+    const win = Desktop.createWindow({
       id,
       title: `📁 ${t('app_filemanager')}`,
       width: 720,
@@ -17,7 +17,7 @@ const FileManager = (() => {
       appSettings: 'filemanager',
       onMount(body) {
         (window.mvmOS?.i18nReady || Promise.resolve()).then(() => {
-          const fm = new FMInstance(body);
+          const fm = new FMInstance(body, win.footer);
           if (startPath) {
             fm.navigate(startPath);
           } else {
@@ -32,8 +32,9 @@ const FileManager = (() => {
   }
 
   class FMInstance {
-    constructor(body) {
+    constructor(body, footer) {
       this.body = body;
+      this.footer = footer;
       this.currentPath = '/';
       this.selected = null;
       this.selectedSet = new Set(); // multi-select
@@ -72,9 +73,6 @@ const FileManager = (() => {
               <div class="fm-preview-name"></div>
               <div class="fm-preview-meta"></div>
             </div>
-          </div>
-          <div class="fm-footer">
-            <span class="fm-footer-status"></span>
           </div>
         </div>
       `;
@@ -169,7 +167,7 @@ const FileManager = (() => {
         this._previewClosed = true;
         this.previewEl.style.display = 'none';
       });
-      this.footerStatus  = body.querySelector('.fm-footer-status');
+      this.footerStatus  = this._makeFooterStatus();
 
       this.mkdirBtn       = body.querySelector('.fm-mkdir');
       this.uploadBtn2     = body.querySelector('.fm-upload-btn');
@@ -295,6 +293,26 @@ const FileManager = (() => {
 
     _loadBookmarks() {
       try { return JSON.parse(localStorage.getItem('fm-bookmarks') || '[]'); } catch { return []; }
+    }
+
+    _makeFooterStatus() {
+      const footer = this.footer;
+      const state = { text: '', color: '' };
+      const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+      const render = () => {
+        if (!footer) return;
+        if (!state.text) { footer.clear(); return; }
+        const style = state.color ? ` style="color:${state.color}"` : '';
+        footer.setContent(`<span${style}>${esc(state.text)}</span>`);
+      };
+      return {
+        get textContent() { return state.text; },
+        set textContent(v) { state.text = v; render(); },
+        style: {
+          get color() { return state.color; },
+          set color(v) { state.color = v; render(); },
+        },
+      };
     }
 
     _saveBookmarks(bookmarks) {
