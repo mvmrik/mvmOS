@@ -43,7 +43,7 @@ from .projects import router as projects_router
 from .backup import router as backup_router
 from .scheduler import router as scheduler_router
 from .startup import router as startup_router, _init_startup_db, run_startup_apps
-from .apphub import router as apphub_router, _init_db as _init_apphub_db
+from .apphub import router as apphub_router, public_page_router as apphub_public_router, _init_db as _init_apphub_db
 from .notifications import router as notifications_router
 from .db import APPS_DIR, WIDGETS_DIR, THEMES_DIR
 from . import app_backends, public_loader, projects
@@ -73,6 +73,7 @@ app.include_router(backup_router)
 app.include_router(scheduler_router)
 app.include_router(startup_router)
 app.include_router(apphub_router)
+app.include_router(apphub_public_router, prefix="/pub/apphub")
 app.include_router(notifications_router)
 
 app_backends.load_all(app)
@@ -188,7 +189,7 @@ async def block_apps_public_middleware(request: Request, call_next):
 
 @app.middleware("http")
 async def layout_inject_middleware(request: Request, call_next):
-    """Auto-inject the shared header/footer chrome (backend/apps/apphub/public/layout.js)
+    """Auto-inject the shared header/footer chrome (backend/apphub_pub/layout.js)
     into every /pub/<app>/ HTML page. Apps never include this themselves — it's
     added centrally here so every public app gets it for free, including future ones."""
     response = await call_next(request)
@@ -205,7 +206,7 @@ async def layout_inject_middleware(request: Request, call_next):
     if "/pub/apphub/layout.js" in html:
         snippet = ""
     else:
-        layout_js_path = os.path.join(os.path.dirname(__file__), "apps", "apphub", "public", "layout.js")
+        layout_js_path = os.path.join(os.path.dirname(__file__), "apphub_pub", "layout.js")
         try:
             v = int(os.path.getmtime(layout_js_path))
         except OSError:

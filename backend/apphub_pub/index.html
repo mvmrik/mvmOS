@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Apps Hub</title>
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{--bg:#1e1e2e;--surface1:#181825;--surface2:#313244;--border:#45475a;--fg:#cdd6f4;--fg2:#a6adc8;--accent:#89b4fa;--green:#a6e3a1;--red:#f38ba8;--yellow:#f9e2af}
+  body{font-family:system-ui,sans-serif;background:var(--bg);color:var(--fg);min-height:100dvh;display:flex;flex-direction:column}
+  #app{flex:1;display:flex;flex-direction:column}
+  button{font-family:inherit;cursor:pointer}
+  input{font-family:inherit}
+  .card{background:var(--surface1);border:1px solid var(--border);border-radius:12px}
+  .btn{border:none;border-radius:8px;padding:9px 20px;font-size:.9rem;font-weight:600}
+  .btn-primary{background:var(--accent);color:#1e1e2e}
+  .btn-primary:hover{opacity:.9}
+  .btn-secondary{background:var(--surface2);color:var(--fg);border:1px solid var(--border)}
+  .btn-secondary:hover{background:var(--border)}
+  .inp{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--fg);font-size:.9rem;width:100%;outline:none}
+  .inp:focus{border-color:var(--accent)}
+  .err{color:var(--red);font-size:.82rem;min-height:18px}
+  .tab-bar{display:flex;gap:6px;border-bottom:1px solid var(--border);padding:0 16px;flex-shrink:0}
+  .tab{background:none;border:none;padding:10px 14px;font-size:.88rem;color:var(--fg2);border-bottom:2px solid transparent;margin-bottom:-1px;transition:color .15s,border-color .15s}
+  .tab.active{color:var(--accent);border-color:var(--accent)}
+  .tab:hover:not(.active){color:var(--fg)}
+  .section{padding:16px}
+  .app-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:12px;padding:16px}
+  .app-card{position:relative;background:var(--surface1);border:1px solid var(--border);border-radius:12px;padding:16px 12px;display:flex;flex-direction:column;align-items:center;gap:8px;cursor:pointer;transition:background .12s,border-color .12s;text-decoration:none;color:var(--fg)}
+  .app-card:hover{background:var(--surface2);border-color:var(--accent)}
+  .app-icon{font-size:2.2rem;line-height:1;position:relative}
+  .app-badge{position:absolute;top:-2px;right:-4px;width:10px;height:10px;border-radius:50%;background:var(--red);border:2px solid var(--surface1)}
+  .app-name{font-size:.85rem;font-weight:600;text-align:center}
+  .app-desc{font-size:.72rem;color:var(--fg2);text-align:center;line-height:1.4}
+  .avatar{border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;color:#1e1e2e;flex-shrink:0}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script src="/pub/apphub/avatar.js"></script>
+<script>
+const BASE = '/api/pub/apphub';
+const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;');
+
+let _me = null;
+const _params = new URLSearchParams(location.search);
+let _token = _params.get('token') || localStorage.getItem('apphub_token');
+const _startTab = _params.get('tab') || 'apps';
+// Optional return URL: another app sends the user here to log in, then we send them back.
+// Only same-origin relative paths are honoured, to avoid open-redirects.
+const _returnTo = (() => {
+  const r = _params.get('return');
+  if (r && r.startsWith('/') && !r.startsWith('//')) return r;
+  return null;
+})();
+if (_token) { localStorage.setItem('apphub_token', _token); history.replaceState(null,'',location.pathname); }
+
+// Called after any successful authentication. If we were sent here to log in
+// on behalf of another app, bounce straight back to it.
+function _afterAuth() {
+  if (_returnTo) { location.replace(_returnTo); return true; }
+  return false;
+}
+
+const app = document.getElementById('app');
+
+async function boot() {
+  app.innerHTML = `<div style="flex:1;display:flex;align-items:center;justify-content:center;color:var(--fg2);font-size:.9rem">Loading…</div>`;
+  if (_token) {
+    try {
+      const r = await fetch(BASE + '/me', {headers:{'X-Pub-Token':_token}});
+      if (r.ok) _me = await r.json();
+      else { _token = null; localStorage.removeItem('apphub_token'); }
+    } catch(_) { _token = null; localStorage.removeItem('apphub_token'); }
+  }
+  if (!_me) showAuth();
+  else if (_afterAuth()) return;
+  else showDashboard(_startTab);
+}
+
+// ── Auth ────────────────────────────────────────────────────────
+
+function showAuth(tab) {
+  tab = tab || 'login';
+  app.innerHTML = `
+    <div style="flex:1;display:flex;align-items:center;justify-content:center;padding:24px">
+      <div class="card" style="width:100%;max-width:360px;padding:28px;display:flex;flex-direction:column;gap:18px">
+        <div style="text-align:center">
+          <div style="font-size:2.5rem">🧩</div>
+          <div style="font-weight:700;font-size:1.2rem;margin-top:6px">Apps Hub</div>
+          <div style="font-size:.82rem;color:var(--fg2);margin-top:4px">Your profile for all apps</div>
+        </div>
+        <div style="display:flex;gap:0;background:var(--surface2);border-radius:8px;padding:3px">
+          <button id="a-login" style="flex:1;border:none;border-radius:6px;padding:7px;font-size:.88rem;font-weight:600;background:${tab==='login'?'var(--surface1)':'transparent'};color:${tab==='login'?'var(--fg)':'var(--fg2)'}">Log in</button>
+          <button id="a-reg"   style="flex:1;border:none;border-radius:6px;padding:7px;font-size:.88rem;font-weight:600;background:${tab==='register'?'var(--surface1)':'transparent'};color:${tab==='register'?'var(--fg)':'var(--fg2)'}">Register</button>
+        </div>
+        <div id="a-form"></div>
+      </div>
+    </div>`;
+  app.querySelector('#a-login').onclick = () => { renderLoginForm(); _setAuthTab('login'); };
+  app.querySelector('#a-reg').onclick   = () => { renderRegForm();   _setAuthTab('register'); };
+  if (tab === 'register') renderRegForm(); else renderLoginForm();
+}
+
+function _setAuthTab(t) {
+  const l = app.querySelector('#a-login'), r = app.querySelector('#a-reg');
+  l.style.background = t==='login'    ? 'var(--surface1)' : 'transparent';
+  l.style.color      = t==='login'    ? 'var(--fg)'       : 'var(--fg2)';
+  r.style.background = t==='register' ? 'var(--surface1)' : 'transparent';
+  r.style.color      = t==='register' ? 'var(--fg)'       : 'var(--fg2)';
+}
+
+function renderLoginForm() {
+  const f = app.querySelector('#a-form');
+  f.innerHTML = `
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <input class="inp" id="a-user" placeholder="Username" autocomplete="username">
+      <input class="inp" id="a-pass" type="password" placeholder="Password" autocomplete="current-password">
+      <div class="err" id="a-err"></div>
+      <button class="btn btn-primary" id="a-sub">Log in</button>
+    </div>`;
+  const sub = async () => {
+    const u = f.querySelector('#a-user').value.trim();
+    const p = f.querySelector('#a-pass').value;
+    if (!u || !p) return;
+    f.querySelector('#a-sub').disabled = true;
+    const r = await fetch(BASE + '/login', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:u,password:p})});
+    if (r.ok) {
+      const d = await r.json(); _token = d.token; _me = d.user;
+      localStorage.setItem('apphub_token', _token);
+      if (_afterAuth()) return;
+      showDashboard();
+    } else {
+      const d = await r.json().catch(()=>({}));
+      f.querySelector('#a-err').textContent = d.detail || 'Invalid username or password';
+      f.querySelector('#a-sub').disabled = false;
+    }
+  };
+  f.querySelector('#a-sub').onclick = sub;
+  f.querySelector('#a-pass').onkeydown = e => { if(e.key==='Enter') sub(); };
+  setTimeout(() => f.querySelector('#a-user').focus(), 50);
+}
+
+function renderRegForm() {
+  const f = app.querySelector('#a-form');
+  f.innerHTML = `
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <input class="inp" id="a-dname" placeholder="Display name">
+      <input class="inp" id="a-user"  placeholder="Username (letters/numbers)" autocomplete="username">
+      <input class="inp" id="a-pass"  type="password" placeholder="Password (min 4 chars)" autocomplete="new-password">
+      <div class="err" id="a-err"></div>
+      <button class="btn btn-primary" id="a-sub">Create account</button>
+    </div>`;
+  f.querySelector('#a-sub').onclick = async () => {
+    const dn = f.querySelector('#a-dname').value.trim();
+    const un = f.querySelector('#a-user').value.trim();
+    const pw = f.querySelector('#a-pass').value;
+    if (!dn || !un || !pw) { f.querySelector('#a-err').textContent = 'All fields required'; return; }
+    f.querySelector('#a-sub').disabled = true;
+    const r = await fetch(BASE + '/register', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({display_name:dn,username:un,password:pw})});
+    if (r.ok) {
+      const d = await r.json(); _token = d.token; _me = d.user;
+      localStorage.setItem('apphub_token', _token);
+      if (_afterAuth()) return;
+      showDashboard();
+    } else {
+      const d = await r.json().catch(()=>({}));
+      f.querySelector('#a-err').textContent = d.detail || 'Error';
+      f.querySelector('#a-sub').disabled = false;
+    }
+  };
+  setTimeout(() => f.querySelector('#a-dname').focus(), 50);
+}
+
+// ── Dashboard ───────────────────────────────────────────────────
+
+function showDashboard(activeTab) {
+  activeTab = activeTab || 'apps';
+  app.innerHTML = `
+    <div class="tab-bar">
+      <button class="tab${activeTab==='apps'?' active':''}" data-t="apps">Apps</button>
+      <button class="tab${activeTab==='favourites'?' active':''}" data-t="favourites">Favourites</button>
+      <button class="tab${activeTab==='profile'?' active':''}" data-t="profile">Profile</button>
+    </div>
+    <div id="d-body" style="flex:1;overflow-y:auto"></div>`;
+
+  window.MvmLayout && MvmLayout.refresh();
+  app.querySelectorAll('.tab').forEach(t => {
+    t.onclick = () => {
+      app.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+      t.classList.add('active');
+      renderTab(t.dataset.t);
+    };
+  });
+  renderTab(activeTab);
+}
+
+function renderTab(t) {
+  clearInterval(_badgePoll);
+  const c = app.querySelector('#d-body');
+  if (t === 'apps')       renderApps(c);
+  if (t === 'favourites') renderFavourites(c);
+  if (t === 'profile')    renderProfile(c);
+}
+
+// ── Apps tab ────────────────────────────────────────────────────
+
+const SORT_KEY  = 'apphub_apps_sort';
+const USAGE_KEY = 'apphub_apps_usage';
+
+function _getUsage() {
+  try { return JSON.parse(localStorage.getItem(USAGE_KEY)) || {}; } catch(_) { return {}; }
+}
+function _recordUsage(id) {
+  const u = _getUsage();
+  u[id] = { count: (u[id]?.count || 0) + 1, last: Date.now() };
+  localStorage.setItem(USAGE_KEY, JSON.stringify(u));
+}
+function _getSortPref() { return localStorage.getItem(SORT_KEY) || 'alpha'; }
+function _setSortPref(v) { localStorage.setItem(SORT_KEY, v); }
+
+function _sortApps(apps, mode) {
+  const usage = _getUsage();
+  const sorted = apps.slice();
+  if (mode === 'recent') {
+    sorted.sort((a, b) => (usage[b.id]?.last || 0) - (usage[a.id]?.last || 0));
+  } else if (mode === 'frequent') {
+    sorted.sort((a, b) => (usage[b.id]?.count || 0) - (usage[a.id]?.count || 0));
+  } else {
+    sorted.sort((a, b) => a.name.localeCompare(b.name));
+  }
+  return sorted;
+}
+
+async function _loadBadges() {
+  if (!_token) return {};
+  try {
+    const r = await fetch('/api/notifications/badges', {headers:{'X-Pub-Token':_token}});
+    return r.ok ? await r.json() : {};
+  } catch(_) { return {}; }
+}
+
+// This is a static page with no websocket/live-push channel of its own, so
+// badge state (which apps have unread notifications) can only go stale —
+// poll it periodically while the Apps tab is open instead of requiring a
+// full page reload to see a badge appear or disappear.
+let _badgePoll = null;
+
+async function renderApps(c) {
+  c.innerHTML = `<div style="padding:32px;text-align:center;color:var(--fg2);font-size:.9rem">Loading apps…</div>`;
+  let apps = [];
+  try {
+    const r = await fetch(BASE + '/apps');
+    if (r.ok) apps = await r.json();
+  } catch(_) {}
+  let badges = await _loadBadges();
+
+  if (!apps.length) {
+    c.innerHTML = `<div style="padding:40px;text-align:center;color:var(--fg2)">
+      <div style="font-size:2rem;margin-bottom:10px">📭</div>
+      <div>No public apps available yet.</div>
+    </div>`;
+    return;
+  }
+
+  const sortMode = _getSortPref();
+  c.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:flex-end;gap:8px;padding:12px 16px 0">
+      <span style="font-size:.78rem;color:var(--fg2)">Sort by</span>
+      <select class="inp" id="apps-sort" style="width:auto;padding:5px 10px;font-size:.8rem">
+        <option value="alpha"${sortMode==='alpha'?' selected':''}>Alphabetical</option>
+        <option value="recent"${sortMode==='recent'?' selected':''}>Recently used</option>
+        <option value="frequent"${sortMode==='frequent'?' selected':''}>Most used</option>
+      </select>
+    </div>
+    <div class="app-grid" id="apps-grid"></div>`;
+
+  const renderGrid = () => {
+    const sorted = _sortApps(apps, _getSortPref());
+    c.querySelector('#apps-grid').innerHTML = sorted.map(a => `
+      <a class="app-card" href="${esc(a.public_url)}" data-id="${esc(a.id)}">
+        <div class="app-icon">${esc(a.icon)}${badges[a.id] ? '<span class="app-badge"></span>' : ''}</div>
+        <div class="app-name">${esc(a.name)}</div>
+        ${a.description ? `<div class="app-desc">${esc(a.description.slice(0,60))}${a.description.length>60?'…':''}</div>` : ''}
+      </a>`).join('');
+    c.querySelectorAll('.app-card').forEach(el => {
+      el.addEventListener('click', () => _recordUsage(el.dataset.id));
+    });
+  };
+  renderGrid();
+
+  c.querySelector('#apps-sort').onchange = e => { _setSortPref(e.target.value); renderGrid(); };
+
+  clearInterval(_badgePoll);
+  _badgePoll = setInterval(async () => {
+    if (!c.isConnected) { clearInterval(_badgePoll); return; }
+    badges = await _loadBadges();
+    c.querySelectorAll('.app-card').forEach(el => {
+      const icon = el.querySelector('.app-icon');
+      const dot = icon.querySelector('.app-badge');
+      const shouldShow = !!badges[el.dataset.id];
+      if (shouldShow && !dot) icon.insertAdjacentHTML('beforeend', '<span class="app-badge"></span>');
+      if (!shouldShow && dot) dot.remove();
+    });
+  }, 8000);
+}
+
+// ── Favourites tab ──────────────────────────────────────────────
+// Favourites are the single shared list used by Game Hub and Chat —
+// this is the one place to search for people and add/remove them.
+
+let _favs = null; // cache
+
+async function _loadFavs() {
+  try {
+    const r = await fetch(BASE + '/favourites', {headers:{'X-Pub-Token':_token}});
+    _favs = r.ok ? await r.json() : [];
+  } catch (_) {
+    _favs = [];
+  }
+}
+function _isFav(userId) { return !!(_favs && _favs.some(f=>f.id===userId)); }
+async function _toggleFav(p) {
+  const isFav = _isFav(p.id);
+  await fetch(`${BASE}/favourites/${p.id}`, {method: isFav ? 'DELETE' : 'POST', headers:{'X-Pub-Token':_token}});
+  if (isFav) { _favs = (_favs||[]).filter(f=>f.id!==p.id); }
+  else { _favs = [p, ...(_favs||[]).filter(f=>f.id!==p.id)]; }
+}
+
+async function renderFavourites(c) {
+  c.innerHTML = `<div class="section" style="display:flex;flex-direction:column;gap:14px;max-width:560px"></div>`;
+  const sc = c.querySelector('.section');
+
+  if (_favs === null) await _loadFavs();
+
+  const searchWrap = document.createElement('div');
+  searchWrap.innerHTML = `
+    <div style="font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:var(--fg2);margin-bottom:8px">Find people</div>
+    <input class="inp" id="fav-search" placeholder="Search by name or username…" autocomplete="off">
+    <div id="fav-results" style="display:flex;flex-direction:column;gap:6px;margin-top:8px"></div>`;
+  sc.appendChild(searchWrap);
+
+  const resultsEl = searchWrap.querySelector('#fav-results');
+  let _searchTimer = null;
+
+  async function renderSearch(q) {
+    resultsEl.innerHTML = '';
+    if (q.length < 2) return;
+    resultsEl.innerHTML = `<div style="color:var(--fg2);font-size:13px">Searching…</div>`;
+    const r = await fetch(`${BASE}/search?q=${encodeURIComponent(q)}`);
+    const hits = r.ok ? (await r.json()).filter(p => p.id !== _me?.id) : [];
+    resultsEl.innerHTML = '';
+    if (!hits.length) {
+      resultsEl.innerHTML = `<div style="color:var(--fg2);font-size:13px">No people found.</div>`;
+      return;
+    }
+    hits.forEach(p => resultsEl.appendChild(_favRow(p, () => renderFavourites(c))));
+  }
+
+  searchWrap.querySelector('#fav-search').oninput = e => {
+    clearTimeout(_searchTimer);
+    _searchTimer = setTimeout(() => renderSearch(e.target.value.trim()), 300);
+  };
+
+  const divider = document.createElement('div');
+  divider.style.cssText = 'border-top:1px solid var(--border);padding-top:14px';
+  divider.innerHTML = `<div style="font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:var(--fg2);margin-bottom:8px">Saved favourites</div>`;
+  sc.appendChild(divider);
+
+  const favsEl = document.createElement('div');
+  favsEl.style.cssText = 'display:flex;flex-direction:column;gap:6px';
+  divider.appendChild(favsEl);
+
+  function renderSavedFavs() {
+    favsEl.innerHTML = '';
+    if (!_favs || !_favs.length) {
+      favsEl.innerHTML = `<div style="color:var(--fg2);font-size:13px">No favourites yet. Search for someone above.</div>`;
+      return;
+    }
+    _favs.forEach(f => favsEl.appendChild(_favRow(f, renderSavedFavs)));
+  }
+  renderSavedFavs();
+}
+
+function _favRow(p, onFavChange) {
+  const fav = _isFav(p.id);
+  const row = document.createElement('div');
+  row.style.cssText = 'display:flex;align-items:center;gap:12px;justify-content:space-between';
+  row.innerHTML = `
+    <div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0">
+      ${renderAvatar(p, 32)}
+      <div style="min-width:0">
+        <div style="font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(p.display_name||p.username||'?')}</div>
+        ${p.username?`<div style="font-size:11px;color:var(--fg2)">@${esc(p.username)}</div>`:''}
+      </div>
+    </div>
+    <button class="btn btn-secondary" id="pr-fav" style="padding:5px 10px;font-size:12px;flex-shrink:0">${fav?'★ Saved':'☆ Favourite'}</button>`;
+  row.querySelector('#pr-fav').onclick = async () => {
+    await _toggleFav(p);
+    if (onFavChange) onFavChange();
+  };
+  return row;
+}
+
+// ── Profile tab ─────────────────────────────────────────────────
+
+function _parseAvatarData(raw) {
+  if (!raw) return null;
+  if (typeof raw === 'string') { try { return JSON.parse(raw); } catch(e) { return null; } }
+  return raw;
+}
+
+function renderProfile(c) {
+  let _pendingAvatarData = _parseAvatarData(_me.avatar_data);
+
+  c.innerHTML = `
+    <div class="section" style="max-width:480px;display:flex;flex-direction:column;gap:16px">
+      <div style="display:flex;align-items:center;gap:14px">
+        <div id="prof-av">${renderAvatar(_me, 54)}</div>
+        <div>
+          <div style="font-weight:700;font-size:1.1rem">${esc(_me.display_name)}</div>
+          <div style="font-size:.85rem;color:var(--fg2)">@${esc(_me.username)}</div>
+        </div>
+      </div>
+      <div class="card" style="padding:16px;display:flex;flex-direction:column;gap:12px">
+        <div style="font-weight:600;font-size:13px">Edit profile</div>
+        <button class="btn btn-secondary" id="ef-avatar" style="display:flex;align-items:center;gap:10px;padding:8px 12px;font-weight:500;font-size:13px">
+          <span id="ef-av-preview"></span>
+          <span>Edit Avatar</span>
+        </button>
+        <input class="inp" id="ef-dname" placeholder="Display name" value="${esc(_me.display_name)}">
+        <input class="inp" id="ef-pass"  type="password" placeholder="New password (leave blank to keep)">
+        <div class="err" id="ef-err"></div>
+        <button class="btn btn-primary" id="ef-save">Save changes</button>
+      </div>
+    </div>`;
+
+  const updatePreview = () => {
+    c.querySelector('#ef-av-preview').innerHTML = _pendingAvatarData
+      ? GHAvatar.avatarSvg(_pendingAvatarData, 28)
+      : renderAvatar(_me, 28);
+    c.querySelector('#prof-av').innerHTML = _pendingAvatarData
+      ? GHAvatar.avatarSvg(_pendingAvatarData, 54)
+      : renderAvatar(_me, 54);
+  };
+  updatePreview();
+
+  c.querySelector('#ef-avatar').onclick = () => {
+    GHAvatar.showBuilder(_pendingAvatarData, _me.avatar_color, data => {
+      _pendingAvatarData = _parseAvatarData(data);
+      updatePreview();
+    });
+  };
+
+  c.querySelector('#ef-save').onclick = async () => {
+    const dn   = c.querySelector('#ef-dname').value.trim();
+    const pw   = c.querySelector('#ef-pass').value;
+    const errEl = c.querySelector('#ef-err');
+    if (!dn) { errEl.textContent = 'Display name required'; return; }
+    c.querySelector('#ef-save').disabled = true;
+    errEl.textContent = '';
+
+    const svgStr = _pendingAvatarData ? GHAvatar.avatarSvg(_pendingAvatarData, 80) : null;
+    const body = { display_name: dn, avatar_data: _pendingAvatarData ? JSON.stringify(_pendingAvatarData) : null, avatar_svg: svgStr };
+    if (pw) body.password = pw;
+
+    const r = await fetch(BASE + '/me', {
+      method: 'PUT',
+      headers: {'Content-Type':'application/json','X-Pub-Token':_token},
+      body: JSON.stringify(body)
+    });
+    if (r.ok) {
+      _me.display_name = dn;
+      _me.avatar_data  = _pendingAvatarData;
+      _me.avatar_svg   = svgStr;
+      window.MvmLayout && MvmLayout.refresh();
+      errEl.style.color = 'var(--green)';
+      errEl.textContent = 'Saved!';
+      setTimeout(() => { if(errEl) errEl.textContent=''; }, 2000);
+    } else {
+      const d = await r.json().catch(()=>({}));
+      errEl.style.color = 'var(--red)';
+      errEl.textContent = d.detail || 'Error saving';
+    }
+    c.querySelector('#ef-save').disabled = false;
+  };
+}
+
+// ── Avatar helper ───────────────────────────────────────────────
+
+function renderAvatar(u, size) {
+  if (u && u.avatar_svg) {
+    return u.avatar_svg.replace(/width="\d+"/, `width="${size}"`).replace(/height="\d+"/, `height="${size}"`);
+  }
+  const color = esc(u?.avatar_color || '#585b70');
+  const letter = esc((u?.display_name?.[0] || '?').toUpperCase());
+  return `<div class="avatar" style="width:${size}px;height:${size}px;font-size:${Math.round(size*0.45)}px;background:${color}">${letter}</div>`;
+}
+
+boot();
+</script>
+</body>
+</html>

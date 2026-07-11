@@ -15,7 +15,7 @@ Exports (used by other modules via sys.modules["backend.apphub"]):
 import hashlib, os, secrets, sqlite3, sys, uuid
 from datetime import datetime, timezone, timedelta
 from fastapi import APIRouter, Depends, HTTPException, Header
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse, HTMLResponse
 from pydantic import BaseModel
 from typing import Optional
 
@@ -23,7 +23,10 @@ get_current_session = sys.modules["backend.auth"].get_current_session
 
 TOKEN_DAYS = 30
 
-_DB_PATH = os.path.join(os.path.dirname(__file__), "..", "apps", "apphub", "data.db")
+_DB_PATH = os.path.join(os.path.dirname(__file__), "apphub_data", "data.db")
+
+# Display name/icon for core system apps that have no manifest.json.
+_CORE_APP_META = {"apphub": {"name": "Apps Hub", "icon": "🧩"}}
 
 
 def _db():
@@ -79,9 +82,11 @@ def is_app_public(app_id: str) -> bool:
 
 
 def _detect_public_apps() -> list:
-    """Scan backend/apps/ for directories with public.py — these are public-capable."""
+    """Scan backend/apps/ for directories with public.py — these are public-capable.
+    apphub's own public page is core-wired (backend/apphub_pub/, not under backend/apps/),
+    so include it explicitly."""
     base = os.path.join(os.path.dirname(__file__), "apps")
-    result = []
+    result = ["apphub"]
     if not os.path.isdir(base):
         return result
     for app_id in sorted(os.listdir(base)):
@@ -459,10 +464,11 @@ async def list_public_apps_admin(session=Depends(get_current_session)):
             m = json.load(open(mpath)) if os.path.isfile(mpath) else {}
         except Exception:
             m = {}
+        meta = _CORE_APP_META.get(app_id, {})
         result.append({
             "id":      app_id,
-            "name":    m.get("name", app_id),
-            "icon":    m.get("icon", "📦"),
+            "name":    m.get("name") or meta.get("name", app_id),
+            "icon":    m.get("icon") or meta.get("icon", "📦"),
             "enabled": bool(rows.get(app_id, 0)),
         })
     return JSONResponse(result)
@@ -571,3 +577,47 @@ async def get_stats_admin(session=Depends(get_current_session)):
 
 router.include_router(_admin)
 router.include_router(_pub)
+
+
+# ── Public page (served at /pub/apphub/) ───────────────────────────
+# Core-wired: assets live in backend/apphub_pub/ and this router is mounted
+# directly in main.py at prefix /pub/apphub (not via the generic public_loader,
+# which only scans backend/apps/). This is what makes apphub a core system app
+# with all its files under backend/ instead of the ignored apps/ folders.
+
+_PUB_DIR = os.path.join(os.path.dirname(__file__), "apphub_pub")
+
+public_page_router = APIRouter()
+
+
+def _apphub_private_page():
+    return HTMLResponse("""<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Apps Hub</title>
+<style>body{font-family:system-ui,sans-serif;display:flex;align-items:center;justify-content:center;
+height:100vh;margin:0;background:#1e1e2e;color:#a6adc8;flex-direction:column;gap:12px}
+.icon{font-size:3rem}.msg{font-size:1.1rem;font-weight:700;color:#cdd6f4}
+.sub{font-size:.9rem;color:#6c7086}</style>
+</head><body>
+<div class="icon">🔒</div>
+<div class="msg">Apps Hub is private</div>
+<div class="sub">Access is not available to the public.</div>
+</body></html>""", status_code=403)
+
+
+@public_page_router.get("/")
+async def _apphub_public_index():
+    if not is_app_public("apphub"):
+        return _apphub_private_page()
+    return FileResponse(os.path.join(_PUB_DIR, "index.html"))
+
+
+@public_page_router.get("/avatar.js")
+async def _apphub_avatar_js():
+    return FileResponse(os.path.join(_PUB_DIR, "avatar.js"),
+                        media_type="application/javascript")
+
+
+@public_page_router.get("/layout.js")
+async def _apphub_layout_js():
+    return FileResponse(os.path.join(_PUB_DIR, "layout.js"),
+                        media_type="application/javascript")

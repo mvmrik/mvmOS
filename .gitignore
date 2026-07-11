@@ -13,4 +13,5 @@ CLAUDE.md
 TODO.md
 *.db
 backend/app-backends/
+backend/apphub_data/
 error-reports/
