@@ -55,7 +55,7 @@ const Notifications = (() => {
           const list = body.querySelector('#nf-list');
           list.innerHTML = `<div style="padding:20px;color:var(--text-dim);font-size:.85rem">…</div>`;
           const res = await fetch('/api/notifications', { headers: mvmOS._pubHeaders() }).catch(() => null);
-          if (!res || !res.ok) { list.innerHTML = `<div style="padding:20px;color:#ef4444">Error loading</div>`; return; }
+          if (!res || !res.ok) { list.innerHTML = `<div style="padding:20px;color:#ef4444">${_t('notif_error_loading')}</div>`; return; }
           all = await res.json();
           render();
         }

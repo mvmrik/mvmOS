@@ -4,6 +4,7 @@
 // Reports go to https://mvmos.mvmrik.com/report (independent receiver).
 
 window.ErrorReporter = (() => {
+  const t = window.t || (k => k);
   const REPORT_URL = 'https://mvmos.mvmrik.com/report';
   const _buf = [];        // circular buffer, max 20 error entries
   const _fetchLog = [];   // last 10 fetch requests
@@ -111,23 +112,23 @@ window.ErrorReporter = (() => {
     overlay.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.65);display:flex;align-items:center;justify-content:center;padding:16px;box-sizing:border-box';
     overlay.innerHTML = `
       <div style="background:var(--surface,#1e1e2e);border:1px solid var(--border,#313244);border-radius:10px;padding:24px;max-width:480px;width:100%;box-shadow:0 8px 32px rgba(0,0,0,.5);color:var(--text,#cdd6f4);font-family:inherit">
-        <div style="font-size:1.1rem;font-weight:700;margin-bottom:6px">⚠ Something went wrong</div>
-        <div style="font-size:.85rem;color:var(--text-dim,#a6adc8);margin-bottom:16px">An error occurred. Would you like to send a report to help fix it?</div>
+        <div style="font-size:1.1rem;font-weight:700;margin-bottom:6px">${t('errrep_title')}</div>
+        <div style="font-size:.85rem;color:var(--text-dim,#a6adc8);margin-bottom:16px">${t('errrep_subtitle')}</div>
 
         <details style="margin-bottom:16px;background:var(--surface2,#313244);border:1px solid var(--border,#45475a);border-radius:6px;padding:8px 12px;font-size:.8rem">
-          <summary style="cursor:pointer;color:var(--text-dim,#a6adc8);user-select:none">Details</summary>
+          <summary style="cursor:pointer;color:var(--text-dim,#a6adc8);user-select:none">${t('errrep_details')}</summary>
           <div style="margin-top:8px;display:flex;flex-direction:column;gap:4px">
-            <div><b>Message:</b> ${esc(entry.message)}</div>
-            <div><b>Time:</b> ${esc(entry.time)}</div>
-            <div><b>Version:</b> ${esc(_version())}</div>
-            <div><b>Browser:</b> ${esc(browser)}</div>
-            <div><b>OS:</b> ${esc(os)}</div>
-            <div><b>Screen:</b> ${esc(screen_)}</div>
-            ${entry.status ? `<div><b>HTTP status:</b> ${esc(entry.status)}</div>` : ''}
-            ${entry.url ? `<div style="word-break:break-all"><b>URL:</b> ${esc(entry.url)}</div>` : ''}
-            ${activeApps ? `<div><b>Open apps:</b> ${esc(activeApps)}</div>` : ''}
+            <div><b>${t('errrep_message')}</b> ${esc(entry.message)}</div>
+            <div><b>${t('errrep_time')}</b> ${esc(entry.time)}</div>
+            <div><b>${t('errrep_version')}</b> ${esc(_version())}</div>
+            <div><b>${t('errrep_browser')}</b> ${esc(browser)}</div>
+            <div><b>${t('errrep_os')}</b> ${esc(os)}</div>
+            <div><b>${t('errrep_screen')}</b> ${esc(screen_)}</div>
+            ${entry.status ? `<div><b>${t('errrep_http_status')}</b> ${esc(entry.status)}</div>` : ''}
+            ${entry.url ? `<div style="word-break:break-all"><b>${t('errrep_url')}</b> ${esc(entry.url)}</div>` : ''}
+            ${activeApps ? `<div><b>${t('errrep_open_apps')}</b> ${esc(activeApps)}</div>` : ''}
             ${recentReqs.length ? `
-              <div style="margin-top:4px"><b>Recent requests:</b></div>
+              <div style="margin-top:4px"><b>${t('errrep_recent_requests')}</b></div>
               ${recentReqs.map(r => `<div style="font-size:.72rem;color:var(--text-dim,#a6adc8);word-break:break-all">${esc(r.status)} ${esc(r.url)}</div>`).join('')}
             ` : ''}
             ${entry.stack ? `<pre style="margin:6px 0 0;overflow:auto;font-size:.73rem;white-space:pre-wrap;max-height:110px">${esc(entry.stack.slice(0,600))}</pre>` : ''}
@@ -136,12 +137,12 @@ window.ErrorReporter = (() => {
 
         <label style="display:flex;align-items:center;gap:8px;margin-bottom:16px;font-size:.83rem;cursor:pointer;color:var(--text-dim,#a6adc8)">
           <input type="checkbox" id="err-no-more" style="cursor:pointer">
-          Don't show this again
+          ${t('errrep_dont_show_again')}
         </label>
 
         <div style="display:flex;gap:10px;justify-content:flex-end">
-          <button id="err-dont" style="padding:7px 16px;background:var(--surface2,#313244);border:1px solid var(--border,#45475a);border-radius:6px;color:var(--text,#cdd6f4);cursor:pointer;font-size:.85rem;font-family:inherit">Don't send</button>
-          <button id="err-send" style="padding:7px 16px;background:var(--accent,#6366f1);border:none;border-radius:6px;color:#fff;cursor:pointer;font-size:.85rem;font-weight:600;font-family:inherit">Send report</button>
+          <button id="err-dont" style="padding:7px 16px;background:var(--surface2,#313244);border:1px solid var(--border,#45475a);border-radius:6px;color:var(--text,#cdd6f4);cursor:pointer;font-size:.85rem;font-family:inherit">${t('errrep_dont_send')}</button>
+          <button id="err-send" style="padding:7px 16px;background:var(--accent,#6366f1);border:none;border-radius:6px;color:#fff;cursor:pointer;font-size:.85rem;font-weight:600;font-family:inherit">${t('errrep_send_report')}</button>
         </div>
       </div>`;
 

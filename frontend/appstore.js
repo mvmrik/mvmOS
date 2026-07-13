@@ -453,7 +453,7 @@ const AppStore = (() => {
       : `store_id=${store.id}&category_id=${encodeURIComponent(cat.id)}`;
     const res = await fetch(`/api/plugins/category-apps?${params}`);
     const apps = await res.json();
-    if (!Array.isArray(apps)) { list.innerHTML = `<div class="as-loading">Error: ${apps.error || 'Invalid response'}</div>`; return; }
+    if (!Array.isArray(apps)) { list.innerHTML = `<div class="as-loading">${t('as_error')}: ${apps.error || t('as_invalid_response')}</div>`; return; }
 
     // back button
     const backBar = document.createElement('div');
@@ -523,11 +523,11 @@ const AppStore = (() => {
         <div class="as-pkg-info" style="flex:1">
           <div class="as-pkg-top">
             <span class="as-pkg-name">${store.official ? '⚡' : '📦'} ${store.name}</span>
-            ${store.official ? '<span class="as-installed-badge">Official</span>' : ''}
+            ${store.official ? `<span class="as-installed-badge">${t('appstore_official')}</span>` : ''}
           </div>
           <span class="as-pkg-desc" style="font-family:monospace;font-size:.73rem">${store.manifest_url}</span>
         </div>
-        ${!store.official ? `<button class="s-btn s-btn-sm s-btn-danger as-store-remove" data-id="${store.id}" style="flex-shrink:0;margin-left:8px">Remove</button>` : ''}
+        ${!store.official ? `<button class="s-btn s-btn-sm s-btn-danger as-store-remove" data-id="${store.id}" style="flex-shrink:0;margin-left:8px">${t('appstore_remove')}</button>` : ''}
       `;
       row.querySelector('.as-store-remove')?.addEventListener('click', async e => {
         if (!confirm(`Remove store "${store.name}"?`)) return;
@@ -572,7 +572,7 @@ const AppStore = (() => {
             <span class="as-pkg-name">${app.icon} ${app.name}</span>
             <span class="as-cat-badge as-cat-sm">${app.category}</span>
             ${app.installed ? `<span class="as-installed-badge">${t('appstore_installed_badge')}</span>` : ''}
-            ${app.update_available ? '<span class="as-update-badge">Update available</span>' : ''}
+            ${app.update_available ? `<span class="as-update-badge">${t('appstore_update_badge')}</span>` : ''}
           </div>
           <span class="as-pkg-desc">${app.description || ''}</span>
         </div>
@@ -645,7 +645,7 @@ const AppStore = (() => {
       });
       row.querySelector('.as-mvmos-update')?.addEventListener('click', async e => {
         e.target.dataset.orig = t('um_update_btn');
-        await doInstall(JSON.parse(e.target.dataset.app), e.target, 'Updating…');
+        await doInstall(JSON.parse(e.target.dataset.app), e.target, t('um_updating'));
       });
       row.querySelector('.as-mvmos-settings')?.addEventListener('click', e => {
         _openAppSettings(body, e.target.dataset.id, app);
@@ -882,7 +882,7 @@ const AppStore = (() => {
           <div class="as-pkg-top">
             <span class="as-pkg-name">${pkg.name}</span>
             ${pkg.section ? `<span class="as-cat-badge as-cat-sm">${pkg.section}</span>` : ''}
-            ${pkg.installed ? `<span class="as-installed-badge">Installed</span>` : ''}
+            ${pkg.installed ? `<span class="as-installed-badge">${t('as_installed')}</span>` : ''}
           </div>
           <span class="as-pkg-desc">${pkg.description || ''}</span>
         </div>
@@ -925,8 +925,8 @@ const AppStore = (() => {
   function renderDetailBtn(body, pkgName, isInstalled, row) {
     const actions = body.querySelector('#as-detail-actions');
     actions.innerHTML = isInstalled
-      ? `<button class="s-btn s-btn-full s-btn-danger as-remove-btn" data-pkg="${pkgName}">🗑 Remove</button>`
-      : `<button class="s-btn s-btn-full as-install-btn" data-pkg="${pkgName}">⬇ Install</button>`;
+      ? `<button class="s-btn s-btn-full s-btn-danger as-remove-btn" data-pkg="${pkgName}">🗑 ${t('appstore_remove')}</button>`
+      : `<button class="s-btn s-btn-full as-install-btn" data-pkg="${pkgName}">⬇ ${t('appstore_install')}</button>`;
     actions.querySelector('.as-install-btn')?.addEventListener('click', async e => {
       await runApt(body, 'install', e.target.dataset.pkg);
       if (row) {
@@ -1189,11 +1189,11 @@ const AppStore = (() => {
         <div class="as-pkg-info" style="flex:1">
           <div class="as-pkg-top">
             <span class="as-pkg-name">${store.official ? '⚡' : '📦'} ${store.name}</span>
-            ${store.official ? '<span class="as-installed-badge">Official</span>' : ''}
+            ${store.official ? `<span class="as-installed-badge">${t('appstore_official')}</span>` : ''}
           </div>
           <span class="as-pkg-desc" style="font-family:monospace;font-size:.73rem">${store.manifest_url}</span>
         </div>
-        ${!store.official ? `<button class="s-btn s-btn-sm s-btn-danger" data-id="${store.id}">Remove</button>` : ''}
+        ${!store.official ? `<button class="s-btn s-btn-sm s-btn-danger" data-id="${store.id}">${t('appstore_remove')}</button>` : ''}
       `;
       row.querySelector('[data-id]')?.addEventListener('click', async e => {
         if (!confirm(`Remove store "${store.name}"?`)) return;
@@ -1238,7 +1238,7 @@ const AppStore = (() => {
             <span class="as-cat-badge as-cat-sm">${w.category}</span>
             ${w.widget_type ? `<span class="as-cat-badge as-cat-sm" style="background:#89b4fa20;color:#89b4fa">${w.widget_type}</span>` : ''}
             ${w.installed ? `<span class="as-installed-badge">${t('appstore_installed_badge')}</span>` : ''}
-            ${w.update_available ? '<span class="as-update-badge">Update</span>' : ''}
+            ${w.update_available ? `<span class="as-update-badge">${t('appstore_update')}</span>` : ''}
           </div>
           <span class="as-pkg-desc">${w.description || ''}</span>
         </div>
@@ -1275,7 +1275,7 @@ const AppStore = (() => {
         doWidgetInstall(JSON.parse(e.target.dataset.widget), e.target, t('um_installing'));
       });
       row.querySelector('.ws-update')?.addEventListener('click', e => {
-        doWidgetInstall(JSON.parse(e.target.dataset.widget), e.target, 'Updating…');
+        doWidgetInstall(JSON.parse(e.target.dataset.widget), e.target, t('um_updating'));
       });
       row.querySelector('.ws-remove')?.addEventListener('click', async e => {
         const btn = e.target;
@@ -1580,10 +1580,10 @@ const AppStore = (() => {
           <div class="as-pkg-ver">${theme.version} · ${theme.layout}</div>
         </div>
         <div class="as-pkg-actions">
-          ${isActive ? '<span class="as-installed-badge">✓ Active</span>' :
-            inst ? `<button class="s-btn s-btn-sm ts-activate" data-id="${theme.id}">Activate</button>
+          ${isActive ? `<span class="as-installed-badge">${t('as_theme_active')}</span>` :
+            inst ? `<button class="s-btn s-btn-sm ts-activate" data-id="${theme.id}">${t('appstore_activate')}</button>
                     <button class="s-btn-sm s-btn-danger ts-remove" data-id="${theme.id}">✕</button>` :
-            `<button class="s-btn ts-install" data-theme='${JSON.stringify({...theme, store_id: storeId ?? null})}'>Install</button>`
+            `<button class="s-btn ts-install" data-theme='${JSON.stringify({...theme, store_id: storeId ?? null})}'>${t('appstore_install')}</button>`
           }
         </div>
       `;
@@ -1691,8 +1691,8 @@ const AppStore = (() => {
           <div class="as-pkg-desc" style="font-family:monospace;font-size:.72rem">${s.manifest_url}</div>
         </div>
         <div class="as-pkg-actions">
-          ${s.official ? '<span class="as-installed-badge">Official</span>' :
-            `<button class="s-btn-sm s-btn-danger ts-del-store" data-id="${s.id}">✕ Remove</button>`}
+          ${s.official ? `<span class="as-installed-badge">${t('appstore_official')}</span>` :
+            `<button class="s-btn-sm s-btn-danger ts-del-store" data-id="${s.id}">✕ ${t('appstore_remove')}</button>`}
         </div>
       `;
       row.querySelector('.ts-del-store')?.addEventListener('click', async e => {
@@ -1723,7 +1723,7 @@ const AppStore = (() => {
       loadThemeStoreTabs(body);
     } else {
       const d = await res.json();
-      err.textContent = d.detail || 'Error';
+      err.textContent = d.detail || t('as_error');
     }
   }
 

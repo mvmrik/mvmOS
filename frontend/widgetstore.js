@@ -1,6 +1,7 @@
 // ── Widget Store ──────────────────────────────────────────────────────────────
 
 const WidgetStore = (() => {
+  const t = window.t || (k => k);
 
   function openWindow(filterType) {
     const existing = document.querySelector('.window[data-win-id="widgetstore"]');
@@ -14,7 +15,7 @@ const WidgetStore = (() => {
     }
     Desktop.createWindow({
       id: 'widgetstore',
-      title: '🔲 Widget Store',
+      title: '🔲 ' + t('ws_title'),
       width: 700,
       height: 500,
       onMount(body) { render(body, filterType || ''); },
@@ -37,40 +38,40 @@ const WidgetStore = (() => {
     body.innerHTML = `
       <div class="as-wrap">
         <nav class="as-sidebar">
-          <div class="as-sidebar-group-label">Widget Stores</div>
+          <div class="as-sidebar-group-label">${t('ws_stores_group_label')}</div>
           <div id="ws-store-tabs"></div>
           <div class="as-sidebar-sep"></div>
-          <div class="as-tab" data-tab="installed">✅ Installed</div>
+          <div class="as-tab" data-tab="installed">${t('ws_tab_installed')}</div>
           <div class="as-sidebar-sep"></div>
-          <div class="as-tab" data-tab="stores">🔗 Stores</div>
+          <div class="as-tab" data-tab="stores">${t('ws_tab_stores')}</div>
         </nav>
         <div class="as-main">
 
           <!-- Installed widgets -->
           <div class="as-panel" id="wsp-installed">
             <div class="as-toolbar">
-              <span style="font-size:.8rem;color:var(--text-dim);flex:1">Installed widgets</span>
+              <span style="font-size:.8rem;color:var(--text-dim);flex:1">${t('ws_installed_widgets')}</span>
               <button class="s-btn" id="ws-installed-refresh">↺</button>
             </div>
-            <div class="as-list" id="ws-installed-list"><div class="as-loading">Loading…</div></div>
+            <div class="as-list" id="ws-installed-list"><div class="as-loading">${t('ws_loading')}</div></div>
           </div>
 
           <!-- Stores management -->
           <div class="as-panel" id="wsp-stores">
             <div class="as-toolbar">
-              <span style="font-size:.8rem;color:var(--text-dim);flex:1">Widget store sources</span>
-              <button class="s-btn" id="ws-stores-add-btn">+ Add store</button>
+              <span style="font-size:.8rem;color:var(--text-dim);flex:1">${t('ws_store_sources')}</span>
+              <button class="s-btn" id="ws-stores-add-btn">${t('ws_add_store')}</button>
             </div>
             <div id="ws-add-store-form" style="display:none;flex-direction:column;gap:6px;padding:10px 12px;border-bottom:1px solid var(--border)">
-              <input class="as-filter" id="ws-store-name" placeholder="Store name">
-              <input class="as-filter" id="ws-store-url" placeholder="manifest.json URL">
+              <input class="as-filter" id="ws-store-name" placeholder="${t('ws_store_name_ph')}">
+              <input class="as-filter" id="ws-store-url" placeholder="${t('ws_store_url_ph')}">
               <div style="display:flex;gap:6px">
-                <button class="s-btn" id="ws-store-submit">Add</button>
-                <button class="s-btn-sm" id="ws-store-cancel">Cancel</button>
+                <button class="s-btn" id="ws-store-submit">${t('ws_add')}</button>
+                <button class="s-btn-sm" id="ws-store-cancel">${t('ws_cancel')}</button>
                 <span id="ws-store-err" style="font-size:.78rem;color:#f38ba8;align-self:center"></span>
               </div>
             </div>
-            <div class="as-list" id="ws-stores-list"><div class="as-loading">Loading…</div></div>
+            <div class="as-list" id="ws-stores-list"><div class="as-loading">${t('ws_loading')}</div></div>
           </div>
 
           <!-- Dynamic store panels -->
@@ -134,14 +135,14 @@ const WidgetStore = (() => {
         panel.id = panelId;
         panel.innerHTML = `
           <div class="as-toolbar" id="ws-filter-bar-${store.id}" style="gap:6px;flex-wrap:wrap">
-            <span style="font-size:.78rem;color:var(--text-dim);margin-right:4px">Show:</span>
+            <span style="font-size:.78rem;color:var(--text-dim);margin-right:4px">${t('ws_show_label')}</span>
             ${['','desktop','taskbar'].map(v => `
               <button class="s-btn-sm ws-wtype-btn${v===filterType ? ' active' : ''}" data-wtype="${v}"
                 style="${v===filterType ? 'background:var(--accent);color:#fff;border-color:var(--accent)' : ''}"
-              >${v === '' ? 'All' : v.charAt(0).toUpperCase() + v.slice(1)}</button>
+              >${v === '' ? t('ws_filter_all') : v.charAt(0).toUpperCase() + v.slice(1)}</button>
             `).join('')}
           </div>
-          <div class="as-list" id="ws-store-list-${store.id}"><div class="as-loading">Loading…</div></div>
+          <div class="as-list" id="ws-store-list-${store.id}"><div class="as-loading">${t('ws_loading')}</div></div>
         `;
         body.querySelector('.as-main').appendChild(panel);
 
@@ -204,14 +205,14 @@ const WidgetStore = (() => {
   async function loadStoreCategories(body, store, filterType) {
     const list = body.querySelector(`#ws-store-list-${store.id}`);
     if (!list) return;
-    list.innerHTML = '<div class="as-loading">Loading…</div>';
+    list.innerHTML = `<div class="as-loading">${t('ws_loading')}</div>`;
     const params = filterType ? `store_id=${store.id}&widget_type=${filterType}` : `store_id=${store.id}`;
     const res = await fetch(`/api/widgets/categories?${params}`);
     const data = await res.json();
-    if (data.error) { list.innerHTML = `<div class="as-loading">Error: ${data.error}</div>`; return; }
+    if (data.error) { list.innerHTML = `<div class="as-loading">${t('ws_error_prefix')}${data.error}</div>`; return; }
 
     const cats = data.categories || [];
-    if (!cats.length) { list.innerHTML = '<div class="as-loading">No widgets available.</div>'; return; }
+    if (!cats.length) { list.innerHTML = `<div class="as-loading">${t('ws_no_widgets_available')}</div>`; return; }
 
     list.innerHTML = '';
     const grid = document.createElement('div');
@@ -222,7 +223,7 @@ const WidgetStore = (() => {
       card.innerHTML = `
         <div style="font-size:1.6rem;margin-bottom:6px">${cat.icon || '🔲'}</div>
         <div style="font-weight:600;color:var(--text);font-size:.83rem">${cat.name}</div>
-        <div style="color:var(--text-dim);font-size:.75rem;margin-top:2px">${cat.count || ''} widgets</div>
+        <div style="color:var(--text-dim);font-size:.75rem;margin-top:2px">${cat.count || ''} ${t('ws_widgets_unit')}</div>
         ${cat.widget_type ? `<div style="font-size:.7rem;color:var(--accent);margin-top:4px">${cat.widget_type}</div>` : ''}
       `;
       card.addEventListener('mouseenter', () => card.style.background = 'var(--surface)');
@@ -235,13 +236,13 @@ const WidgetStore = (() => {
 
   // ── Category widgets ──────────────────────────────────────────────────────
   async function loadCategoryWidgets(body, store, cat, list) {
-    list.innerHTML = '<div class="as-loading">Loading…</div>';
+    list.innerHTML = `<div class="as-loading">${t('ws_loading')}</div>`;
     const params = cat.manifest_url
       ? `category_url=${encodeURIComponent(cat.manifest_url)}`
       : `store_id=${store.id}&category_id=${encodeURIComponent(cat.id)}`;
     const res = await fetch(`/api/widgets/category-widgets?${params}`);
     const widgets = await res.json();
-    if (widgets.error) { list.innerHTML = `<div class="as-loading">Error: ${widgets.error}</div>`; return; }
+    if (widgets.error) { list.innerHTML = `<div class="as-loading">${t('ws_error_prefix')}${widgets.error}</div>`; return; }
 
     const backBar = document.createElement('div');
     backBar.className = 'as-toolbar';
@@ -259,17 +260,17 @@ const WidgetStore = (() => {
   // ── Installed ─────────────────────────────────────────────────────────────
   async function loadInstalled(body) {
     const list = body.querySelector('#ws-installed-list');
-    list.innerHTML = '<div class="as-loading">Loading…</div>';
+    list.innerHTML = `<div class="as-loading">${t('ws_loading')}</div>`;
     const res = await fetch('/api/widgets');
     const widgets = await res.json();
-    if (!widgets.length) { list.innerHTML = '<div class="as-loading">No widgets installed.</div>'; return; }
+    if (!widgets.length) { list.innerHTML = `<div class="as-loading">${t('ws_no_widgets_installed')}</div>`; return; }
     renderWidgets(list, widgets.map(w => ({ ...w, installed: true })), body);
   }
 
   // ── Stores management ─────────────────────────────────────────────────────
   async function loadStores(body) {
     const list = body.querySelector('#ws-stores-list');
-    list.innerHTML = '<div class="as-loading">Loading…</div>';
+    list.innerHTML = `<div class="as-loading">${t('ws_loading')}</div>`;
     const res = await fetch('/api/widgets/stores');
     const stores = await res.json();
     list.innerHTML = '';
@@ -280,14 +281,14 @@ const WidgetStore = (() => {
         <div class="as-pkg-info" style="flex:1">
           <div class="as-pkg-top">
             <span class="as-pkg-name">${store.official ? '⚡' : '📦'} ${store.name}</span>
-            ${store.official ? '<span class="as-installed-badge">Official</span>' : ''}
+            ${store.official ? `<span class="as-installed-badge">${t('ws_official_badge')}</span>` : ''}
           </div>
           <span class="as-pkg-desc" style="font-family:monospace;font-size:.73rem">${store.manifest_url}</span>
         </div>
-        ${!store.official ? `<button class="s-btn s-btn-sm s-btn-danger" data-id="${store.id}">Remove</button>` : ''}
+        ${!store.official ? `<button class="s-btn s-btn-sm s-btn-danger" data-id="${store.id}">${t('ws_remove')}</button>` : ''}
       `;
       row.querySelector('[data-id]')?.addEventListener('click', async e => {
-        if (!confirm(`Remove store "${store.name}"?`)) return;
+        if (!confirm(t('ws_remove_store_confirm', { name: store.name }))) return;
         await fetch(`/api/widgets/stores/${store.id}`, { method: 'DELETE' });
         loadStores(body);
         loadStoreTabs(body);
@@ -300,8 +301,8 @@ const WidgetStore = (() => {
     const name = body.querySelector('#ws-store-name').value.trim();
     const url  = body.querySelector('#ws-store-url').value.trim();
     const err  = body.querySelector('#ws-store-err');
-    if (!name || !url) { err.textContent = 'Name and URL required.'; return; }
-    err.textContent = 'Checking…';
+    if (!name || !url) { err.textContent = t('ws_name_url_required'); return; }
+    err.textContent = t('ws_checking');
     const res = await fetch('/api/widgets/stores', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -329,15 +330,15 @@ const WidgetStore = (() => {
             <span class="as-pkg-name">${w.icon} ${w.name}</span>
             <span class="as-cat-badge as-cat-sm">${w.category}</span>
             ${w.widget_type ? `<span class="as-cat-badge as-cat-sm" style="background:#89b4fa20;color:#89b4fa">${w.widget_type}</span>` : ''}
-            ${w.installed ? '<span class="as-installed-badge">Installed</span>' : ''}
-            ${w.update_available ? '<span class="as-update-badge">Update</span>' : ''}
+            ${w.installed ? `<span class="as-installed-badge">${t('ws_installed_badge')}</span>` : ''}
+            ${w.update_available ? `<span class="as-update-badge">${t('ws_update_badge')}</span>` : ''}
           </div>
           <span class="as-pkg-desc">${w.description || ''}</span>
         </div>
         <div style="display:flex;align-items:center;gap:6px;padding-left:10px;flex-shrink:0">
           ${w.installed
-            ? `<button class="s-btn s-btn-sm s-btn-danger ws-remove" data-id="${w.id}">Remove</button>`
-            : `<button class="s-btn s-btn-sm ws-install" data-widget='${JSON.stringify(w)}'>Install</button>`}
+            ? `<button class="s-btn s-btn-sm s-btn-danger ws-remove" data-id="${w.id}">${t('ws_remove')}</button>`
+            : `<button class="s-btn s-btn-sm ws-install" data-widget='${JSON.stringify(w)}'>${t('ws_install')}</button>`}
         </div>
       `;
 
@@ -345,9 +346,9 @@ const WidgetStore = (() => {
         const btn = e.target;
         const data = JSON.parse(btn.dataset.widget);
         if (!data.official) {
-          if (!confirm(`⚠️ Third-party widget\n\n"${data.name}" is from an unofficial store. Install anyway?`)) return;
+          if (!confirm(t('ws_third_party_confirm', { name: data.name }))) return;
         }
-        btn.disabled = true; btn.textContent = 'Installing…';
+        btn.disabled = true; btn.textContent = t('ws_installing');
         const res = await fetch('/api/widgets/install', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -358,14 +359,14 @@ const WidgetStore = (() => {
           await mvmOS._loadWidget(data.id);
           body._ws.refreshCurrent?.();
         } else {
-          btn.disabled = false; btn.textContent = 'Install';
-          alert('Failed: ' + (result.error || 'unknown'));
+          btn.disabled = false; btn.textContent = t('ws_install');
+          alert(t('ws_install_failed', { error: result.error || t('ws_install_failed_unknown') }));
         }
       });
 
       row.querySelector('.ws-remove')?.addEventListener('click', async e => {
         const btn = e.target;
-        btn.disabled = true; btn.textContent = 'Removing…';
+        btn.disabled = true; btn.textContent = t('ws_removing');
         await fetch(`/api/widgets/${btn.dataset.id}`, { method: 'DELETE' });
         mvmOS._removeWidget(btn.dataset.id);
         body._ws.refreshCurrent?.();

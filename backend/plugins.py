@@ -412,7 +412,11 @@ async def list_plugins(session=Depends(get_current_session)):
         except Exception:
             item["settings"] = []
             item["replaces_widget"] = None
-            item["public_url"] = None
+            # System apps have no manifest.json, so the lookup above always
+            # fails for them — but apphub's public page is core-wired (not
+            # manifest-driven), so it needs a hardcoded public_url or its
+            # desktop window never gets the shared footer's public-page link.
+            item["public_url"] = "/pub/apphub/" if r["id"] == "apphub" else None
         result.append(item)
     return JSONResponse(result)
 

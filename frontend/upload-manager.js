@@ -6,6 +6,7 @@
  *                           fields, noFinalize, onDone, onError, onCancel })
  */
 (function () {
+  const t = window.t || (k => k);
   const CHUNK_SIZE = 80 * 1024 * 1024;
   const WIN_ID = '__upload_manager__';
 
@@ -57,13 +58,13 @@
   function _openWindow(cb) {
     if (_body) {
       // already open — just focus
-      Desktop.createWindow({ id: WIN_ID, title: '↑ Качване', icon: '📤', width: 340, height: 200, onMount: () => {} });
+      Desktop.createWindow({ id: WIN_ID, title: t('upload_window_title'), icon: '📤', width: 340, height: 200, onMount: () => {} });
       cb();
       return;
     }
     Desktop.createWindow({
       id: WIN_ID,
-      title: '↑ Качване',
+      title: t('upload_window_title'),
       icon: '📤',
       width: 340,
       height: 200,
@@ -83,7 +84,7 @@
               <span class="um-speed"></span>
               <span class="um-status"></span>
             </div>
-            <button class="um-stop" style="flex-shrink:0;background:none;border:1px solid var(--surface2,#313244);color:var(--text-muted,#a6adc8);cursor:pointer;border-radius:5px;padding:2px 8px;font-size:11px">■ Stop</button>
+            <button class="um-stop" style="flex-shrink:0;background:none;border:1px solid var(--surface2,#313244);color:var(--text-muted,#a6adc8);cursor:pointer;border-radius:5px;padding:2px 8px;font-size:11px">${t('upload_stop')}</button>
           </div>
           <div class="um-queue" style="display:none;border-top:1px solid var(--surface2,#313244);padding-top:8px;overflow-y:auto;max-height:80px"></div>
         `;
@@ -172,7 +173,7 @@
         }
         task.onCancel && task.onCancel();
         _setSpeed(0);
-        _setStatus('Спряно', '#a6adc8');
+        _setStatus(t('upload_stopped'), '#a6adc8');
         _maybeUnlock();
         setTimeout(() => { _next(); _renderQueue(); }, 1500);
       };
@@ -225,7 +226,7 @@
             try { data = JSON.parse(xhr.responseText); } catch (_) {}
             done(data);
           });
-          xhr.addEventListener('error', () => { if (!cancelled) fail('Network error'); });
+          xhr.addEventListener('error', () => { if (!cancelled) fail(t('upload_network_error')); });
           xhr.send(fd);
         };
         sendChunk();
@@ -256,7 +257,7 @@
       });
       xhr.addEventListener('load', () => {
         if (cancelled) return;
-        if (xhr.status === 413) { fail('Файлът е твърде голям'); return; }
+        if (xhr.status === 413) { fail(t('upload_file_too_large')); return; }
         if (xhr.status >= 400) {
           let msg = `Error ${xhr.status}`;
           try { msg = JSON.parse(xhr.responseText).detail || msg; } catch (_) {}
@@ -266,7 +267,7 @@
         try { data = JSON.parse(xhr.responseText); } catch (_) {}
         done(data);
       });
-      xhr.addEventListener('error', () => { if (!cancelled) fail('Network error'); });
+      xhr.addEventListener('error', () => { if (!cancelled) fail(t('upload_network_error')); });
       xhr.send(fd);
     });
   }
@@ -293,7 +294,7 @@
       if (a.endsWith('/*')) return mime.startsWith(a.slice(0, -1));
       return mime === a;
     });
-    if (!ok) return `Неразрешен тип файл. Позволени: ${accept.join(', ')}`;
+    if (!ok) return t('upload_disallowed_file_type', { types: accept.join(', ') });
     return null;
   }
 

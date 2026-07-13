@@ -1,4 +1,5 @@
 var CodeEditor = (() => {
+  const t = window.t || (k => k);
   let _win = null;
   let _editor = null;
   let _currentFile = null;
@@ -365,7 +366,7 @@ var CodeEditor = (() => {
   }
 
   async function _buildSidebar(sidebar) {
-    sidebar.innerHTML = '<div class="ce-loading">Loading…</div>';
+    sidebar.innerHTML = `<div class="ce-loading">${t('ce_loading')}</div>`;
     try {
       const res = await fetch('/api/files?path=' + encodeURIComponent(_projectDir));
       const data = await res.json();
@@ -404,7 +405,7 @@ var CodeEditor = (() => {
       }
       renderItems(files, sidebar, _projectDir);
     } catch (e) {
-      sidebar.innerHTML = '<div class="ce-loading" style="color:#e05555">Error loading files</div>';
+      sidebar.innerHTML = `<div class="ce-loading" style="color:#e05555">${t('ce_error_loading_files')}</div>`;
     }
   }
 
@@ -420,14 +421,14 @@ var CodeEditor = (() => {
       groups[g].push({ ...h, _i: i });
     });
 
-    let html = `<div class="ce-hints-title">API Reference</div>`;
+    let html = `<div class="ce-hints-title">${t('ce_api_reference')}</div>`;
     for (const [groupName, items] of Object.entries(groups)) {
       html += `<div class="ce-hints-group">${groupName}</div>`;
       html += items.map(h => `
         <div class="ce-hint-item">
           <div class="ce-hint-name">${h.name}</div>
           <div class="ce-hint-desc">${h.desc}</div>
-          <button class="ce-hint-insert s-btn" data-i="${h._i}">Insert</button>
+          <button class="ce-hint-insert s-btn" data-i="${h._i}">${t('ce_insert')}</button>
         </div>`).join('');
     }
     panel.innerHTML = html;
@@ -469,11 +470,11 @@ var CodeEditor = (() => {
         const saveBtn = document.createElement('button');
         saveBtn.className = 's-btn ce-save';
         saveBtn.style.cssText = 'font-size:.75rem;padding:3px 10px;margin-right:4px';
-        saveBtn.textContent = 'Save';
+        saveBtn.textContent = t('ce_save');
         const apiBtn = document.createElement('button');
         apiBtn.className = 's-btn ce-hints-toggle';
         apiBtn.style.cssText = 'font-size:.75rem;padding:3px 10px;margin-right:4px';
-        apiBtn.textContent = 'API';
+        apiBtn.textContent = t('ce_api_button');
         titlebar.querySelector('.window-controls').after(saveBtn, apiBtn);
 
         const ceBody   = body.querySelector('.ce-body');

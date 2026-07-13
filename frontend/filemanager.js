@@ -283,7 +283,7 @@ const FileManager = (() => {
         // Add bookmark button
         const addBtn = document.createElement('div');
         addBtn.className = 'fm-place fm-bookmark-add';
-        addBtn.innerHTML = `<span class="fm-place-icon">＋</span><span>Add Bookmark</span>`;
+        addBtn.innerHTML = `<span class="fm-place-icon">＋</span><span>${t('fm_add_bookmark')}</span>`;
         addBtn.addEventListener('click', () => this._addCurrentAsBookmark());
         this.placesEl.appendChild(addBtn);
 
@@ -657,7 +657,7 @@ const FileManager = (() => {
         }
       });
       if (entries.length === 0) {
-        this.listEl.innerHTML = '<div class="fm-empty">Empty folder</div>';
+        this.listEl.innerHTML = `<div class="fm-empty">${t('fm_empty_folder')}</div>`;
         return;
       }
 
@@ -684,7 +684,7 @@ const FileManager = (() => {
         const permsHtml = prefs.showPerms
           ? `<span class="fm-perms${isRoot ? ' fm-editable' : ''}" title="${isRoot ? t('fm_perms_title') : ''}">${entry.permissions || ''}</span>` : '';
         const ownerHtml = prefs.showOwner
-          ? `<span class="fm-owner${isRoot ? ' fm-editable' : ''}" title="${isRoot ? 'Click to change' : ''}">${entry.owner || ''}${entry.group ? ':'+entry.group : ''}</span>` : '';
+          ? `<span class="fm-owner${isRoot ? ' fm-editable' : ''}" title="${isRoot ? t('fm_perms_title') : ''}">${entry.owner || ''}${entry.group ? ':'+entry.group : ''}</span>` : '';
 
         row.innerHTML = `
           <span class="fm-icon">${icon}</span>
@@ -934,7 +934,7 @@ const FileManager = (() => {
         });
         if (!r.ok) {
           const err = await r.json().catch(() => ({}));
-          this.showError(err.detail || 'Could not move to trash');
+          this.showError(err.detail || t('fm_move_to_trash_failed'));
           return;
         }
       } else {
@@ -1011,7 +1011,7 @@ const FileManager = (() => {
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        alert(err.detail || 'Download failed');
+        alert(err.detail || t('fm_download_failed'));
         return;
       }
       const blob = await res.blob();
@@ -1195,7 +1195,7 @@ const FileManager = (() => {
           const dur = h > 0 ? `${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}` : `${m}:${String(s).padStart(2,'0')}`;
           const el = win.querySelector('#fm-info-extra');
           if (el) el.innerHTML = `<tr style="border-bottom:1px solid var(--border);">
-            <td style="padding:7px 14px;color:var(--text-dim);width:100px;">Duration</td>
+            <td style="padding:7px 14px;color:var(--text-dim);width:100px;">${t('fm_duration')}</td>
             <td style="padding:7px 14px;">${dur}</td></tr>`;
           media.remove();
         };

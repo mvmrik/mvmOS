@@ -37,6 +37,7 @@
 </head>
 <body>
 <div id="app"></div>
+<script src="/i18n/i18n.js"></script>
 <script src="/pub/apphub/avatar.js"></script>
 <script>
 const BASE = '/api/pub/apphub';
@@ -63,9 +64,10 @@ function _afterAuth() {
 }
 
 const app = document.getElementById('app');
+const t = (key, vars) => (window.t ? window.t(key, vars) : key);
 
 async function boot() {
-  app.innerHTML = `<div style="flex:1;display:flex;align-items:center;justify-content:center;color:var(--fg2);font-size:.9rem">Loading…</div>`;
+  app.innerHTML = `<div style="flex:1;display:flex;align-items:center;justify-content:center;color:var(--fg2);font-size:.9rem">${t('ah_pub_loading')}</div>`;
   if (_token) {
     try {
       const r = await fetch(BASE + '/me', {headers:{'X-Pub-Token':_token}});
@@ -88,11 +90,11 @@ function showAuth(tab) {
         <div style="text-align:center">
           <div style="font-size:2.5rem">🧩</div>
           <div style="font-weight:700;font-size:1.2rem;margin-top:6px">Apps Hub</div>
-          <div style="font-size:.82rem;color:var(--fg2);margin-top:4px">Your profile for all apps</div>
+          <div style="font-size:.82rem;color:var(--fg2);margin-top:4px">${t('ah_pub_tagline')}</div>
         </div>
         <div style="display:flex;gap:0;background:var(--surface2);border-radius:8px;padding:3px">
-          <button id="a-login" style="flex:1;border:none;border-radius:6px;padding:7px;font-size:.88rem;font-weight:600;background:${tab==='login'?'var(--surface1)':'transparent'};color:${tab==='login'?'var(--fg)':'var(--fg2)'}">Log in</button>
-          <button id="a-reg"   style="flex:1;border:none;border-radius:6px;padding:7px;font-size:.88rem;font-weight:600;background:${tab==='register'?'var(--surface1)':'transparent'};color:${tab==='register'?'var(--fg)':'var(--fg2)'}">Register</button>
+          <button id="a-login" style="flex:1;border:none;border-radius:6px;padding:7px;font-size:.88rem;font-weight:600;background:${tab==='login'?'var(--surface1)':'transparent'};color:${tab==='login'?'var(--fg)':'var(--fg2)'}">${t('ah_pub_log_in')}</button>
+          <button id="a-reg"   style="flex:1;border:none;border-radius:6px;padding:7px;font-size:.88rem;font-weight:600;background:${tab==='register'?'var(--surface1)':'transparent'};color:${tab==='register'?'var(--fg)':'var(--fg2)'}">${t('ah_register')}</button>
         </div>
         <div id="a-form"></div>
       </div>
@@ -114,10 +116,10 @@ function renderLoginForm() {
   const f = app.querySelector('#a-form');
   f.innerHTML = `
     <div style="display:flex;flex-direction:column;gap:10px">
-      <input class="inp" id="a-user" placeholder="Username" autocomplete="username">
-      <input class="inp" id="a-pass" type="password" placeholder="Password" autocomplete="current-password">
+      <input class="inp" id="a-user" placeholder="${t('ah_username_ph')}" autocomplete="username">
+      <input class="inp" id="a-pass" type="password" placeholder="${t('ah_password_ph')}" autocomplete="current-password">
       <div class="err" id="a-err"></div>
-      <button class="btn btn-primary" id="a-sub">Log in</button>
+      <button class="btn btn-primary" id="a-sub">${t('ah_pub_log_in')}</button>
     </div>`;
   const sub = async () => {
     const u = f.querySelector('#a-user').value.trim();
@@ -132,7 +134,7 @@ function renderLoginForm() {
       showDashboard();
     } else {
       const d = await r.json().catch(()=>({}));
-      f.querySelector('#a-err').textContent = d.detail || 'Invalid username or password';
+      f.querySelector('#a-err').textContent = d.detail || t('ah_pub_invalid_credentials');
       f.querySelector('#a-sub').disabled = false;
     }
   };
@@ -145,17 +147,17 @@ function renderRegForm() {
   const f = app.querySelector('#a-form');
   f.innerHTML = `
     <div style="display:flex;flex-direction:column;gap:10px">
-      <input class="inp" id="a-dname" placeholder="Display name">
-      <input class="inp" id="a-user"  placeholder="Username (letters/numbers)" autocomplete="username">
-      <input class="inp" id="a-pass"  type="password" placeholder="Password (min 4 chars)" autocomplete="new-password">
+      <input class="inp" id="a-dname" placeholder="${t('ah_display_name_ph')}">
+      <input class="inp" id="a-user"  placeholder="${t('ah_pub_username_letters_ph')}" autocomplete="username">
+      <input class="inp" id="a-pass"  type="password" placeholder="${t('ah_password_min_ph')}" autocomplete="new-password">
       <div class="err" id="a-err"></div>
-      <button class="btn btn-primary" id="a-sub">Create account</button>
+      <button class="btn btn-primary" id="a-sub">${t('ah_create_account')}</button>
     </div>`;
   f.querySelector('#a-sub').onclick = async () => {
     const dn = f.querySelector('#a-dname').value.trim();
     const un = f.querySelector('#a-user').value.trim();
     const pw = f.querySelector('#a-pass').value;
-    if (!dn || !un || !pw) { f.querySelector('#a-err').textContent = 'All fields required'; return; }
+    if (!dn || !un || !pw) { f.querySelector('#a-err').textContent = t('ah_fill_all_fields'); return; }
     f.querySelector('#a-sub').disabled = true;
     const r = await fetch(BASE + '/register', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({display_name:dn,username:un,password:pw})});
     if (r.ok) {
@@ -165,7 +167,7 @@ function renderRegForm() {
       showDashboard();
     } else {
       const d = await r.json().catch(()=>({}));
-      f.querySelector('#a-err').textContent = d.detail || 'Error';
+      f.querySelector('#a-err').textContent = d.detail || t('ah_registration_failed');
       f.querySelector('#a-sub').disabled = false;
     }
   };
@@ -178,9 +180,10 @@ function showDashboard(activeTab) {
   activeTab = activeTab || 'apps';
   app.innerHTML = `
     <div class="tab-bar">
-      <button class="tab${activeTab==='apps'?' active':''}" data-t="apps">Apps</button>
-      <button class="tab${activeTab==='favourites'?' active':''}" data-t="favourites">Favourites</button>
-      <button class="tab${activeTab==='profile'?' active':''}" data-t="profile">Profile</button>
+      <button class="tab${activeTab==='apps'?' active':''}" data-t="apps">${t('ah_pub_tab_apps')}</button>
+      <button class="tab${activeTab==='favourites'?' active':''}" data-t="favourites">${t('ah_pub_tab_favourites')}</button>
+      <button class="tab${activeTab==='credits'?' active':''}" data-t="credits">${t('ah_pub_tab_credits')}</button>
+      <button class="tab${activeTab==='profile'?' active':''}" data-t="profile">${t('ah_pub_tab_profile')}</button>
     </div>
     <div id="d-body" style="flex:1;overflow-y:auto"></div>`;
 
@@ -200,6 +203,7 @@ function renderTab(t) {
   const c = app.querySelector('#d-body');
   if (t === 'apps')       renderApps(c);
   if (t === 'favourites') renderFavourites(c);
+  if (t === 'credits')    renderCredits(c);
   if (t === 'profile')    renderProfile(c);
 }
 
@@ -247,7 +251,7 @@ async function _loadBadges() {
 let _badgePoll = null;
 
 async function renderApps(c) {
-  c.innerHTML = `<div style="padding:32px;text-align:center;color:var(--fg2);font-size:.9rem">Loading apps…</div>`;
+  c.innerHTML = `<div style="padding:32px;text-align:center;color:var(--fg2);font-size:.9rem">${t('ah_pub_loading_apps')}</div>`;
   let apps = [];
   try {
     const r = await fetch(BASE + '/apps');
@@ -258,7 +262,7 @@ async function renderApps(c) {
   if (!apps.length) {
     c.innerHTML = `<div style="padding:40px;text-align:center;color:var(--fg2)">
       <div style="font-size:2rem;margin-bottom:10px">📭</div>
-      <div>No public apps available yet.</div>
+      <div>${t('ah_pub_no_apps_yet')}</div>
     </div>`;
     return;
   }
@@ -266,11 +270,11 @@ async function renderApps(c) {
   const sortMode = _getSortPref();
   c.innerHTML = `
     <div style="display:flex;align-items:center;justify-content:flex-end;gap:8px;padding:12px 16px 0">
-      <span style="font-size:.78rem;color:var(--fg2)">Sort by</span>
+      <span style="font-size:.78rem;color:var(--fg2)">${t('ah_pub_sort_by')}</span>
       <select class="inp" id="apps-sort" style="width:auto;padding:5px 10px;font-size:.8rem">
-        <option value="alpha"${sortMode==='alpha'?' selected':''}>Alphabetical</option>
-        <option value="recent"${sortMode==='recent'?' selected':''}>Recently used</option>
-        <option value="frequent"${sortMode==='frequent'?' selected':''}>Most used</option>
+        <option value="alpha"${sortMode==='alpha'?' selected':''}>${t('ah_pub_sort_alpha')}</option>
+        <option value="recent"${sortMode==='recent'?' selected':''}>${t('ah_pub_sort_recent')}</option>
+        <option value="frequent"${sortMode==='frequent'?' selected':''}>${t('ah_pub_sort_frequent')}</option>
       </select>
     </div>
     <div class="app-grid" id="apps-grid"></div>`;
@@ -335,8 +339,8 @@ async function renderFavourites(c) {
 
   const searchWrap = document.createElement('div');
   searchWrap.innerHTML = `
-    <div style="font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:var(--fg2);margin-bottom:8px">Find people</div>
-    <input class="inp" id="fav-search" placeholder="Search by name or username…" autocomplete="off">
+    <div style="font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:var(--fg2);margin-bottom:8px">${t('ah_find_people')}</div>
+    <input class="inp" id="fav-search" placeholder="${t('ah_search_people_ph')}" autocomplete="off">
     <div id="fav-results" style="display:flex;flex-direction:column;gap:6px;margin-top:8px"></div>`;
   sc.appendChild(searchWrap);
 
@@ -346,12 +350,12 @@ async function renderFavourites(c) {
   async function renderSearch(q) {
     resultsEl.innerHTML = '';
     if (q.length < 2) return;
-    resultsEl.innerHTML = `<div style="color:var(--fg2);font-size:13px">Searching…</div>`;
+    resultsEl.innerHTML = `<div style="color:var(--fg2);font-size:13px">${t('ah_searching')}</div>`;
     const r = await fetch(`${BASE}/search?q=${encodeURIComponent(q)}`);
     const hits = r.ok ? (await r.json()).filter(p => p.id !== _me?.id) : [];
     resultsEl.innerHTML = '';
     if (!hits.length) {
-      resultsEl.innerHTML = `<div style="color:var(--fg2);font-size:13px">No people found.</div>`;
+      resultsEl.innerHTML = `<div style="color:var(--fg2);font-size:13px">${t('ah_no_people_found')}</div>`;
       return;
     }
     hits.forEach(p => resultsEl.appendChild(_favRow(p, () => renderFavourites(c))));
@@ -364,7 +368,7 @@ async function renderFavourites(c) {
 
   const divider = document.createElement('div');
   divider.style.cssText = 'border-top:1px solid var(--border);padding-top:14px';
-  divider.innerHTML = `<div style="font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:var(--fg2);margin-bottom:8px">Saved favourites</div>`;
+  divider.innerHTML = `<div style="font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:var(--fg2);margin-bottom:8px">${t('ah_saved_favourites')}</div>`;
   sc.appendChild(divider);
 
   const favsEl = document.createElement('div');
@@ -374,7 +378,7 @@ async function renderFavourites(c) {
   function renderSavedFavs() {
     favsEl.innerHTML = '';
     if (!_favs || !_favs.length) {
-      favsEl.innerHTML = `<div style="color:var(--fg2);font-size:13px">No favourites yet. Search for someone above.</div>`;
+      favsEl.innerHTML = `<div style="color:var(--fg2);font-size:13px">${t('ah_no_favourites')}</div>`;
       return;
     }
     _favs.forEach(f => favsEl.appendChild(_favRow(f, renderSavedFavs)));
@@ -394,7 +398,7 @@ function _favRow(p, onFavChange) {
         ${p.username?`<div style="font-size:11px;color:var(--fg2)">@${esc(p.username)}</div>`:''}
       </div>
     </div>
-    <button class="btn btn-secondary" id="pr-fav" style="padding:5px 10px;font-size:12px;flex-shrink:0">${fav?'★ Saved':'☆ Favourite'}</button>`;
+    <button class="btn btn-secondary" id="pr-fav" style="padding:5px 10px;font-size:12px;flex-shrink:0">${fav?t('ah_favourited'):t('ah_favourite')}</button>`;
   row.querySelector('#pr-fav').onclick = async () => {
     await _toggleFav(p);
     if (onFavChange) onFavChange();
@@ -423,15 +427,15 @@ function renderProfile(c) {
         </div>
       </div>
       <div class="card" style="padding:16px;display:flex;flex-direction:column;gap:12px">
-        <div style="font-weight:600;font-size:13px">Edit profile</div>
+        <div style="font-weight:600;font-size:13px">${t('ah_pub_edit_profile')}</div>
         <button class="btn btn-secondary" id="ef-avatar" style="display:flex;align-items:center;gap:10px;padding:8px 12px;font-weight:500;font-size:13px">
           <span id="ef-av-preview"></span>
-          <span>Edit Avatar</span>
+          <span>${t('ah_pub_edit_avatar')}</span>
         </button>
-        <input class="inp" id="ef-dname" placeholder="Display name" value="${esc(_me.display_name)}">
-        <input class="inp" id="ef-pass"  type="password" placeholder="New password (leave blank to keep)">
+        <input class="inp" id="ef-dname" placeholder="${t('ah_display_name_ph')}" value="${esc(_me.display_name)}">
+        <input class="inp" id="ef-pass"  type="password" placeholder="${t('ah_pub_new_password_ph')}">
         <div class="err" id="ef-err"></div>
-        <button class="btn btn-primary" id="ef-save">Save changes</button>
+        <button class="btn btn-primary" id="ef-save">${t('ah_pub_save_changes')}</button>
       </div>
     </div>`;
 
@@ -456,7 +460,7 @@ function renderProfile(c) {
     const dn   = c.querySelector('#ef-dname').value.trim();
     const pw   = c.querySelector('#ef-pass').value;
     const errEl = c.querySelector('#ef-err');
-    if (!dn) { errEl.textContent = 'Display name required'; return; }
+    if (!dn) { errEl.textContent = t('ah_pub_display_name_required'); return; }
     c.querySelector('#ef-save').disabled = true;
     errEl.textContent = '';
 
@@ -475,15 +479,62 @@ function renderProfile(c) {
       _me.avatar_svg   = svgStr;
       window.MvmLayout && MvmLayout.refresh();
       errEl.style.color = 'var(--green)';
-      errEl.textContent = 'Saved!';
+      errEl.textContent = t('ah_pub_saved');
       setTimeout(() => { if(errEl) errEl.textContent=''; }, 2000);
     } else {
       const d = await r.json().catch(()=>({}));
       errEl.style.color = 'var(--red)';
-      errEl.textContent = d.detail || 'Error saving';
+      errEl.textContent = d.detail || t('ah_pub_error_saving');
     }
     c.querySelector('#ef-save').disabled = false;
   };
+}
+
+// ── Credits tab ─────────────────────────────────────────────────
+
+function _fmtTime(iso) {
+  try { return new Date(iso).toLocaleString([], {dateStyle:'medium', timeStyle:'short', hour12:false}); }
+  catch(_) { return iso; }
+}
+
+async function renderCredits(c) {
+  c.innerHTML = `<div style="padding:32px;text-align:center;color:var(--fg2);font-size:.9rem">${t('ah_pub_loading_credits')}</div>`;
+  let balance = 0, txs = [];
+  try {
+    const [rb, rt] = await Promise.all([
+      fetch(BASE + '/credits', {headers:{'X-Pub-Token':_token}}),
+      fetch(BASE + '/credits/transactions', {headers:{'X-Pub-Token':_token}}),
+    ]);
+    if (rb.ok) balance = (await rb.json()).balance;
+    if (rt.ok) txs = await rt.json();
+  } catch(_) {}
+
+  c.innerHTML = `
+    <div class="section" style="max-width:560px;display:flex;flex-direction:column;gap:14px">
+      <div class="card" style="padding:20px;display:flex;flex-direction:column;align-items:center;gap:4px">
+        <div style="font-size:.8rem;color:var(--fg2)">${t('ah_pub_your_balance')}</div>
+        <div style="font-size:2.2rem;font-weight:700;color:var(--accent)">${balance}</div>
+        <div style="font-size:.75rem;color:var(--fg2)">${t('ah_pub_credits_unit')}</div>
+      </div>
+      <div style="font-weight:600;font-size:13px">${t('ah_credits_history')}</div>
+      <div id="cr-list" style="display:flex;flex-direction:column;gap:6px"></div>
+    </div>`;
+
+  const list = c.querySelector('#cr-list');
+  if (!txs.length) {
+    list.innerHTML = `<div style="padding:20px;text-align:center;color:var(--fg2);font-size:.85rem">${t('ah_credits_no_transactions')}</div>`;
+    return;
+  }
+  list.innerHTML = txs.map(t => `
+    <div class="card" style="padding:10px 14px;display:flex;justify-content:space-between;align-items:center;gap:10px">
+      <div style="display:flex;flex-direction:column;gap:2px;min-width:0">
+        <div style="font-size:.85rem;font-weight:600">${esc(t.reason || t.app_id)}</div>
+        <div style="font-size:.72rem;color:var(--fg2)">${esc(t.app_id)} · ${_fmtTime(t.created_at)}</div>
+      </div>
+      <div style="font-size:.95rem;font-weight:700;color:${t.delta>=0?'var(--green)':'var(--red)'};flex-shrink:0">
+        ${t.delta>=0?'+':''}${t.delta}
+      </div>
+    </div>`).join('');
 }
 
 // ── Avatar helper ───────────────────────────────────────────────
@@ -497,7 +548,7 @@ function renderAvatar(u, size) {
   return `<div class="avatar" style="width:${size}px;height:${size}px;font-size:${Math.round(size*0.45)}px;background:${color}">${letter}</div>`;
 }
 
-boot();
+(window.mvmOS?.i18nReady || Promise.resolve()).then(boot);
 </script>
 </body>
 </html>

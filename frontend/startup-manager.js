@@ -6,6 +6,7 @@ const StartupManager = (() => {
       enabled:  'Enabled',
       disabled: 'Disabled',
       no_apps:  'No app backends found.',
+      error_loading: 'Error loading',
     },
     bg: {
       title:    'Мениджър за стартиране',
@@ -13,6 +14,7 @@ const StartupManager = (() => {
       enabled:  'Включено',
       disabled: 'Изключено',
       no_apps:  'Няма намерени app backends.',
+      error_loading: 'Грешка при зареждане',
     },
   };
   function _t(k) { const l = window.mvmOS?.lang || 'en'; return (i18n[l] || i18n.en)[k] || k; }
@@ -35,7 +37,7 @@ const StartupManager = (() => {
           const list = body.querySelector('#sm-list');
           list.innerHTML = '<div style="padding:20px;color:var(--text-dim);font-size:.85rem">…</div>';
           const res = await fetch('/api/startup').catch(() => null);
-          if (!res || !res.ok) { list.innerHTML = '<div style="padding:20px;color:#ef4444">Error loading</div>'; return; }
+          if (!res || !res.ok) { list.innerHTML = `<div style="padding:20px;color:#ef4444">${_t('error_loading')}</div>`; return; }
           const apps = await res.json();
           if (!apps.length) { list.innerHTML = `<div style="padding:20px;color:var(--text-dim);font-size:.85rem">${_t('no_apps')}</div>`; return; }
 

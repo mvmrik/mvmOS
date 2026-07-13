@@ -137,7 +137,7 @@ const TextEditor = (() => {
           <div style="display:flex;align-items:center;gap:8px;padding:5px 10px;background:var(--surface);border-bottom:1px solid var(--border);flex-shrink:0;">
             <span style="font-size:.8rem;color:var(--text-dim);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${path}</span>
             <span id="te-status" style="font-size:.78rem;color:var(--text-dim);"></span>
-            <button class="s-btn" id="te-save" style="font-size:.78rem;">💾 Save</button>
+            <button class="s-btn" id="te-save" style="font-size:.78rem;">💾 ${t('mv_save')}</button>
           </div>
           <textarea id="te-area" spellcheck="false" style="flex:1;width:100%;background:var(--surface2);color:var(--text);font-family:var(--mono);font-size:.85rem;padding:12px;border:none;outline:none;resize:none;box-sizing:border-box;line-height:1.5;"></textarea>
         `;
@@ -149,12 +149,12 @@ const TextEditor = (() => {
         fetch(`/api/files/raw?path=${encodeURIComponent(path)}&_=${Date.now()}`)
           .then(r => r.text())
           .then(text => { area.value = text; status.textContent = ''; })
-          .catch(() => { status.textContent = 'Failed to load'; });
+          .catch(() => { status.textContent = t('mv_failed_to_load'); });
 
         let dirty = false;
         area.addEventListener('input', () => {
           dirty = true;
-          status.textContent = '● unsaved';
+          status.textContent = '● ' + t('mv_unsaved');
           status.style.color = '#f38ba8';
         });
 
@@ -168,11 +168,11 @@ const TextEditor = (() => {
           saveBtn.disabled = false;
           if (res.ok) {
             dirty = false;
-            status.textContent = '✓ saved';
+            status.textContent = '✓ ' + t('mv_saved');
             status.style.color = '#50fa7b';
             setTimeout(() => { if (!dirty) status.textContent = ''; }, 2000);
           } else {
-            status.textContent = '✗ save failed';
+            status.textContent = '✗ ' + t('mv_save_failed');
           }
         }
 

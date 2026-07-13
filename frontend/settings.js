@@ -225,7 +225,7 @@ const Settings = (() => {
             <div class="settings-section">
               <div class="settings-section-title">🎨 Theme</div>
               <div id="theme-picker-wrap" style="display:flex;flex-wrap:wrap;gap:10px;padding:4px 0">
-                <div style="color:var(--text-dim);font-size:.83rem">Loading themes…</div>
+                <div style="color:var(--text-dim);font-size:.83rem">${t('tstore_loading')}</div>
               </div>
               <div style="margin-top:10px">
                 <button class="s-btn-sm" id="s-open-theme-store">${t('tstore_browse')}</button>
@@ -403,11 +403,11 @@ const Settings = (() => {
           <!-- System panel -->
           <div class="settings-panel ${activeTab==='system'?'active':''}" id="sp-system">
             <div class="settings-section">
-              <div class="settings-section-title">Error Reporting</div>
+              <div class="settings-section-title">${t('system_error_reporting')}</div>
               <div class="settings-row">
                 <div>
-                  <div style="font-weight:500">Send error reports</div>
-                  <div style="font-size:.8rem;color:var(--text-dim);margin-top:2px">When an error occurs, you'll be asked whether to send a report to the developer. Disable to never be asked.</div>
+                  <div style="font-weight:500">${t('system_send_error_reports')}</div>
+                  <div style="font-size:.8rem;color:var(--text-dim);margin-top:2px">${t('system_error_reports_desc')}</div>
                 </div>
                 <label class="toggle"><input type="checkbox" id="s-error-reporting"><span class="toggle-slider"></span></label>
               </div>
@@ -746,7 +746,7 @@ const Settings = (() => {
         <div style="font-size:.82rem;color:var(--text-dim);margin-bottom:4px">${t('users_2fa_secret_label')}</div>
         <div style="display:flex;align-items:stretch;gap:6px;margin-bottom:12px">
           <div style="font-family:monospace;font-size:.95rem;letter-spacing:.08em;background:var(--surface2,#313244);border:1px solid var(--border,#45475a);border-radius:6px;padding:10px 12px;flex:1;user-select:all;word-break:break-all;cursor:text">${secretFmt}</div>
-          <button id="totp-copy-secret" class="s-btn-sm" style="flex-shrink:0;white-space:nowrap">Copy</button>
+          <button id="totp-copy-secret" class="s-btn-sm" style="flex-shrink:0;white-space:nowrap">${t('settings_copy')}</button>
         </div>
 
         <div style="background:rgba(255,184,108,.08);border:1px solid rgba(255,184,108,.3);border-radius:6px;padding:10px 12px;font-size:.82rem;margin-bottom:16px;color:#ffb86c;line-height:1.5">
@@ -1207,12 +1207,12 @@ const Settings = (() => {
       const res = await fetch('/api/themes');
       themes = await res.json();
     } catch (_) {
-      wrap.innerHTML = '<div style="color:#e05555;font-size:.83rem">Failed to load themes.</div>';
+      wrap.innerHTML = `<div style="color:#e05555;font-size:.83rem">${t('tstore_failed')}</div>`;
       return;
     }
 
     if (!themes.length) {
-      wrap.innerHTML = '<div style="color:var(--text-dim);font-size:.83rem">No themes installed. Browse the App Store to install themes.</div>';
+      wrap.innerHTML = `<div style="color:var(--text-dim);font-size:.83rem">${t('tstore_no_installed_hint')}</div>`;
     } else {
       wrap.innerHTML = themes.map(t => `
         <div class="theme-card ${t.is_active ? 'active' : ''}" data-id="${t.id}" title="${t.description}" style="

@@ -10,6 +10,17 @@ Exports (used by other modules via sys.modules["backend.apphub"]):
   issue_pub_token(uid)    -> str
   revoke_token(token)     -> None
   migrate_from_gamehub(players, tokens) -> int
+  get_credit_balance(uid) -> int
+  spend_credits(uid, app_id, amount, reason="", idempotency_key=None) -> int  (raises CreditError)
+  grant_credits(uid, app_id, amount, reason="", idempotency_key=None) -> int  (raises CreditError)
+
+Credits — a shared, account-wide balance apps can charge against for optional
+paid features. Apps never touch the balance column directly: spend_credits()
+does the check-and-deduct as a single atomic UPDATE (balance is only
+decremented when the WHERE clause proves it's sufficient), so two concurrent
+spends from the same user can't both succeed against a balance that only
+covers one of them. idempotency_key (unique per app_id) makes retries safe —
+replaying the same key returns the same result instead of charging twice.
 """
 
 import hashlib, os, secrets, sqlite3, sys, uuid
@@ -68,6 +79,25 @@ def _init_db():
                 created_at   TEXT NOT NULL,
                 PRIMARY KEY (user_id, favourite_id)
             );
+            CREATE TABLE IF NOT EXISTS credits (
+                user_id TEXT PRIMARY KEY REFERENCES public_users(id) ON DELETE CASCADE,
+                balance INTEGER NOT NULL DEFAULT 0
+            );
+            CREATE TABLE IF NOT EXISTS credit_transactions (
+                id               INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id          TEXT NOT NULL REFERENCES public_users(id) ON DELETE CASCADE,
+                app_id           TEXT NOT NULL,
+                delta            INTEGER NOT NULL,
+                balance_after    INTEGER NOT NULL,
+                reason           TEXT NOT NULL DEFAULT '',
+                idempotency_key  TEXT,
+                created_at       TEXT NOT NULL
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_credit_tx_idem
+                ON credit_transactions(app_id, idempotency_key)
+                WHERE idempotency_key IS NOT NULL;
+            CREATE INDEX IF NOT EXISTS idx_credit_tx_user
+                ON credit_transactions(user_id, created_at);
         """)
         cols = {r[1] for r in conn.execute("PRAGMA table_info(public_users)")}
         if "is_admin" not in cols:
@@ -268,6 +298,126 @@ def migrate_from_gamehub(players: list, tokens: list) -> int:
             )
         conn.commit()
     return count
+
+
+# ── Credits ─────────────────────────────────────────────────────
+# Shared, account-wide balance. Apps charge against it for optional paid
+# features; the platform never decides what costs what — each app's own
+# backend decides when to call spend_credits(). balance is only ever
+# mutated by the atomic UPDATEs below, never by a Python read-modify-write,
+# so concurrent spends can't both succeed against a balance that covers
+# only one of them.
+
+class CreditError(Exception):
+    """Raised by spend_credits/grant_credits on insufficient balance or bad input."""
+    pass
+
+
+def get_credit_balance(user_id: str) -> int:
+    with _db() as conn:
+        row = conn.execute("SELECT balance FROM credits WHERE user_id=?", (user_id,)).fetchone()
+    return row["balance"] if row else 0
+
+
+def get_credit_transactions(user_id: str, limit: int = 50) -> list:
+    with _db() as conn:
+        rows = conn.execute(
+            "SELECT app_id, delta, balance_after, reason, created_at FROM credit_transactions "
+            "WHERE user_id=? ORDER BY id DESC LIMIT ?",
+            (user_id, limit)
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def _credit_delta(user_id: str, app_id: str, delta: int, reason: str,
+                   idempotency_key: Optional[str], require_funds: bool) -> int:
+    if not app_id:
+        raise CreditError("app_id required")
+    now = datetime.now(timezone.utc).isoformat()
+    with _db() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            if idempotency_key:
+                existing = conn.execute(
+                    "SELECT balance_after FROM credit_transactions WHERE app_id=? AND idempotency_key=?",
+                    (app_id, idempotency_key)
+                ).fetchone()
+                if existing is not None:
+                    conn.execute("COMMIT")
+                    return existing["balance_after"]
+
+            conn.execute(
+                "INSERT OR IGNORE INTO credits(user_id, balance) VALUES(?, 0)", (user_id,)
+            )
+            if require_funds:
+                # Atomic check-and-deduct: the row is only touched if the
+                # balance already covers it, so a concurrent second spend
+                # racing against this one sees the post-deduction balance
+                # (SQLite serializes writers) and fails cleanly instead of
+                # both succeeding.
+                cur = conn.execute(
+                    "UPDATE credits SET balance = balance - ? WHERE user_id=? AND balance >= ?",
+                    (delta, user_id, delta)
+                )
+                if cur.rowcount == 0:
+                    conn.execute("ROLLBACK")
+                    raise CreditError("Insufficient credits")
+            else:
+                conn.execute(
+                    "UPDATE credits SET balance = balance + ? WHERE user_id=?",
+                    (delta, user_id)
+                )
+
+            new_balance = conn.execute(
+                "SELECT balance FROM credits WHERE user_id=?", (user_id,)
+            ).fetchone()["balance"]
+
+            signed = -delta if require_funds else delta
+            try:
+                conn.execute(
+                    "INSERT INTO credit_transactions"
+                    "(user_id, app_id, delta, balance_after, reason, idempotency_key, created_at)"
+                    " VALUES(?,?,?,?,?,?,?)",
+                    (user_id, app_id, signed, new_balance, reason or "", idempotency_key, now)
+                )
+            except sqlite3.IntegrityError:
+                # Lost the race on the idempotency key to a concurrent identical
+                # request — undo our own delta and return the winner's result.
+                conn.execute("ROLLBACK")
+                with _db() as conn2:
+                    row = conn2.execute(
+                        "SELECT balance_after FROM credit_transactions WHERE app_id=? AND idempotency_key=?",
+                        (app_id, idempotency_key)
+                    ).fetchone()
+                return row["balance_after"] if row else get_credit_balance(user_id)
+
+            conn.execute("COMMIT")
+            return new_balance
+        except CreditError:
+            raise
+        except Exception:
+            conn.execute("ROLLBACK")
+            raise
+
+
+def spend_credits(user_id: str, app_id: str, amount: int, reason: str = "",
+                   idempotency_key: Optional[str] = None) -> int:
+    """Deduct `amount` credits from user_id on behalf of app_id. Returns the
+    resulting balance. Raises CreditError if amount is invalid or balance is
+    insufficient. Safe to retry with the same idempotency_key (per app_id) —
+    a repeat call returns the original result instead of charging again."""
+    if amount <= 0:
+        raise CreditError("amount must be positive")
+    return _credit_delta(user_id, app_id, amount, reason, idempotency_key, require_funds=True)
+
+
+def grant_credits(user_id: str, app_id: str, amount: int, reason: str = "",
+                   idempotency_key: Optional[str] = None) -> int:
+    """Add `amount` credits to user_id, attributed to app_id (e.g. a reward,
+    a refund, an admin top-up). Returns the resulting balance."""
+    if amount <= 0:
+        raise CreditError("amount must be positive")
+    return _credit_delta(user_id, app_id, amount, reason, idempotency_key, require_funds=False)
 
 
 # ── Routers ────────────────────────────────────────────────────
@@ -573,6 +723,107 @@ async def get_stats_admin(session=Depends(get_current_session)):
             (datetime.now(timezone.utc).isoformat(),)
         ).fetchone()[0]
     return JSONResponse({"total_users": total, "active_sessions": active})
+
+
+# ── Credits: public (self) endpoints ───────────────────────────
+# In-process app backends should call spend_credits()/grant_credits()
+# directly (see module docstring). These HTTP routes exist for: (a) the
+# apphub public page's own "Credits" tab, and (b) any app whose paid
+# feature is implemented client-side or in a separate process that can't
+# import backend.apphub directly.
+
+@_pub.get("/credits")
+async def get_credits_pub(x_pub_token: Optional[str] = Header(default=None)):
+    u = get_pub_session(x_pub_token)
+    if not u:
+        raise HTTPException(401)
+    return JSONResponse({"balance": get_credit_balance(u["id"])})
+
+
+@_pub.get("/credits/transactions")
+async def get_credit_transactions_pub(x_pub_token: Optional[str] = Header(default=None)):
+    u = get_pub_session(x_pub_token)
+    if not u:
+        raise HTTPException(401)
+    return JSONResponse(get_credit_transactions(u["id"]))
+
+
+class SpendBody(BaseModel):
+    app_id:           str
+    amount:           int
+    reason:           str = ""
+    idempotency_key:  Optional[str] = None
+
+
+@_pub.post("/credits/spend")
+async def spend_credits_pub(body: SpendBody, x_pub_token: Optional[str] = Header(default=None)):
+    u = get_pub_session(x_pub_token)
+    if not u:
+        raise HTTPException(401)
+    try:
+        balance = spend_credits(u["id"], body.app_id, body.amount, body.reason, body.idempotency_key)
+    except CreditError as e:
+        raise HTTPException(402, detail=str(e))
+    return JSONResponse({"ok": True, "balance": balance})
+
+
+# ── Credits: admin endpoints ────────────────────────────────────
+
+@_admin.get("/credits/{uid}")
+async def get_credits_admin(uid: str, session=Depends(get_current_session)):
+    return JSONResponse({
+        "balance":      get_credit_balance(uid),
+        "transactions": get_credit_transactions(uid),
+    })
+
+
+class GrantBody(BaseModel):
+    amount: int
+    reason: str = ""
+
+
+@_admin.post("/credits/{uid}/grant")
+async def grant_credits_admin(uid: str, body: GrantBody, session=Depends(get_current_session)):
+    """Manual top-up/correction by an mvmOS admin. app_id is fixed to
+    'apphub' so these are visibly distinct from app-issued rewards in the
+    transaction log."""
+    try:
+        balance = grant_credits(uid, "apphub", body.amount, body.reason or "Admin grant")
+    except CreditError as e:
+        raise HTTPException(400, detail=str(e))
+    return JSONResponse({"ok": True, "balance": balance})
+
+
+class AdjustBody(BaseModel):
+    amount: int
+    reason: str = ""
+
+
+@_admin.post("/credits/{uid}/deduct")
+async def deduct_credits_admin(uid: str, body: AdjustBody, session=Depends(get_current_session)):
+    """Manual correction (e.g. reversing a grant typo). Not gated on balance
+    sufficiency the way spend_credits is for apps — admin can also zero out
+    an over-grant."""
+    if body.amount <= 0:
+        raise HTTPException(400, detail="amount must be positive")
+    with _db() as conn:
+        conn.execute("INSERT OR IGNORE INTO credits(user_id, balance) VALUES(?, 0)", (uid,))
+        before = conn.execute("SELECT balance FROM credits WHERE user_id=?", (uid,)).fetchone()["balance"]
+        conn.execute("UPDATE credits SET balance = MAX(0, balance - ?) WHERE user_id=?", (body.amount, uid))
+        new_balance = conn.execute("SELECT balance FROM credits WHERE user_id=?", (uid,)).fetchone()["balance"]
+        # Log the delta that actually happened, not the requested amount —
+        # if amount > before, the clamp to 0 means fewer credits were removed
+        # than asked; the transaction history must reflect reality.
+        actual_delta = new_balance - before
+        conn.execute(
+            "INSERT INTO credit_transactions"
+            "(user_id, app_id, delta, balance_after, reason, idempotency_key, created_at)"
+            " VALUES(?,?,?,?,?,?,?)",
+            (uid, "apphub", actual_delta, new_balance, body.reason or "Admin deduct", None,
+             datetime.now(timezone.utc).isoformat())
+        )
+        conn.commit()
+    return JSONResponse({"ok": True, "balance": new_balance})
 
 
 router.include_router(_admin)

@@ -137,13 +137,13 @@ const Sites = (() => {
       <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px;width:300px;display:flex;flex-direction:column;gap:12px">
         <div style="font-weight:600;font-size:.9rem">🌐 Web Server</div>
         <div style="display:flex;flex-direction:column;gap:4px">
-          <label style="font-size:.82rem;color:var(--text-dim)">Port</label>
+          <label style="font-size:.82rem;color:var(--text-dim)">${t('sites_port')}</label>
           <input id="ws-port" class="s-input" type="number" value="80" min="1" max="65535">
         </div>
         <div id="ws-error" style="display:none;font-size:.78rem;color:#ff5555"></div>
         <div style="display:flex;gap:8px;justify-content:flex-end">
           <button class="s-btn" id="ws-cancel">${t('cancel')}</button>
-          <button class="s-btn" id="ws-start" style="background:var(--accent);color:#fff;border-color:var(--accent)">Start</button>
+          <button class="s-btn" id="ws-start" style="background:var(--accent);color:#fff;border-color:var(--accent)">${t('sites_start')}</button>
         </div>
       </div>`;
     el.style.position = 'relative';
