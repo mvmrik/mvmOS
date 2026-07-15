@@ -614,6 +614,8 @@ async def list_public_apps_admin(session=Depends(get_current_session)):
             m = json.load(open(mpath)) if os.path.isfile(mpath) else {}
         except Exception:
             m = {}
+        if m.get("public_directory") is False:
+            continue
         meta = _CORE_APP_META.get(app_id, {})
         result.append({
             "id":      app_id,

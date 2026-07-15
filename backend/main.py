@@ -45,6 +45,7 @@ from .scheduler import router as scheduler_router
 from .startup import router as startup_router, _init_startup_db, run_startup_apps
 from .apphub import router as apphub_router, public_page_router as apphub_public_router, _init_db as _init_apphub_db
 from .notifications import router as notifications_router
+from .notfound import render_404_html
 from .db import APPS_DIR, WIDGETS_DIR, THEMES_DIR
 from . import app_backends, public_loader, projects
 
@@ -83,6 +84,14 @@ async def _run_startup_apps():
     await run_startup_apps()
 public_loader.load_all(app)
 projects.init(app)
+
+
+@app.exception_handler(404)
+async def _not_found_handler(request: Request, exc):
+    accept = request.headers.get("accept", "")
+    if "text/html" in accept:
+        return HTMLResponse(render_404_html(), status_code=404)
+    return PlainTextResponse("Not Found", status_code=404)
 
 FRONTEND_DIR = os.path.join(os.path.dirname(__file__), "..", "frontend")
 
@@ -176,6 +185,21 @@ _PUB_APP_RE = re.compile(r"^/pub/([a-zA-Z0-9_-]+)/")
 _APPS_PUBLIC_RE = re.compile(r"^/apps/[a-zA-Z0-9_-]+/public(/|$)")
 
 
+def _app_wants_public_chrome(app_id: str) -> bool:
+    """Manifest opt-out: an app can set "public_chrome": false to render fully
+    standalone public pages (own header/footer/identity) with no injected
+    Apps Hub chrome — e.g. an app whose public pages are end-user-owned sites,
+    not the app's own public interface."""
+    import json
+    mpath = os.path.join(APPS_DIR, app_id, "manifest.json")
+    try:
+        with open(mpath) as f:
+            m = json.load(f)
+    except Exception:
+        return True
+    return m.get("public_chrome", True) is not False
+
+
 @app.middleware("http")
 async def block_apps_public_middleware(request: Request, call_next):
     """/apps/<id>/public/... is a static-file backdoor into the same pages
@@ -197,6 +221,8 @@ async def layout_inject_middleware(request: Request, call_next):
     if not m or not response.headers.get("content-type", "").startswith("text/html"):
         return response
     app_id = m.group(1)
+    if not _app_wants_public_chrome(app_id):
+        return response
 
     body = b""
     async for chunk in response.body_iterator:

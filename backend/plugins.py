@@ -408,7 +408,11 @@ async def list_plugins(session=Depends(get_current_session)):
                 mf = json.load(f)
             item["settings"] = mf.get("settings", [])
             item["replaces_widget"] = mf.get("replaces_widget")
-            item["public_url"] = mf.get("public_url")
+            # public_directory: false means the app has no single public page of
+            # its own (e.g. mvmSiteBuilder — each site gets its own URL under
+            # /pub/mvmsitebuilder/<slug>, so the bare public_url is meaningless) —
+            # same flag backend/apphub.py's public-apps listing already honors.
+            item["public_url"] = mf.get("public_url") if mf.get("public_directory") is not False else None
         except Exception:
             item["settings"] = []
             item["replaces_widget"] = None
