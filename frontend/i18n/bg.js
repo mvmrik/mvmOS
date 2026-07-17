@@ -617,6 +617,7 @@ window._i18n = {
   'ah_pub_tab_favourites':        'Любими',
   'ah_pub_tab_credits':            'Кредити',
   'ah_pub_tab_profile':            'Профил',
+  'ah_pub_tab_settings':           'Настройки',
   'ah_pub_loading_apps':           'Зареждане на приложения…',
   'ah_pub_no_apps_yet':            'Все още няма публични приложения.',
   'ah_pub_sort_by':                'Подреди по',
@@ -633,6 +634,8 @@ window._i18n = {
   'ah_pub_loading_credits':       'Зареждане на кредити…',
   'ah_pub_your_balance':           'Твоят баланс',
   'ah_pub_credits_unit':           'кредита',
+  'ah_pub_settings_theme_label':  'Цвят на фон и текст',
+  'ah_pub_settings_font_label':   'Размер на текста',
 
   // ── Widget Store ──────────────────────────────────────────────────────────
   'ws_title':                      'Магазин за джаджи',

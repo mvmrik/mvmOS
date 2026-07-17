@@ -615,6 +615,7 @@ window._i18n = {
   'ah_pub_tab_favourites':        'Favourites',
   'ah_pub_tab_credits':            'Credits',
   'ah_pub_tab_profile':            'Profile',
+  'ah_pub_tab_settings':           'Settings',
   'ah_pub_loading_apps':           'Loading apps…',
   'ah_pub_no_apps_yet':            'No public apps available yet.',
   'ah_pub_sort_by':                'Sort by',
@@ -631,6 +632,8 @@ window._i18n = {
   'ah_pub_loading_credits':       'Loading credits…',
   'ah_pub_your_balance':           'Your balance',
   'ah_pub_credits_unit':           'credits',
+  'ah_pub_settings_theme_label':  'Background & text color',
+  'ah_pub_settings_font_label':   'Text size',
 
   // ── Widget Store ──────────────────────────────────────────────────────────
   'ws_title':                      'Widget Store',

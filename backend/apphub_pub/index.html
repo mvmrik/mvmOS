@@ -184,6 +184,7 @@ function showDashboard(activeTab) {
       <button class="tab${activeTab==='favourites'?' active':''}" data-t="favourites">${t('ah_pub_tab_favourites')}</button>
       <button class="tab${activeTab==='credits'?' active':''}" data-t="credits">${t('ah_pub_tab_credits')}</button>
       <button class="tab${activeTab==='profile'?' active':''}" data-t="profile">${t('ah_pub_tab_profile')}</button>
+      <button class="tab${activeTab==='settings'?' active':''}" data-t="settings">${t('ah_pub_tab_settings')}</button>
     </div>
     <div id="d-body" style="flex:1;overflow-y:auto"></div>`;
 
@@ -205,6 +206,7 @@ function renderTab(t) {
   if (t === 'favourites') renderFavourites(c);
   if (t === 'credits')    renderCredits(c);
   if (t === 'profile')    renderProfile(c);
+  if (t === 'settings')   renderSettings(c);
 }
 
 // ── Apps tab ────────────────────────────────────────────────────
@@ -488,6 +490,86 @@ function renderProfile(c) {
     }
     c.querySelector('#ef-save').disabled = false;
   };
+}
+
+// ── Settings tab ────────────────────────────────────────────────
+// Ready-made color pairs + a handful of text sizes — no free color pickers —
+// so the choice can't produce an unreadable page. Applied instantly via
+// MvmLayout.applyTheme() for feedback, then persisted to the account so it
+// follows the user to every /pub/<app>/ page (layout.js reads it on load).
+
+const THEME_SWATCHES = [
+  { id: 'dark',  bg: '#1e1e2e', fg: '#cdd6f4', accent: '#89b4fa' },
+  { id: 'light', bg: '#f6f8fa', fg: '#1f2328', accent: '#0969da' },
+];
+const FONT_SIZES = ['sm', 'md', 'lg', 'xl'];
+const FONT_PREVIEW_PX = { sm: 13, md: 15, lg: 17, xl: 19 };
+
+function renderSettings(c) {
+  let theme = _me.theme || 'dark';
+  let fontSize = _me.font_size || 'md';
+
+  c.innerHTML = `
+    <div class="section" style="max-width:480px;display:flex;flex-direction:column;gap:20px">
+      <div class="card" style="padding:16px;display:flex;flex-direction:column;gap:12px">
+        <div style="font-weight:600;font-size:13px">${t('ah_pub_settings_theme_label')}</div>
+        <div id="st-theme" style="display:flex;gap:12px"></div>
+      </div>
+      <div class="card" style="padding:16px;display:flex;flex-direction:column;gap:12px">
+        <div style="font-weight:600;font-size:13px">${t('ah_pub_settings_font_label')}</div>
+        <div id="st-font" style="display:flex;gap:10px"></div>
+      </div>
+      <div class="err" id="st-err"></div>
+    </div>`;
+
+  const themeWrap = c.querySelector('#st-theme');
+  const fontWrap  = c.querySelector('#st-font');
+
+  function renderThemeSwatches() {
+    themeWrap.innerHTML = THEME_SWATCHES.map(sw => `
+      <button type="button" class="st-swatch" data-theme="${sw.id}" style="cursor:pointer;border-radius:10px;padding:0;overflow:hidden;
+        border:2px solid ${theme===sw.id?'var(--accent)':'var(--border)'};background:${sw.bg};width:76px;height:56px;
+        display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px">
+        <span style="font-weight:700;font-size:15px;color:${sw.fg}">Aa</span>
+        <span style="width:20px;height:4px;border-radius:2px;background:${sw.accent}"></span>
+      </button>`).join('');
+    themeWrap.querySelectorAll('.st-swatch').forEach(btn => {
+      btn.onclick = () => { theme = btn.dataset.theme; renderThemeSwatches(); save(); };
+    });
+  }
+
+  function renderFontButtons() {
+    fontWrap.innerHTML = FONT_SIZES.map(sz => `
+      <button type="button" class="st-font-btn" data-size="${sz}" style="cursor:pointer;flex:1;border-radius:8px;padding:10px 4px;
+        border:2px solid ${fontSize===sz?'var(--accent)':'var(--border)'};background:var(--surface2);color:var(--fg)">
+        <span style="font-weight:700;font-size:${FONT_PREVIEW_PX[sz]}px">Aa</span>
+      </button>`).join('');
+    fontWrap.querySelectorAll('.st-font-btn').forEach(btn => {
+      btn.onclick = () => { fontSize = btn.dataset.size; renderFontButtons(); save(); };
+    });
+  }
+
+  let _saving = false;
+  async function save() {
+    window.MvmLayout && MvmLayout.applyTheme(theme, fontSize);
+    if (_saving) return;
+    _saving = true;
+    const errEl = c.querySelector('#st-err');
+    const r = await fetch(BASE + '/me', {
+      method: 'PUT',
+      headers: {'Content-Type':'application/json','X-Pub-Token':_token},
+      body: JSON.stringify({ theme, font_size: fontSize })
+    });
+    _saving = false;
+    if (r.ok) {
+      _me.theme = theme; _me.font_size = fontSize;
+    } else if (errEl) {
+      errEl.textContent = t('ah_pub_error_saving');
+    }
+  }
+
+  renderThemeSwatches();
+  renderFontButtons();
 }
 
 // ── Credits tab ─────────────────────────────────────────────────

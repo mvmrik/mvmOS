@@ -6,10 +6,68 @@
   var THIS_SCRIPT = document.currentScript;
   var APP_ID = (THIS_SCRIPT && THIS_SCRIPT.getAttribute('data-mvm-app')) || '';
   var TOKEN_KEY = 'apphub_token';
+  var THEME_KEY = 'apphub_theme';
+  var FONT_KEY  = 'apphub_font_size';
 
   function esc(s) {
     return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
   }
+
+  // ── Appearance (theme + text size) ───────────────────────────────
+  // Ready-made color pairs only — no free color pickers — so a user can't
+  // land on an unreadable combination. Applied by overriding CSS custom
+  // properties every public page already styles with. Two naming sets:
+  //   --bg/--fg/... (unprefixed)   — standalone public pages with their own
+  //                                  :root (apphub itself, gamehub, ...).
+  //   --pub-bg/--pub-fg/... (prefixed) — the shared budget/chat/calendar
+  //                                  widgets, which this same JS also mounts
+  //                                  inside desktop windows (frontend/style.css
+  //                                  already owns unprefixed --bg/--border/
+  //                                  --accent there for the desktop shell) —
+  //                                  a prefixed, unclaimed namespace keeps the
+  //                                  public-theme override from ever leaking
+  //                                  into the desktop UI.
+  // Kept in sync with backend/apphub.py VALID_THEMES.
+  var THEMES = {
+    dark: null, // default palette already baked into each page's own CSS
+    light: {
+      '--bg': '#f6f8fa', '--surface1': '#ffffff', '--surface2': '#eaeef2',
+      '--border': '#d0d7de', '--fg': '#1f2328', '--fg2': '#656d76',
+      '--accent': '#0969da', '--green': '#1a7f37', '--red': '#cf222e', '--yellow': '#9a6700',
+
+      '--pub-bg': '#f6f8fa', '--pub-surface1': '#ffffff', '--pub-surface2': '#eaeef2',
+      '--pub-border': '#d0d7de', '--pub-fg': '#1f2328', '--pub-fg2': '#656d76',
+      '--pub-dim': '#8c959f', '--pub-crust': '#eef1f4',
+      '--pub-accent': '#0969da', '--pub-accent-hover': '#0860ca',
+      '--pub-green': '#1a7f37', '--pub-red': '#cf222e', '--pub-yellow': '#9a6700', '--pub-warning': '#9a6700'
+    }
+  };
+  var FONT_SCALE = { sm: '90%', md: '100%', lg: '112%', xl: '125%' };
+
+  function applyTheme(theme, fontSize) {
+    if (theme) localStorage.setItem(THEME_KEY, theme);
+    if (fontSize) localStorage.setItem(FONT_KEY, fontSize);
+    theme = theme || localStorage.getItem(THEME_KEY) || 'dark';
+    fontSize = fontSize || localStorage.getItem(FONT_KEY) || 'md';
+
+    var vars = THEMES[theme] || THEMES.dark;
+    var css = 'html{font-size:' + (FONT_SCALE[fontSize] || FONT_SCALE.md) + '}';
+    if (vars) {
+      var decls = Object.keys(vars).map(function (k) { return k + ':' + vars[k]; }).join(';');
+      css += ':root{' + decls + '}';
+    }
+    var s = document.getElementById('mvm-theme-vars');
+    if (!s) {
+      s = document.createElement('style');
+      s.id = 'mvm-theme-vars';
+      document.head.appendChild(s);
+    }
+    s.textContent = css;
+  }
+
+  // Apply the last-known prefs immediately (before any network round-trip)
+  // so there's no flash of the wrong theme/size on load.
+  applyTheme();
 
   function renderAvatar(user, size) {
     user = user || {};
@@ -138,6 +196,9 @@
     var results = await Promise.all([fetchAppMeta(), fetchUser()]);
     var finalHdr = buildHeader(results[0], results[1]);
     placeholderHdr.replaceWith(finalHdr);
+
+    var user = results[1];
+    if (user) applyTheme(user.theme, user.font_size);
   }
 
   async function init() {
@@ -148,7 +209,7 @@
     await refresh();
   }
 
-  window.MvmLayout = { refresh: refresh };
+  window.MvmLayout = { refresh: refresh, applyTheme: applyTheme, THEMES: THEMES, FONT_SCALE: FONT_SCALE };
 
   if (document.body) init();
   else document.addEventListener('DOMContentLoaded', init);

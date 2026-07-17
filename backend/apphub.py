@@ -39,6 +39,13 @@ _DB_PATH = os.path.join(os.path.dirname(__file__), "apphub_data", "data.db")
 # Display name/icon for core system apps that have no manifest.json.
 _CORE_APP_META = {"apphub": {"name": "Apps Hub", "icon": "🧩"}}
 
+# Public-page appearance prefs: a fixed set of ready-made color pairs and text
+# sizes (not free-form color pickers) so a non-technical user can't land on an
+# unreadable combination. Values are stored on public_users and read by every
+# /pub/<app>/ page via layout.js (see backend/apphub_pub/layout.js THEMES/FONT_SCALE).
+VALID_THEMES     = {"dark", "light"}
+VALID_FONT_SIZES = {"sm", "md", "lg", "xl"}
+
 
 def _db():
     os.makedirs(os.path.dirname(_DB_PATH), exist_ok=True)
@@ -61,6 +68,8 @@ def _init_db():
                 avatar_svg    TEXT,
                 password_hash TEXT,
                 is_admin      INTEGER NOT NULL DEFAULT 0,
+                theme         TEXT NOT NULL DEFAULT 'dark',
+                font_size     TEXT NOT NULL DEFAULT 'md',
                 created_at    TEXT NOT NULL
             );
             CREATE TABLE IF NOT EXISTS pub_tokens (
@@ -102,6 +111,10 @@ def _init_db():
         cols = {r[1] for r in conn.execute("PRAGMA table_info(public_users)")}
         if "is_admin" not in cols:
             conn.execute("ALTER TABLE public_users ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0")
+        if "theme" not in cols:
+            conn.execute("ALTER TABLE public_users ADD COLUMN theme TEXT NOT NULL DEFAULT 'dark'")
+        if "font_size" not in cols:
+            conn.execute("ALTER TABLE public_users ADD COLUMN font_size TEXT NOT NULL DEFAULT 'md'")
         conn.commit()
 
 
@@ -458,6 +471,7 @@ async def register(body: RegisterBody):
         "id": uid, "username": body.username.strip().lower(),
         "display_name": body.display_name.strip(), "avatar_color": body.avatar_color,
         "avatar_data": None, "avatar_svg": None,
+        "theme": "dark", "font_size": "md",
     }})
 
 
@@ -478,6 +492,7 @@ async def login(body: LoginBody):
         "id": row["id"], "username": row["username"],
         "display_name": row["display_name"], "avatar_color": row["avatar_color"],
         "avatar_data": row["avatar_data"], "avatar_svg": row["avatar_svg"],
+        "theme": row["theme"], "font_size": row["font_size"],
     }})
 
 
@@ -494,7 +509,7 @@ async def me_pub(x_pub_token: Optional[str] = Header(default=None)):
     if not u:
         raise HTTPException(401)
     return JSONResponse({k: u[k] for k in
-        ("id", "username", "display_name", "avatar_color", "avatar_data", "avatar_svg")})
+        ("id", "username", "display_name", "avatar_color", "avatar_data", "avatar_svg", "theme", "font_size")})
 
 
 class MeUpdateBody(BaseModel):
@@ -503,6 +518,8 @@ class MeUpdateBody(BaseModel):
     avatar_color: Optional[str] = None
     avatar_data:  Optional[str] = None
     avatar_svg:   Optional[str] = None
+    theme:        Optional[str] = None
+    font_size:    Optional[str] = None
 
 
 @_pub.put("/me")
@@ -526,6 +543,14 @@ async def update_me_pub(body: MeUpdateBody, x_pub_token: Optional[str] = Header(
         fields.append("avatar_data=?"); vals.append(body.avatar_data)
     if body.avatar_svg is not None:
         fields.append("avatar_svg=?"); vals.append(body.avatar_svg)
+    if body.theme is not None:
+        if body.theme not in VALID_THEMES:
+            raise HTTPException(400, detail="Invalid theme")
+        fields.append("theme=?"); vals.append(body.theme)
+    if body.font_size is not None:
+        if body.font_size not in VALID_FONT_SIZES:
+            raise HTTPException(400, detail="Invalid font_size")
+        fields.append("font_size=?"); vals.append(body.font_size)
     if fields:
         vals.append(u["id"])
         with _db() as conn:
