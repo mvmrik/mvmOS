@@ -104,6 +104,7 @@ const AppHub = (() => {
       { id: 'account',    label: t('ah_tab_account') },
       { id: 'favourites', label: t('ah_tab_favourites') },
       { id: 'apps',       label: t('ah_tab_apps'), adminOnly: true },
+      { id: 'app-apis',   label: t('ah_tab_app_apis'), adminOnly: true },
       { id: 'users',      label: t('ah_tab_users'), adminOnly: true },
     ];
 
@@ -126,6 +127,7 @@ const AppHub = (() => {
       if (id === 'account') renderAccount(c);
       else if (id === 'favourites') renderFavourites(c);
       else if (id === 'apps')  renderApps(c);
+      else if (id === 'app-apis') renderAppApis(c);
       else if (id === 'users') renderUsers(c);
     }
 
@@ -412,6 +414,52 @@ const AppHub = (() => {
         });
       }
       render(c.querySelector('#ah-apps-list'));
+    }
+
+    // ── App-to-app API tab ────────────────────────────────────
+    async function renderAppApis(c) {
+      c.innerHTML = '<div style="padding:20px;color:var(--text-dim);font-size:.85rem">…</div>';
+      const r = await fetch('/api/apphub/app-apis').catch(()=>null);
+      if (!r?.ok) { c.innerHTML = `<div style="padding:20px;color:#f38ba8;font-size:.85rem">${t('ah_error_loading_apps')}</div>`; return; }
+      const apps = await r.json();
+      if (!apps.length) { c.innerHTML = `<div style="padding:20px;color:var(--text-dim);font-size:.85rem;text-align:center">${t('ah_no_app_apis')}</div>`; return; }
+
+      c.innerHTML = `
+        <div style="padding:12px 16px;font-size:.78rem;color:var(--text-dim);border-bottom:1px solid var(--border)">
+          ${t('ah_app_apis_hint')}
+        </div>
+        <div id="ah-app-apis-list"></div>`;
+
+      function render(list) {
+        list.innerHTML = apps.map(a => `
+          <div style="display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid var(--border)">
+            <span style="font-size:1.4rem">${esc(a.icon)}</span>
+            <div style="flex:1;min-width:0">
+              <div style="font-size:.88rem;font-weight:500">${esc(a.name)}</div>
+              <div style="font-size:.72rem;color:var(--text-dim)">${esc(a.id)}/api.py</div>
+            </div>
+            <label style="display:flex;align-items:center;gap:6px;cursor:pointer;flex-shrink:0">
+              <input type="checkbox" data-id="${a.id}" ${a.enabled?'checked':''} style="width:16px;height:16px;cursor:pointer">
+              <span style="font-size:.8rem;color:${a.enabled?'var(--accent)':'var(--text-dim)'}">${a.enabled?t('ah_enabled'):t('ah_disabled')}</span>
+            </label>
+          </div>`).join('');
+
+        list.querySelectorAll('input[type=checkbox]').forEach(cb => {
+          cb.onchange = async () => {
+            const id  = cb.dataset.id;
+            const app = apps.find(x => x.id === id);
+            if (!app) return;
+            app.enabled = cb.checked;
+            await fetch(`/api/apphub/app-apis/${id}`, {
+              method: 'PUT',
+              headers: {'Content-Type':'application/json'},
+              body: JSON.stringify({enabled: cb.checked}),
+            });
+            render(list);
+          };
+        });
+      }
+      render(c.querySelector('#ah-app-apis-list'));
     }
 
     // ── Users tab ──────────────────────────────────────────────

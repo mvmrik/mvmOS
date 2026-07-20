@@ -13,6 +13,22 @@
     return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
   }
 
+  // This file is injected into every /pub/<app>/ page, including ones that
+  // never load /i18n/i18n.js themselves, so window.t can't be relied on to
+  // exist. Use it opportunistically (it works on apphub's own page and any
+  // app that does load i18n) and fall back to plain English otherwise —
+  // same keys as frontend/i18n/en.js so translations stay in sync when
+  // window.t is present.
+  function tt(key, fallback) {
+    try {
+      if (window.t) {
+        var s = window.t(key);
+        if (s && s !== key) return s;
+      }
+    } catch (e) {}
+    return fallback;
+  }
+
   // ── Appearance (theme + text size) ───────────────────────────────
   // Ready-made color pairs only — no free color pickers — so a user can't
   // land on an unreadable combination. Applied by overriding CSS custom
@@ -42,7 +58,7 @@
       '--pub-green': '#1a7f37', '--pub-red': '#cf222e', '--pub-yellow': '#9a6700', '--pub-warning': '#9a6700'
     }
   };
-  var FONT_SCALE = { sm: '90%', md: '100%', lg: '112%', xl: '125%' };
+  var FONT_SCALE = { sm: '90%', md: '100%', lg: '112%', xl: '125%', xxl: '140%', xxxl: '155%' };
 
   function applyTheme(theme, fontSize) {
     if (theme) localStorage.setItem(THEME_KEY, theme);
@@ -93,13 +109,23 @@
       '.mvm-crumbs a:hover{color:var(--accent,#89b4fa)}' +
       '.mvm-crumbs .mvm-sep{color:var(--fg2,#a6adc8);font-weight:400}' +
       '.mvm-crumbs .mvm-cur{color:var(--fg2,#a6adc8);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}' +
-      '.mvm-user{display:flex;align-items:center;gap:8px;font-family:system-ui,sans-serif;flex-shrink:0}' +
-      '.mvm-user-name{display:flex;flex-direction:column;line-height:1.2}' +
-      '.mvm-user-lbl{font-size:11px;color:var(--fg2,#a6adc8)}' +
-      '.mvm-user-val{font-size:13px;font-weight:700;color:var(--accent,#89b4fa);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}' +
-      '.mvm-logout{border:1px solid var(--border,#45475a);border-radius:8px;padding:5px 12px;font-size:.82rem;' +
-      'background:var(--surface2,#313244);color:var(--fg,#cdd6f4);cursor:pointer;font-family:inherit}' +
-      '.mvm-logout:hover{background:var(--border,#45475a)}' +
+      '.mvm-user{position:relative;display:flex;align-items:center;font-family:system-ui,sans-serif;flex-shrink:0}' +
+      '.mvm-avatar-btn{display:flex;align-items:center;gap:6px;background:none;border:none;padding:3px;border-radius:999px;cursor:pointer}' +
+      '.mvm-avatar-btn:hover{background:var(--surface2,#313244)}' +
+      '.mvm-credits-pill{display:flex;align-items:center;gap:2px;font-size:11px;font-weight:700;line-height:1;' +
+      'color:var(--fg,#cdd6f4);background:var(--surface2,#313244);border:1px solid var(--border,#45475a);' +
+      'border-radius:999px;padding:4px 8px;white-space:nowrap}' +
+      '.mvm-menu{position:absolute;top:calc(100% + 8px);right:0;min-width:200px;background:var(--surface1,#181825);' +
+      'border:1px solid var(--border,#45475a);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.35);' +
+      'z-index:1000;display:flex;flex-direction:column;padding:6px}' +
+      '.mvm-menu[hidden]{display:none}' +
+      '.mvm-menu-hdr{display:flex;align-items:center;gap:9px;padding:8px 8px 10px}' +
+      '.mvm-menu-name{font-size:13px;font-weight:700;color:var(--fg,#cdd6f4);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}' +
+      '.mvm-menu-item{display:flex;align-items:center;gap:9px;padding:9px 8px;border-radius:7px;font-size:13px;' +
+      'color:var(--fg,#cdd6f4);text-decoration:none;background:none;border:none;text-align:left;width:100%;' +
+      'font-family:inherit;cursor:pointer}' +
+      '.mvm-menu-item:hover{background:var(--surface2,#313244)}' +
+      '.mvm-menu-logout{color:var(--red,#f38ba8);border-top:1px solid var(--border,#45475a);margin-top:4px;padding-top:11px}' +
       '.mvm-ftr{display:flex;align-items:center;justify-content:center;gap:8px;padding:8px 16px;' +
       'border-top:1px solid var(--border,#45475a);background:var(--surface1,#181825);' +
       'font-family:system-ui,sans-serif;font-size:.72rem;color:var(--fg2,#a6adc8);flex-shrink:0;order:999}' +
@@ -122,7 +148,12 @@
     if (root) root.style.cssText += ';flex:1 1 auto;min-height:0;overflow:auto';
   }
 
-  function buildHeader(appMeta, user) {
+  // Just the avatar is always visible (name + logout used to sit right in the
+  // header, which is too cramped on phones); everything else — name, credit
+  // balance, profile/settings links, logout — moves into a dropdown opened by
+  // tapping the avatar. The credit balance also gets a small pill next to the
+  // avatar itself, so it's visible without opening the menu.
+  function buildHeader(appMeta, user, credits) {
     var hdr = document.createElement('header');
     hdr.className = 'mvm-hdr';
 
@@ -142,12 +173,48 @@
     hdr.appendChild(spacer);
 
     if (user) {
+      var creditsUnit = tt('ah_pub_credits_unit', 'credits');
+      var creditsText = credits != null ? (credits + ' ' + creditsUnit) : creditsUnit;
+
       var box = document.createElement('div');
       box.className = 'mvm-user';
-      box.innerHTML = renderAvatar(user, 26)
-        + '<div class="mvm-user-name"><span class="mvm-user-lbl">Logged in as</span><span class="mvm-user-val">' + esc(user.display_name) + '</span></div>'
-        + '<button class="mvm-logout" type="button">Logout</button>';
-      box.querySelector('.mvm-logout').onclick = async function () {
+      box.innerHTML =
+        '<button class="mvm-avatar-btn" type="button" aria-haspopup="true" aria-expanded="false">'
+          + renderAvatar(user, 28)
+          + (credits != null ? '<span class="mvm-credits-pill">🪙 ' + esc(credits) + '</span>' : '')
+        + '</button>'
+        + '<div class="mvm-menu" hidden>'
+          + '<div class="mvm-menu-hdr">' + renderAvatar(user, 32) + '<span class="mvm-menu-name">' + esc(user.display_name) + '</span></div>'
+          + '<a class="mvm-menu-item" href="/pub/apphub/?tab=credits" data-tab="credits">🪙 ' + esc(creditsText) + '</a>'
+          + '<a class="mvm-menu-item" href="/pub/apphub/?tab=profile" data-tab="profile">👤 ' + esc(tt('ah_pub_tab_profile', 'Profile')) + '</a>'
+          + '<a class="mvm-menu-item" href="/pub/apphub/?tab=settings" data-tab="settings">⚙️ ' + esc(tt('ah_pub_tab_settings', 'Settings')) + '</a>'
+          + '<button class="mvm-menu-item mvm-menu-logout" type="button">↪ ' + esc(tt('ah_logout', 'Logout')) + '</button>'
+        + '</div>';
+
+      var menuBtn = box.querySelector('.mvm-avatar-btn');
+      var menu = box.querySelector('.mvm-menu');
+      menuBtn.onclick = function (e) {
+        e.stopPropagation();
+        var willOpen = menu.hidden;
+        menu.hidden = !willOpen;
+        menuBtn.setAttribute('aria-expanded', String(willOpen));
+      };
+
+      // On apphub's own page, switch tabs in place through its SPA router
+      // (window.MvmApphub, exposed by index.html) instead of a full reload —
+      // real navigation only makes sense when coming from a different app,
+      // and window.MvmApphub simply won't exist there, so the <a href> below
+      // falls through to a normal page load in that case.
+      box.querySelectorAll('.mvm-menu-item[data-tab]').forEach(function (el) {
+        el.addEventListener('click', function (e) {
+          if (!(window.MvmApphub && window.MvmApphub.goToTab)) return;
+          e.preventDefault();
+          menu.hidden = true;
+          window.MvmApphub.goToTab(el.dataset.tab);
+        });
+      });
+
+      box.querySelector('.mvm-menu-logout').onclick = async function () {
         var token = localStorage.getItem(TOKEN_KEY);
         try {
           await fetch('/api/pub/apphub/logout', { method: 'POST', headers: { 'X-Pub-Token': token || '' } });
@@ -159,6 +226,24 @@
     }
     return hdr;
   }
+
+  // Registered once at script load (not per header rebuild, since refresh()
+  // replaces the header element every time) — closes the menu on outside
+  // click or Escape, whichever header instance is currently in the DOM.
+  document.addEventListener('click', function (e) {
+    var menu = document.querySelector('.mvm-menu');
+    var box = document.querySelector('.mvm-user');
+    if (menu && !menu.hidden && box && !box.contains(e.target)) {
+      menu.hidden = true;
+      var btn = box.querySelector('.mvm-avatar-btn');
+      if (btn) btn.setAttribute('aria-expanded', 'false');
+    }
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Escape') return;
+    var menu = document.querySelector('.mvm-menu');
+    if (menu) menu.hidden = true;
+  });
 
   function buildFooter() {
     var ftr = document.createElement('footer');
@@ -177,6 +262,17 @@
     } catch (e) { return null; }
   }
 
+  async function fetchCredits() {
+    var token = localStorage.getItem(TOKEN_KEY);
+    if (!token) return null;
+    try {
+      var r = await fetch('/api/pub/apphub/credits', { headers: { 'X-Pub-Token': token } });
+      if (!r.ok) return null;
+      var d = await r.json();
+      return typeof d.balance === 'number' ? d.balance : null;
+    } catch (e) { return null; }
+  }
+
   async function fetchAppMeta() {
     if (!APP_ID || APP_ID === 'apphub') return null;
     try {
@@ -190,11 +286,11 @@
 
   async function refresh() {
     var existingHdr = document.querySelector('.mvm-hdr');
-    var placeholderHdr = existingHdr || buildHeader(null, null);
+    var placeholderHdr = existingHdr || buildHeader(null, null, null);
     if (!existingHdr) document.body.prepend(placeholderHdr);
 
-    var results = await Promise.all([fetchAppMeta(), fetchUser()]);
-    var finalHdr = buildHeader(results[0], results[1]);
+    var results = await Promise.all([fetchAppMeta(), fetchUser(), fetchCredits()]);
+    var finalHdr = buildHeader(results[0], results[1], results[2]);
     placeholderHdr.replaceWith(finalHdr);
 
     var user = results[1];

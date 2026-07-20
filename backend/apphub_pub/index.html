@@ -182,9 +182,6 @@ function showDashboard(activeTab) {
     <div class="tab-bar">
       <button class="tab${activeTab==='apps'?' active':''}" data-t="apps">${t('ah_pub_tab_apps')}</button>
       <button class="tab${activeTab==='favourites'?' active':''}" data-t="favourites">${t('ah_pub_tab_favourites')}</button>
-      <button class="tab${activeTab==='credits'?' active':''}" data-t="credits">${t('ah_pub_tab_credits')}</button>
-      <button class="tab${activeTab==='profile'?' active':''}" data-t="profile">${t('ah_pub_tab_profile')}</button>
-      <button class="tab${activeTab==='settings'?' active':''}" data-t="settings">${t('ah_pub_tab_settings')}</button>
     </div>
     <div id="d-body" style="flex:1;overflow-y:auto"></div>`;
 
@@ -208,6 +205,21 @@ function renderTab(t) {
   if (t === 'profile')    renderProfile(c);
   if (t === 'settings')   renderSettings(c);
 }
+
+// Lets layout.js's avatar-menu links (Credits/Profile/Settings — no longer
+// in the tab bar itself) switch tabs in place instead of reloading the page,
+// same as a real tab-bar button click. Only exists once the dashboard is up,
+// so layout.js's header only wires this up when it finds it — a plain page
+// load otherwise, which is what apps other than apphub itself need anyway.
+window.MvmApphub = {
+  goToTab(tab) {
+    if (!_me || !app.querySelector('.tab-bar')) return;
+    app.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+    const btn = app.querySelector(`.tab[data-t="${tab}"]`);
+    if (btn) btn.classList.add('active');
+    renderTab(tab);
+  }
+};
 
 // ── Apps tab ────────────────────────────────────────────────────
 
@@ -502,8 +514,8 @@ const THEME_SWATCHES = [
   { id: 'dark',  bg: '#1e1e2e', fg: '#cdd6f4', accent: '#89b4fa' },
   { id: 'light', bg: '#f6f8fa', fg: '#1f2328', accent: '#0969da' },
 ];
-const FONT_SIZES = ['sm', 'md', 'lg', 'xl'];
-const FONT_PREVIEW_PX = { sm: 13, md: 15, lg: 17, xl: 19 };
+const FONT_SIZES = ['sm', 'md', 'lg', 'xl', 'xxl', 'xxxl'];
+const FONT_PREVIEW_PX = { sm: 13, md: 15, lg: 17, xl: 19, xxl: 21, xxxl: 23 };
 
 function renderSettings(c) {
   let theme = _me.theme || 'dark';
@@ -517,7 +529,7 @@ function renderSettings(c) {
       </div>
       <div class="card" style="padding:16px;display:flex;flex-direction:column;gap:12px">
         <div style="font-weight:600;font-size:13px">${t('ah_pub_settings_font_label')}</div>
-        <div id="st-font" style="display:flex;gap:10px"></div>
+        <div id="st-font" style="display:flex;flex-wrap:wrap;gap:10px"></div>
       </div>
       <div class="err" id="st-err"></div>
     </div>`;
@@ -540,7 +552,7 @@ function renderSettings(c) {
 
   function renderFontButtons() {
     fontWrap.innerHTML = FONT_SIZES.map(sz => `
-      <button type="button" class="st-font-btn" data-size="${sz}" style="cursor:pointer;flex:1;border-radius:8px;padding:10px 4px;
+      <button type="button" class="st-font-btn" data-size="${sz}" style="cursor:pointer;flex:1 1 60px;border-radius:8px;padding:10px 4px;
         border:2px solid ${fontSize===sz?'var(--accent)':'var(--border)'};background:var(--surface2);color:var(--fg)">
         <span style="font-weight:700;font-size:${FONT_PREVIEW_PX[sz]}px">Aa</span>
       </button>`).join('');

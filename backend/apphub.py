@@ -13,6 +13,7 @@ Exports (used by other modules via sys.modules["backend.apphub"]):
   get_credit_balance(uid) -> int
   spend_credits(uid, app_id, amount, reason="", idempotency_key=None) -> int  (raises CreditError)
   grant_credits(uid, app_id, amount, reason="", idempotency_key=None) -> int  (raises CreditError)
+  call_app_api(target_app_id, method, *args, **kwargs) -> Any  (raises AppApiError)
 
 Credits — a shared, account-wide balance apps can charge against for optional
 paid features. Apps never touch the balance column directly: spend_credits()
@@ -21,6 +22,15 @@ decremented when the WHERE clause proves it's sufficient), so two concurrent
 spends from the same user can't both succeed against a balance that only
 covers one of them. idempotency_key (unique per app_id) makes retries safe —
 replaying the same key returns the same result instead of charging twice.
+
+App-to-app API — the only sanctioned way for one app's backend to reach into
+another's. An app opts in by adding backend/apps/<id>/api.py, a plain Python
+module exposing whatever functions it's willing to let other apps call (never
+raw DB access). Apps Hub admin must explicitly enable the target app's API
+(off by default, same posture as the public-page toggle) before any call
+succeeds. Callers must always go through call_app_api() here — never import
+another app's api.py directly — so this stays the single enforceable trust
+boundary even after apps are sandboxed into separate processes down the line.
 """
 
 import hashlib, os, secrets, sqlite3, sys, uuid
@@ -44,7 +54,7 @@ _CORE_APP_META = {"apphub": {"name": "Apps Hub", "icon": "🧩"}}
 # unreadable combination. Values are stored on public_users and read by every
 # /pub/<app>/ page via layout.js (see backend/apphub_pub/layout.js THEMES/FONT_SCALE).
 VALID_THEMES     = {"dark", "light"}
-VALID_FONT_SIZES = {"sm", "md", "lg", "xl"}
+VALID_FONT_SIZES = {"sm", "md", "lg", "xl", "xxl", "xxxl"}
 
 
 def _db():
@@ -79,6 +89,10 @@ def _init_db():
                 expires_at TEXT NOT NULL
             );
             CREATE TABLE IF NOT EXISTS public_apps (
+                app_id     TEXT PRIMARY KEY,
+                enabled    INTEGER NOT NULL DEFAULT 0
+            );
+            CREATE TABLE IF NOT EXISTS app_apis (
                 app_id     TEXT PRIMARY KEY,
                 enabled    INTEGER NOT NULL DEFAULT 0
             );
@@ -138,6 +152,83 @@ def _detect_public_apps() -> list:
         if os.path.isfile(os.path.join(base, app_id, "public.py")):
             result.append(app_id)
     return result
+
+
+# ── App-to-app API ──────────────────────────────────────────────
+# Same shape as the public.py convention above, and as telegramhub's own
+# per-app adapter loader (backend/apps/telegramhub/backend.py) — an app opts
+# in by dropping a file next to its other backend files, this module
+# discovers it, and an admin toggle gates whether it's actually reachable.
+
+def is_app_api_enabled(app_id: str) -> bool:
+    with _db() as conn:
+        row = conn.execute("SELECT enabled FROM app_apis WHERE app_id=?", (app_id,)).fetchone()
+    return bool(row and row["enabled"])
+
+
+def _detect_app_apis() -> list:
+    """Scan backend/apps/ for directories with api.py — these are app-API-capable."""
+    base = os.path.join(os.path.dirname(__file__), "apps")
+    result = []
+    if not os.path.isdir(base):
+        return result
+    for app_id in sorted(os.listdir(base)):
+        if app_id.startswith("_"):
+            continue
+        if os.path.isfile(os.path.join(base, app_id, "api.py")):
+            result.append(app_id)
+    return result
+
+
+_api_modules: dict = {}  # app_id -> loaded api.py module (or None if load failed)
+
+
+def _load_app_api(app_id: str):
+    if app_id in _api_modules:
+        return _api_modules[app_id]
+    path = os.path.join(os.path.dirname(__file__), "apps", app_id, "api.py")
+    if not os.path.isfile(path):
+        _api_modules[app_id] = None
+        return None
+    import types
+    mod_name = f"app_api_{app_id}"
+    try:
+        with open(path) as f:
+            source = f.read()
+        mod = types.ModuleType(mod_name)
+        mod.__file__ = path
+        sys.modules[mod_name] = mod
+        exec(compile(source, path, "exec"), mod.__dict__)
+        _api_modules[app_id] = mod
+    except Exception as e:
+        print(f"[app-api] failed to load api.py for {app_id}: {e}")
+        _api_modules[app_id] = None
+    return _api_modules[app_id]
+
+
+class AppApiError(Exception):
+    """Raised by call_app_api() when the target app has no api.py, its API is
+    disabled by the admin, or it doesn't expose the requested method. Callers
+    should expect this as a normal, non-exceptional outcome (the target app
+    may simply not be installed) and degrade gracefully — e.g. a task's
+    reward-to-budget link silently not firing if Budget isn't installed or
+    its API isn't enabled, rather than the task itself failing."""
+    pass
+
+
+def call_app_api(target_app_id: str, method: str, *args, **kwargs):
+    """Call a function exposed by another app's backend/apps/<id>/api.py,
+    in-process. The target app receives only the args/kwargs you pass — it
+    has no way to know which app is calling."""
+    if not is_app_api_enabled(target_app_id):
+        raise AppApiError(f"'{target_app_id}' app API is not enabled")
+    mod = _load_app_api(target_app_id)
+    if mod is None:
+        raise AppApiError(f"'{target_app_id}' has no api.py")
+    fn = getattr(mod, method, None)
+    if fn is None or not callable(fn):
+        raise AppApiError(f"'{target_app_id}' does not expose '{method}'")
+    return fn(*args, **kwargs)
 
 
 def _hash_pw(pw: str) -> str:
@@ -660,6 +751,48 @@ async def toggle_public_app(app_id: str, body: PublicAppToggle, session=Depends(
     with _db() as conn:
         conn.execute(
             "INSERT OR REPLACE INTO public_apps(app_id, enabled) VALUES(?,?)",
+            (app_id, 1 if body.enabled else 0)
+        )
+        conn.commit()
+    return JSONResponse({"ok": True})
+
+
+# ── Admin: app-to-app API management ──────────────────────────────
+
+@_admin.get("/app-apis")
+async def list_app_apis_admin(session=Depends(get_current_session)):
+    """List all apps that expose an api.py, with their enabled status."""
+    import json
+    detected = _detect_app_apis()
+    apps_dir = os.path.join(os.path.dirname(__file__), "..", "apps")
+    with _db() as conn:
+        rows = {r["app_id"]: r["enabled"] for r in conn.execute("SELECT app_id, enabled FROM app_apis").fetchall()}
+    result = []
+    for app_id in detected:
+        mpath = os.path.join(apps_dir, app_id, "manifest.json")
+        try:
+            m = json.load(open(mpath)) if os.path.isfile(mpath) else {}
+        except Exception:
+            m = {}
+        meta = _CORE_APP_META.get(app_id, {})
+        result.append({
+            "id":      app_id,
+            "name":    m.get("name") or meta.get("name", app_id),
+            "icon":    m.get("icon") or meta.get("icon", "📦"),
+            "enabled": bool(rows.get(app_id, 0)),
+        })
+    return JSONResponse(result)
+
+
+class AppApiToggle(BaseModel):
+    enabled: bool
+
+
+@_admin.put("/app-apis/{app_id}")
+async def toggle_app_api(app_id: str, body: AppApiToggle, session=Depends(get_current_session)):
+    with _db() as conn:
+        conn.execute(
+            "INSERT OR REPLACE INTO app_apis(app_id, enabled) VALUES(?,?)",
             (app_id, 1 if body.enabled else 0)
         )
         conn.commit()
