@@ -361,7 +361,11 @@ async def login_users():
     with get_conn() as conn:
         row = conn.execute("SELECT value FROM settings WHERE key='last_login_user'").fetchone()
     last = row["value"] if row else None
-    return JSONResponse({"users": _login_users(), "last_user": last})
+    # Never let a browser or an intermediate proxy cache the account list —
+    # over plain HTTP a shared proxy can otherwise serve one server's users
+    # to another.
+    return JSONResponse({"users": _login_users(), "last_user": last},
+                        headers={"Cache-Control": "no-store"})
 
 
 @router.post("/login")
@@ -459,7 +463,8 @@ async def login_totp(body: TotpLoginRequest, request: Request):
 
 @router.get("/api/auth/whoami")
 async def whoami(session=Depends(get_current_session)):
-    return JSONResponse({"effective_user": session["effective_user"]})
+    return JSONResponse({"effective_user": session["effective_user"]},
+                        headers={"Cache-Control": "no-store"})
 
 
 class VerifyRequest(BaseModel):
