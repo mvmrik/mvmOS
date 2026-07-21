@@ -160,6 +160,14 @@ else
 fi
 
 echo ""
+echo "  Accessing directly by IP? If it doesn't load, port $PORT may be closed"
+echo "  by a firewall (ufw/firewalld on this machine, or your VPS provider's"
+echo "  cloud firewall) — open port $PORT/tcp there."
+echo ""
+echo "  Using a domain (nginx, Cloudflare Tunnel, or similar in front of"
+echo "  mvmOS)? Keep port $PORT closed to the outside and point your proxy/"
+echo "  tunnel at 127.0.0.1:$PORT instead."
+echo ""
 echo "  Log in with any Linux system user on this machine."
 echo ""
 echo "  Service commands:"
