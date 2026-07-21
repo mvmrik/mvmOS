@@ -404,6 +404,11 @@ async def login(request: Request):
 
     resp = RedirectResponse(url="/", status_code=303)
     resp.set_cookie("session", token, httponly=True, samesite="lax", max_age=30*24*3600)
+    # Start the redirect to / on a fresh connection. Some HTTP proxies corrupt
+    # the second request on a reused keep-alive connection, which breaks the
+    # first page after login when mvmOS is served directly over plain HTTP.
+    # Hop-by-hop header — reverse proxies strip it, so this is a no-op there.
+    resp.headers["connection"] = "close"
     return resp
 
 
@@ -448,6 +453,7 @@ async def login_totp(body: TotpLoginRequest, request: Request):
 
     resp = RedirectResponse(url="/", status_code=303)
     resp.set_cookie("session", token, httponly=True, samesite="lax", max_age=30*24*3600)
+    resp.headers["connection"] = "close"
     return resp
 
 
