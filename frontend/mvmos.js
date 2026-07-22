@@ -1367,6 +1367,27 @@ var mvmOS = (() => {
         pw.addEventListener('keydown', e => { if (e.key === 'Enter') confirm(); });
       });
     },
+    confirmPassword(title, message) {
+      const _t = k => window._i18n?.[k] || window.mvmOS?.t?.(k) || k;
+      return new Promise(resolve => {
+        const ov = document.createElement('div');
+        ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;';
+        ov.innerHTML = `<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius,6px);padding:24px;max-width:380px;width:90%;box-shadow:var(--shadow)"><div style="font-size:1.05rem;font-weight:700;margin-bottom:8px">🔐 ${title}</div><div style="font-size:.85rem;color:var(--text-dim);margin-bottom:12px">${message}</div><input type="password" id="_cp-pw" autocomplete="current-password" placeholder="${_t('require_root_ph')}" style="width:100%;box-sizing:border-box;padding:7px 10px;border:1px solid var(--border);border-radius:4px;background:var(--surface2);color:var(--text);font-size:.85rem"><div id="_cp-err" style="font-size:.78rem;color:#f38ba8;min-height:16px;margin:6px 0 12px"></div><div style="display:flex;gap:8px;justify-content:flex-end"><button id="_cp-cancel" class="s-btn s-btn-sm">${_t('cancel')}</button><button id="_cp-ok" class="s-btn s-btn-sm s-btn-primary">${_t('confirm')}</button></div></div>`;
+        document.body.appendChild(ov);
+        const input = ov.querySelector('#_cp-pw'), error = ov.querySelector('#_cp-err'), button = ov.querySelector('#_cp-ok');
+        input.focus();
+        ov.querySelector('#_cp-cancel').onclick = () => { ov.remove(); resolve(null); };
+        const submit = async () => {
+          if (!input.value) { error.textContent = _t('require_root_required'); return; }
+          button.disabled = true;
+          const res = await fetch('/api/auth/verify', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:input.value})});
+          if (res.ok) { const password = input.value; ov.remove(); resolve(password); return; }
+          error.textContent = _t('require_root_wrong'); button.disabled = false; input.value = ''; input.focus();
+        };
+        button.onclick = submit;
+        input.addEventListener('keydown', event => { if (event.key === 'Enter') submit(); });
+      });
+    },
     confirm(message, opts) {
       opts = opts || {};
       const _t = k => window._i18n?.[k] || window.mvmOS?.t?.(k) || k;

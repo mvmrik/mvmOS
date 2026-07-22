@@ -180,6 +180,7 @@ const Settings = (() => {
           <div class="settings-tab ${activeTab==='updates'?'active':''}" data-tab="updates">${t('settings_updates')}</div>
           <div class="settings-tab ${activeTab==='startmenu'?'active':''}" data-tab="startmenu">${t('settings_startmenu')}</div>
           <div class="settings-tab ${activeTab==='system'?'active':''}" data-tab="system">${t('settings_system')}</div>
+          <div class="settings-tab ${activeTab==='sshaccess'?'active':''}" data-tab="sshaccess">🔐 ${t('settings_ssh_access')}</div>
           <div class="settings-tab ${activeTab==='backup'?'active':''}" data-tab="backup">${t('settings_backup')}</div>
           <div class="settings-tab ${activeTab==='about'?'active':''}" data-tab="about" style="margin-top:auto">${t('settings_about')}</div>
         </nav>
@@ -417,6 +418,9 @@ const Settings = (() => {
           <!-- Backup panel -->
           <div class="settings-panel ${activeTab==='backup'?'active':''}" id="sp-backup"></div>
 
+          <!-- SSH access panel -->
+          <div class="settings-panel ${activeTab==='sshaccess'?'active':''}" id="sp-sshaccess"></div>
+
           <!-- Screen Saver panel -->
           <div class="settings-panel ${activeTab==='screensaver'?'active':''}" id="sp-screensaver">
             <div class="settings-section">
@@ -481,6 +485,7 @@ const Settings = (() => {
         if (tab.dataset.tab === 'wallpaper') initWallpaper(body);
         if (tab.dataset.tab === 'system') renderSystem(body);
         if (tab.dataset.tab === 'backup') renderBackup(body);
+        if (tab.dataset.tab === 'sshaccess') renderSshAccess(body);
       });
     });
 
@@ -493,6 +498,7 @@ const Settings = (() => {
     if (activeTab === 'wallpaper') initWallpaper(body);
     if (activeTab === 'system') renderSystem(body);
     if (activeTab === 'backup') renderBackup(body);
+    if (activeTab === 'sshaccess') renderSshAccess(body);
 
     // Display — auto-save on slider change
     const iconSlider = body.querySelector('#s-icon-size');
@@ -1749,6 +1755,67 @@ const Settings = (() => {
     ov.addEventListener('click', e => { if (e.target === ov) ov.remove(); });
     document.body.appendChild(ov);
     _render();
+  }
+
+  async function renderSshAccess(body) {
+    const panel = body.querySelector('#sp-sshaccess');
+    if (!panel) return;
+    const esc = value => String(value).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+    panel.innerHTML = `<div style="color:var(--text-dim);font-size:.85rem">${t('loading')}</div>`;
+    let status, keys;
+    try {
+      status = await fetch('/api/ssh-access/status').then(r => r.json());
+      if (!status.requires_root) keys = await fetch('/api/ssh-access/keys').then(r => r.json());
+    } catch (_) {
+      panel.innerHTML = `<div style="color:#e05555">${t('ssh_access_load_error')}</div>`;
+      return;
+    }
+    if (!status.supported) {
+      panel.innerHTML = `<div class="settings-section"><div class="settings-section-title">${t('ssh_access_title')}</div><div style="color:#e05555">${t('ssh_access_unsupported')}</div></div>`;
+      return;
+    }
+    const rows = Array.isArray(keys) ? keys.map(key => `
+      <div class="settings-row" style="align-items:flex-start;gap:12px">
+        <div style="flex:1;min-width:0"><div style="font-weight:600">${esc(key.label)} ${key.active_now ? `<span style="color:#55b971;font-size:.75rem">${t('ssh_access_active')}</span>` : `<span style="color:var(--text-dim);font-size:.75rem">${t('ssh_access_inactive')}</span>`}</div><div style="font:0.72rem monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text-dim);margin-top:3px">${esc(key.public_key)}</div><div style="font-size:.76rem;color:var(--text-dim);margin-top:4px">${t('ssh_access_schedule')}: ${esc(key.start_time)}–${esc(key.end_time)}</div></div>
+        <div style="display:flex;gap:6px"><button class="s-btn-sm ssh-settings" data-id="${key.id}">${t('ssh_access_settings')}</button><button class="s-btn-sm s-btn-danger ssh-delete" data-id="${key.id}">${t('ssh_access_remove')}</button></div>
+      </div>`).join('') : '';
+    panel.innerHTML = `
+      <div class="settings-section"><div class="settings-section-title">${t('ssh_access_title')}</div><div style="font-size:.82rem;color:var(--text-dim);line-height:1.45">${t('ssh_access_desc')}</div>
+      ${status.enabled ? `<div style="margin-top:10px;color:#55b971;font-size:.82rem">${t('ssh_access_enabled')}</div>` : (status.can_admin ? `<button class="settings-btn" id="ssh-enable" style="margin-top:12px">${t('ssh_access_enable')}</button>` : `<div style="margin-top:10px;color:var(--text-dim);font-size:.82rem">${t('ssh_access_root_required')}</div>`)}</div>
+      <div class="settings-section" ${status.enabled ? '' : 'style="opacity:.55;pointer-events:none"'}><div class="settings-section-title">${t('ssh_access_keys')}</div><div id="ssh-keys">${rows || `<div style="color:var(--text-dim);font-size:.83rem">${t('ssh_access_empty')}</div>`}</div><button class="s-btn s-btn-primary" id="ssh-add" style="margin-top:12px">${t('ssh_access_add')}</button></div>`;
+    const password = () => window.mvmOS.confirmPassword(t('ssh_access_title'), t('ssh_access_password_prompt'));
+    const request = async (url, options) => {
+      const res = await fetch(url, options);
+      if (!res.ok) { const data = await res.json().catch(() => ({})); throw new Error(data.detail || t('ssh_access_action_error')); }
+      return res.json();
+    };
+    panel.querySelector('#ssh-enable')?.addEventListener('click', async () => {
+      const pass = await password(); if (pass === null) return;
+      try { await request('/api/ssh-access/enable', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:pass})}); renderSshAccess(body); } catch (e) { alert(e.message); }
+    });
+    panel.querySelector('#ssh-add')?.addEventListener('click', async () => {
+      const label = prompt(t('ssh_access_label_prompt')); if (!label) return;
+      const public_key = prompt(t('ssh_access_key_prompt')); if (!public_key) return;
+      const pass = await password(); if (pass === null) return;
+      try { await request('/api/ssh-access/keys', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({label,public_key,password:pass})}); renderSshAccess(body); } catch (e) { alert(e.message); }
+    });
+    panel.querySelectorAll('.ssh-settings').forEach(button => button.addEventListener('click', async () => {
+      const key = keys.find(item => item.id === Number(button.dataset.id)); if (!key) return;
+      const dayNames = [t('ssh_access_mon'),t('ssh_access_tue'),t('ssh_access_wed'),t('ssh_access_thu'),t('ssh_access_fri'),t('ssh_access_sat'),t('ssh_access_sun')];
+      const hour12 = currentSettings.time_format === '12';
+      const formatTime = value => { if (value === '24:00') return hour12 ? '12:00 AM' : value; const [h,m]=value.split(':').map(Number); return hour12 ? `${((h+11)%12)+1}:${String(m).padStart(2,'0')} ${h<12?'AM':'PM'}` : value; };
+      const timeValues = Array.from({length:97}, (_,i) => i === 96 ? '24:00' : `${String(Math.floor(i/4)).padStart(2,'0')}:${String((i%4)*15).padStart(2,'0')}`);
+      const timeOptions = selected => timeValues.map(value => `<option value="${value}" ${value===selected?'selected':''}>${formatTime(value)}</option>`).join('');
+      const ov = document.createElement('div'); ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center';
+      ov.innerHTML=`<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:20px;width:360px;max-width:92%"><div style="font-weight:700;margin-bottom:14px">${t('ssh_access_settings')}</div><label class="settings-row"><span>${t('ssh_access_enabled_label')}</span><input id="sak-enabled" type="checkbox" ${key.enabled?'checked':''}></label><div style="font-size:.82rem;margin:12px 0 6px">${t('ssh_access_days')}</div><div style="display:flex;flex-wrap:wrap;gap:8px">${dayNames.map((name,i)=>`<label style="font-size:.78rem"><input type="checkbox" class="sak-day" value="${i}" ${key.days.includes(i)?'checked':''}> ${name}</label>`).join('')}</div><div style="display:flex;gap:12px;margin-top:16px"><label style="flex:1;font-size:.8rem">${t('ssh_access_start')}<select id="sak-start" class="s-input">${timeOptions(key.start_time)}</select></label><label style="flex:1;font-size:.8rem">${t('ssh_access_end')}<select id="sak-end" class="s-input">${timeOptions(key.end_time)}</select></label></div><div style="display:flex;justify-content:flex-end;gap:8px;margin-top:18px"><button id="sak-cancel" class="s-btn-sm">${t('cancel')}</button><button id="sak-save" class="s-btn">${t('save')}</button></div></div>`;
+      document.body.appendChild(ov); ov.querySelector('#sak-cancel').onclick=()=>ov.remove();
+      ov.querySelector('#sak-save').onclick=async()=>{ const pass=await password(); if(pass===null)return; const days=[...ov.querySelectorAll('.sak-day:checked')].map(el=>Number(el.value)); const start_time=ov.querySelector('#sak-start').value, end_time=ov.querySelector('#sak-end').value; try { await request(`/api/ssh-access/keys/${key.id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:pass,days,start_time,end_time,enabled:ov.querySelector('#sak-enabled').checked})}); ov.remove(); renderSshAccess(body); } catch(e){alert(e.message);} };
+    }));
+    panel.querySelectorAll('.ssh-delete').forEach(button => button.addEventListener('click', async () => {
+      if (!confirm(t('ssh_access_remove_confirm'))) return;
+      const pass = await password(); if (pass === null) return;
+      try { await request(`/api/ssh-access/keys/${button.dataset.id}`, {method:'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:pass})}); renderSshAccess(body); } catch (e) { alert(e.message); }
+    }));
   }
 
   function renderSystem(body) {

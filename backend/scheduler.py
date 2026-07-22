@@ -32,6 +32,12 @@ _THIS_DIR = os.path.dirname(__file__)
 
 SYSTEM_SCHEDULERS = [
     {
+        "id": "__ssh_access__",
+        "name": "SSH Access",
+        "scheduler": "ssh_access.py",
+        "path": os.path.join(_THIS_DIR, "ssh_access.py"),
+    },
+    {
         "id": "__backup__",
         "name": "Backup",
         "scheduler": "backup_scheduler.py",
@@ -41,6 +47,8 @@ SYSTEM_SCHEDULERS = [
 
 
 def _get_system_config(scheduler_id: str) -> dict:
+    if scheduler_id == "__ssh_access__":
+        return {"schedule": "every_minute"}
     if scheduler_id == "__backup__":
         with get_conn() as conn:
             rows = conn.execute(

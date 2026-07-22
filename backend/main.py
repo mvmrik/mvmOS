@@ -42,6 +42,7 @@ from .domains import router as domains_router
 from .projects import router as projects_router
 from .backup import router as backup_router
 from .scheduler import router as scheduler_router
+from .ssh_access import router as ssh_access_router, init_ssh_access_db
 from .startup import router as startup_router, _init_startup_db, run_startup_apps
 from .apphub import router as apphub_router, public_page_router as apphub_public_router, _init_db as _init_apphub_db
 from .notifications import router as notifications_router
@@ -52,6 +53,7 @@ from . import app_backends, public_loader, projects
 app = FastAPI(title="mvmOS", redirect_slashes=False)
 
 init_db()
+init_ssh_access_db()
 _init_startup_db()
 _init_apphub_db()
 
@@ -72,6 +74,7 @@ app.include_router(domains_router)
 app.include_router(projects_router)
 app.include_router(backup_router)
 app.include_router(scheduler_router)
+app.include_router(ssh_access_router)
 app.include_router(startup_router)
 app.include_router(apphub_router)
 app.include_router(apphub_public_router, prefix="/pub/apphub")
