@@ -573,6 +573,7 @@ window._i18n = {
   'ah_edit_profile':              'Edit profile ↗',
   'ah_logout':                    'Logout',
   'ah_account_active':            'Your Apps Hub account is active. Apps that support Apps Hub will recognize you automatically.',
+  'ah_pwa_install':               'Install Apps Hub',
   'ah_find_people':                'Find people',
   'ah_search_people_ph':          'Search by name or username…',
   'ah_saved_favourites':          'Saved favourites',
@@ -624,6 +625,8 @@ window._i18n = {
   'ah_pub_loading_apps':           'Loading apps…',
   'ah_pub_no_apps_yet':            'No public apps available yet.',
   'ah_pub_sort_by':                'Sort by',
+  'ah_apps_category':              'Category',
+  'ah_apps_all_categories':        'All categories',
   'ah_pub_sort_alpha':             'Alphabetical',
   'ah_pub_sort_recent':            'Recently used',
   'ah_pub_sort_frequent':         'Most used',
@@ -638,6 +641,9 @@ window._i18n = {
   'ah_pub_your_balance':           'Your balance',
   'ah_pub_credits_unit':           'credits',
   'ah_pub_settings_theme_label':  'Background & text color',
+  'ah_pub_theme_dark':            'Dark',
+  'ah_pub_theme_light':           'Light',
+  'ah_pub_theme_auto':            'Automatic',
   'ah_pub_settings_font_label':   'Text size',
 
   // ── Widget Store ──────────────────────────────────────────────────────────

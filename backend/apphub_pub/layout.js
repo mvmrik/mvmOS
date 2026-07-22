@@ -60,13 +60,27 @@
   };
   var FONT_SCALE = { sm: '90%', md: '100%', lg: '112%', xl: '125%', xxl: '140%', xxxl: '155%' };
 
+  function resolvedTheme(theme) {
+    if (theme !== 'auto') return theme;
+    return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  }
+
   function applyTheme(theme, fontSize) {
     if (theme) localStorage.setItem(THEME_KEY, theme);
     if (fontSize) localStorage.setItem(FONT_KEY, fontSize);
     theme = theme || localStorage.getItem(THEME_KEY) || 'dark';
     fontSize = fontSize || localStorage.getItem(FONT_KEY) || 'md';
 
-    var vars = THEMES[theme] || THEMES.dark;
+    // main.py's pre-paint bootstrap puts the last-known light palette and
+    // font size directly on <html> to prevent a flash on reload. Inline
+    // properties outrank this stylesheet, so clear only those bootstrap
+    // values before applying a new live preference; otherwise light → dark
+    // (and text-size changes) appears stuck until the page is reloaded.
+    var root = document.documentElement;
+    root.style.removeProperty('font-size');
+    Object.keys(THEMES.light).forEach(function (key) { root.style.removeProperty(key); });
+
+    var vars = THEMES[resolvedTheme(theme)] || THEMES.dark;
     var css = 'html{font-size:' + (FONT_SCALE[fontSize] || FONT_SCALE.md) + '}';
     if (vars) {
       var decls = Object.keys(vars).map(function (k) { return k + ':' + vars[k]; }).join(';');
@@ -79,6 +93,17 @@
       document.head.appendChild(s);
     }
     s.textContent = css;
+  }
+
+  // Keep public pages in sync when the OS/browser changes appearance while
+  // the page is already open. Explicit light/dark choices remain untouched.
+  if (window.matchMedia) {
+    var systemTheme = window.matchMedia('(prefers-color-scheme: dark)');
+    var onSystemThemeChange = function () {
+      if (localStorage.getItem(THEME_KEY) === 'auto') applyTheme('auto');
+    };
+    if (systemTheme.addEventListener) systemTheme.addEventListener('change', onSystemThemeChange);
+    else if (systemTheme.addListener) systemTheme.addListener(onSystemThemeChange);
   }
 
   // Apply the last-known prefs immediately (before any network round-trip)

@@ -16,14 +16,14 @@ var mvmOS = (() => {
   // needs to add the `launch` binding, which must live in JS.
   function _SYSTEM_APP_DEFS() {
     return [
-      { id: 'terminal',         name: t('app_terminal'),  icon: '🖥️', system: true, launch: () => Terminal.openWindow() },
-      { id: 'filemanager',      name: t('app_filemanager'), icon: '🗂️', system: true, launch: () => FileManager.openWindow() },
-      { id: 'msc',              name: t('app_msc'),       icon: '🛠️', system: true, launch: () => Sites.openWindow() },
-      { id: 'appstore',         name: t('app_appstore'),  icon: '📦', system: true, launch: () => AppStore.openWindow() },
-      { id: 'startup-manager',  name: t('start_startup'), icon: '🚀', system: true, launch: () => StartupManager.openWindow() },
-      { id: 'apphub',           name: t('app_apphub'),    icon: '🧩', system: true, launch: () => AppHub.openWindow() },
-      { id: 'settings',         name: t('app_settings'),  icon: '⚙️', system: true, launch: () => Settings.openWindow() },
-      { id: 'notifications',   name: t('app_notifications'), icon: '🔔', system: true, launch: () => Notifications.openWindow() },
+      { id: 'terminal',         name: t('app_terminal'),  icon: '🖥️', category: 'Developer Tools', system: true, launch: () => Terminal.openWindow() },
+      { id: 'filemanager',      name: t('app_filemanager'), icon: '🗂️', category: 'Utilities', system: true, launch: () => FileManager.openWindow() },
+      { id: 'msc',              name: t('app_msc'),       icon: '🛠️', category: 'Creative', system: true, launch: () => Sites.openWindow() },
+      { id: 'appstore',         name: t('app_appstore'),  icon: '📦', category: 'System & Administration', system: true, launch: () => AppStore.openWindow() },
+      { id: 'startup-manager',  name: t('start_startup'), icon: '🚀', category: 'System & Administration', system: true, launch: () => StartupManager.openWindow() },
+      { id: 'apphub',           name: t('app_apphub'),    icon: '🧩', category: 'Communication', system: true, launch: () => AppHub.openWindow() },
+      { id: 'settings',         name: t('app_settings'),  icon: '⚙️', category: 'System & Administration', system: true, launch: () => Settings.openWindow() },
+      { id: 'notifications',   name: t('app_notifications'), icon: '🔔', category: 'Communication', system: true, launch: () => Notifications.openWindow() },
     ];
   }
 
@@ -83,16 +83,8 @@ var mvmOS = (() => {
       sep.style.cssText = 'height:1px;background:var(--border);margin:2px 0';
       _flyout.appendChild(sep);
     }
-    // System category — always first
-    const SYSTEM_APPS = _SYSTEM_APP_DEFS();
-    const sysEl = document.createElement('div');
-    sysEl.className = 'start-submenu-item';
-    sysEl.innerHTML = `<span class="emoji">🖥️</span>${t('start_system')}<span class="start-menu-item-arrow">›</span>`;
-    sysEl.addEventListener('click', e => { e.stopPropagation(); _renderApps(SYSTEM_APPS, 'System'); });
-    _flyout.appendChild(sysEl);
-
     const cats = {};
-    Object.values(_apps).filter(app => !app.system).forEach(app => {
+    Object.values(_apps).forEach(app => {
       const cat = app.category || 'Utilities';
       if (!cats[cat]) cats[cat] = [];
       cats[cat].push(app);

@@ -1,5 +1,8 @@
+import html
+import json
 import os
 import re
+import subprocess
 from fastapi import FastAPI, Request
 from fastapi.responses import RedirectResponse, HTMLResponse, FileResponse, Response
 from fastapi.staticfiles import StaticFiles
@@ -44,7 +47,7 @@ from .backup import router as backup_router
 from .scheduler import router as scheduler_router
 from .ssh_access import router as ssh_access_router, init_ssh_access_db
 from .startup import router as startup_router, _init_startup_db, run_startup_apps
-from .apphub import router as apphub_router, public_page_router as apphub_public_router, _init_db as _init_apphub_db
+from .apphub import router as apphub_router, public_page_router as apphub_public_router, _init_db as _init_apphub_db, is_app_public
 from .notifications import router as notifications_router
 from .notfound import render_404_html
 from .db import APPS_DIR, WIDGETS_DIR, THEMES_DIR
@@ -85,8 +88,6 @@ app_backends.load_all(app)
 @app.on_event("startup")
 async def _run_startup_apps():
     await run_startup_apps()
-public_loader.load_all(app)
-projects.init(app)
 
 
 @app.exception_handler(404)
@@ -97,6 +98,115 @@ async def _not_found_handler(request: Request, exc):
     return PlainTextResponse("Not Found", status_code=404)
 
 FRONTEND_DIR = os.path.join(os.path.dirname(__file__), "..", "frontend")
+
+
+_PWA_APP_ID_RE = re.compile(r"^[a-zA-Z0-9_-]+$")
+
+
+def _public_pwa_meta(app_id: str):
+    """Metadata for a public app's standalone PWA, or None when unavailable."""
+    if app_id == "apphub" or not _PWA_APP_ID_RE.fullmatch(app_id):
+        return None
+    public_module = os.path.join(os.path.dirname(__file__), "apps", app_id, "public.py")
+    if not os.path.isfile(public_module) or not is_app_public(app_id):
+        return None
+    mpath = os.path.join(APPS_DIR, app_id, "manifest.json")
+    try:
+        with open(mpath, encoding="utf-8") as f:
+            manifest = json.load(f)
+    except (OSError, ValueError):
+        return None
+    if manifest.get("public_directory") is False:
+        return None
+    return {
+        "id": app_id,
+        "name": str(manifest.get("name") or app_id),
+        "icon": str(manifest.get("icon") or "📦"),
+    }
+
+
+@app.get("/pub/{app_id}/manifest.webmanifest", include_in_schema=False)
+async def public_app_manifest(app_id: str):
+    meta = _public_pwa_meta(app_id)
+    if not meta:
+        return Response(status_code=404)
+    base = f"/pub/{app_id}"
+    payload = {
+        "id": f"{base}/",
+        "name": meta["name"],
+        "short_name": meta["name"][:30],
+        "start_url": f"{base}/",
+        "scope": f"{base}/",
+        "display": "standalone",
+        "background_color": "#1e1e2e",
+        "theme_color": "#1e1e2e",
+        "icons": [
+            {"src": f"{base}/pwa-icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable"},
+            {"src": f"{base}/pwa-icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable"},
+            {"src": f"{base}/pwa-icon.svg", "sizes": "any", "type":"image/svg+xml", "purpose": "any"},
+        ],
+    }
+    return Response(json.dumps(payload, ensure_ascii=False), media_type="application/manifest+json")
+
+
+def _public_pwa_icon_svg(meta: dict) -> str:
+    icon = html.escape(meta["icon"])
+    return f'''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+<rect width="512" height="512" fill="#89b4fa"/>
+<text x="256" y="365" text-anchor="middle" font-size="350" font-family="Apple Color Emoji,Segoe UI Emoji,Noto Color Emoji,sans-serif">{icon}</text>
+</svg>'''
+
+
+@app.get("/pub/{app_id}/pwa-icon.svg", include_in_schema=False)
+async def public_app_icon(app_id: str):
+    meta = _public_pwa_meta(app_id)
+    if not meta:
+        return Response(status_code=404)
+    return Response(_public_pwa_icon_svg(meta), media_type="image/svg+xml")
+
+
+@app.get("/pub/{app_id}/pwa-icon-{size}.png", include_in_schema=False)
+async def public_app_icon_png(app_id: str, size: int):
+    meta = _public_pwa_meta(app_id)
+    if not meta or size not in (192, 512):
+        return Response(status_code=404)
+    prepared = os.path.join(
+        os.path.dirname(__file__), "apphub_pub", "pwa-icons", f"{app_id}-{size}.png"
+    )
+    if os.path.isfile(prepared):
+        return FileResponse(prepared, media_type="image/png", headers={"Cache-Control": "public, max-age=86400"})
+    try:
+        image = subprocess.run(
+            ["convert", "-background", "none", "svg:-", "-resize", f"{size}x{size}", "png:-"],
+            input=_public_pwa_icon_svg(meta).encode(), stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL, check=True, timeout=5,
+        ).stdout
+    except (OSError, subprocess.SubprocessError):
+        return Response(status_code=500)
+    return Response(image, media_type="image/png", headers={"Cache-Control": "public, max-age=86400"})
+
+
+@app.get("/pub/{app_id}/pwa-sw.js", include_in_schema=False)
+async def public_app_service_worker(app_id: str):
+    if not _public_pwa_meta(app_id):
+        return Response(status_code=404)
+    # A fetch listener is required for installability; deliberately do not
+    # cache user-specific app data or Apps Hub tokens.
+    worker = "self.addEventListener('install',()=>self.skipWaiting());self.addEventListener('activate',e=>e.waitUntil(self.clients.claim()));self.addEventListener('fetch',()=>{});"
+    return Response(worker, media_type="application/javascript", headers={"Cache-Control": "no-cache"})
+
+
+def _public_pwa_snippet(app_id: str) -> str:
+    """Head and body additions that offer a native PWA install for public apps."""
+    meta = _public_pwa_meta(app_id)
+    if not meta:
+        return ""
+    base = f"/pub/{app_id}"
+    name_js = json.dumps(meta["name"], ensure_ascii=False)
+    return f'''<link rel="manifest" href="{base}/manifest.webmanifest">
+<meta name="theme-color" content="#1e1e2e">
+<link rel="apple-touch-icon" href="{base}/pwa-icon-192.png">
+<script>(function(){{let p;const b=document.createElement('button');b.hidden=true;b.type='button';b.textContent=((navigator.language||'').startsWith('bg')?'Инсталирай ':'Install ')+{name_js};b.style.cssText='position:fixed;right:16px;bottom:16px;z-index:2147483647;border:0;border-radius:999px;padding:10px 16px;background:#89b4fa;color:#1e1e2e;font:700 14px system-ui;box-shadow:0 4px 16px #0008;cursor:pointer';window.addEventListener('beforeinstallprompt',e=>{{e.preventDefault();p=e;b.hidden=false;}});b.onclick=async()=>{{if(!p)return;p.prompt();await p.userChoice;p=null;b.hidden=true;}};window.addEventListener('appinstalled',()=>b.remove());if('serviceWorker'in navigator)navigator.serviceWorker.register('{base}/pwa-sw.js').catch(()=>{{}});document.addEventListener('DOMContentLoaded',()=>document.body.appendChild(b));}})();</script>'''
 
 
 
@@ -203,6 +313,9 @@ def _app_wants_public_chrome(app_id: str) -> bool:
     return m.get("public_chrome", True) is not False
 
 
+_PUBLIC_THEME_BOOTSTRAP = """<script>(function(){try{var r=document.documentElement,t=localStorage.getItem('apphub_theme'),f=localStorage.getItem('apphub_font_size')||'md',s={sm:'90%',md:'100%',lg:'112%',xl:'125%',xxl:'140%',xxxl:'155%'};if(t==='auto')t=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';r.style.fontSize=s[f]||s.md;if(t==='light'){r.style.cssText+=';--bg:#f6f8fa;--surface1:#ffffff;--surface2:#eaeef2;--border:#d0d7de;--fg:#1f2328;--fg2:#656d76;--accent:#0969da;--green:#1a7f37;--red:#cf222e;--yellow:#9a6700;--pub-bg:#f6f8fa;--pub-surface1:#ffffff;--pub-surface2:#eaeef2;--pub-border:#d0d7de;--pub-fg:#1f2328;--pub-fg2:#656d76;--pub-dim:#8c959f;--pub-crust:#eef1f4;--pub-accent:#0969da;--pub-accent-hover:#0860ca;--pub-green:#1a7f37;--pub-red:#cf222e;--pub-yellow:#9a6700;--pub-warning:#9a6700'}}catch(e){}})();</script>"""
+
+
 @app.middleware("http")
 async def block_apps_public_middleware(request: Request, call_next):
     """/apps/<id>/public/... is a static-file backdoor into the same pages
@@ -243,6 +356,10 @@ async def layout_inject_middleware(request: Request, call_next):
         snippet = f'<script src="/pub/apphub/layout.js?v={v}" data-mvm-app="{app_id}"></script>'
     if snippet:
         html = html.replace("</body>", snippet + "</body>", 1) if "</body>" in html else html + snippet
+    pwa = _public_pwa_snippet(app_id)
+    if pwa:
+        html = html.replace("</head>", pwa + "</head>", 1) if "</head>" in html else pwa + html
+    html = html.replace("</head>", _PUBLIC_THEME_BOOTSTRAP + "</head>", 1) if "</head>" in html else _PUBLIC_THEME_BOOTSTRAP + html
 
     headers = dict(response.headers)
     for h in ("content-length", "etag", "last-modified", "accept-ranges"):
@@ -331,6 +448,12 @@ async def _dispatch_public(app_id: str, subpath: str, request: Request) -> Respo
                     headers={k: v for k, v in r.headers.items() if k.lower() not in skip})
 
 
+
+# Load app-specific public routes after the core public PWA routes above.
+# This keeps /pub/<app>/manifest.webmanifest and its worker from being
+# swallowed by an app's optional SPA catch-all route.
+public_loader.load_all(app)
+projects.init(app)
 
 app.mount("/apps", StaticFiles(directory=APPS_DIR, html=True), name="apps")
 app.mount("/widgets", StaticFiles(directory=WIDGETS_DIR), name="widgets")

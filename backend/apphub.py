@@ -53,7 +53,7 @@ _CORE_APP_META = {"apphub": {"name": "Apps Hub", "icon": "🧩"}}
 # sizes (not free-form color pickers) so a non-technical user can't land on an
 # unreadable combination. Values are stored on public_users and read by every
 # /pub/<app>/ page via layout.js (see backend/apphub_pub/layout.js THEMES/FONT_SCALE).
-VALID_THEMES     = {"dark", "light"}
+VALID_THEMES     = {"dark", "light", "auto"}
 VALID_FONT_SIZES = {"sm", "md", "lg", "xl", "xxl", "xxxl"}
 
 
@@ -78,7 +78,7 @@ def _init_db():
                 avatar_svg    TEXT,
                 password_hash TEXT,
                 is_admin      INTEGER NOT NULL DEFAULT 0,
-                theme         TEXT NOT NULL DEFAULT 'dark',
+                theme         TEXT NOT NULL DEFAULT 'auto',
                 font_size     TEXT NOT NULL DEFAULT 'md',
                 created_at    TEXT NOT NULL
             );
@@ -341,10 +341,10 @@ def sync_user_from_backend(user: dict) -> None:
     """
     with _db() as conn:
         conn.execute(
-            "INSERT OR IGNORE INTO public_users(id,username,display_name,avatar_color,password_hash,created_at)"
-            " VALUES(?,?,?,?,?,?)",
+            "INSERT OR IGNORE INTO public_users(id,username,display_name,avatar_color,password_hash,theme,created_at)"
+            " VALUES(?,?,?,?,?,?,?)",
             (user["id"], user.get("username",""), user.get("display_name","?"),
-             user.get("avatar_color","#89b4fa"), user.get("password_hash"),
+             user.get("avatar_color","#89b4fa"), user.get("password_hash"), "auto",
              user.get("created_at") or datetime.now(timezone.utc).isoformat())
         )
         fields = ["display_name=?", "avatar_color=?"]
@@ -384,12 +384,12 @@ def migrate_from_gamehub(players: list, tokens: list) -> int:
         for p in players:
             res = conn.execute(
                 "INSERT OR IGNORE INTO public_users"
-                "(id,username,display_name,avatar_color,avatar_data,avatar_svg,password_hash,created_at)"
-                " VALUES(?,?,?,?,?,?,?,?)",
+                "(id,username,display_name,avatar_color,avatar_data,avatar_svg,password_hash,theme,created_at)"
+                " VALUES(?,?,?,?,?,?,?,?,?)",
                 (p["id"], p["username"], p["display_name"],
                  p.get("avatar_color") or "#89b4fa",
                  p.get("avatar_data"), p.get("avatar_svg"),
-                 p.get("password_hash"), p.get("created_at") or "")
+                 p.get("password_hash"), "auto", p.get("created_at") or "")
             )
             count += res.rowcount
         migrated_ids = {p["id"] for p in players}
@@ -549,10 +549,10 @@ async def register(body: RegisterBody):
     try:
         with _db() as conn:
             conn.execute(
-                "INSERT INTO public_users(id,username,display_name,avatar_color,password_hash,created_at)"
-                " VALUES(?,?,?,?,?,?)",
+                "INSERT INTO public_users(id,username,display_name,avatar_color,password_hash,theme,created_at)"
+                " VALUES(?,?,?,?,?,?,?)",
                 (uid, body.username.strip().lower(), body.display_name.strip(),
-                 body.avatar_color, _hash_pw(body.password), now)
+                 body.avatar_color, _hash_pw(body.password), "auto", now)
             )
             conn.commit()
     except sqlite3.IntegrityError:
@@ -562,7 +562,7 @@ async def register(body: RegisterBody):
         "id": uid, "username": body.username.strip().lower(),
         "display_name": body.display_name.strip(), "avatar_color": body.avatar_color,
         "avatar_data": None, "avatar_svg": None,
-        "theme": "dark", "font_size": "md",
+        "theme": "auto", "font_size": "md",
     }})
 
 
@@ -707,6 +707,7 @@ async def list_public_apps():
             "id":          app_id,
             "name":        m.get("name", app_id),
             "icon":        m.get("icon", "📦"),
+            "category":    m.get("category", "Utilities"),
             "description": m.get("description", ""),
             "public_url":  f"/pub/{app_id}/",
         })
@@ -737,6 +738,7 @@ async def list_public_apps_admin(session=Depends(get_current_session)):
             "id":      app_id,
             "name":    m.get("name") or meta.get("name", app_id),
             "icon":    m.get("icon") or meta.get("icon", "📦"),
+            "category": m.get("category", "Utilities"),
             "enabled": bool(rows.get(app_id, 0)),
         })
     return JSONResponse(result)
@@ -825,10 +827,10 @@ async def create_user_admin(body: UserBody, session=Depends(get_current_session)
     try:
         with _db() as conn:
             conn.execute(
-                "INSERT INTO public_users(id,username,display_name,avatar_color,password_hash,created_at)"
-                " VALUES(?,?,?,?,?,?)",
+                "INSERT INTO public_users(id,username,display_name,avatar_color,password_hash,theme,created_at)"
+                " VALUES(?,?,?,?,?,?,?)",
                 (uid, body.username.strip().lower(), body.display_name.strip(),
-                 body.avatar_color, phash, now)
+                 body.avatar_color, phash, "auto", now)
             )
             conn.commit()
     except sqlite3.IntegrityError:
@@ -1026,6 +1028,26 @@ async def _apphub_public_index():
 async def _apphub_avatar_js():
     return FileResponse(os.path.join(_PUB_DIR, "avatar.js"),
                         media_type="application/javascript")
+
+@public_page_router.get("/manifest.webmanifest")
+async def _apphub_manifest():
+    return FileResponse(os.path.join(_PUB_DIR, "manifest.webmanifest"), media_type="application/manifest+json")
+
+@public_page_router.get("/sw.js")
+async def _apphub_service_worker():
+    return FileResponse(os.path.join(_PUB_DIR, "sw.js"), media_type="application/javascript")
+
+@public_page_router.get("/icon.svg")
+async def _apphub_icon_svg():
+    return FileResponse(os.path.join(_PUB_DIR, "icon.svg"), media_type="image/svg+xml")
+
+@public_page_router.get("/icon-192.png")
+async def _apphub_icon_192():
+    return FileResponse(os.path.join(_PUB_DIR, "icon-192.png"), media_type="image/png")
+
+@public_page_router.get("/icon-512.png")
+async def _apphub_icon_512():
+    return FileResponse(os.path.join(_PUB_DIR, "icon-512.png"), media_type="image/png")
 
 
 @public_page_router.get("/layout.js")

@@ -376,15 +376,27 @@ const AppHub = (() => {
       if (!r?.ok) { c.innerHTML = `<div style="padding:20px;color:#f38ba8;font-size:.85rem">${t('ah_error_loading_apps')}</div>`; return; }
       const apps = await r.json();
       if (!apps.length) { c.innerHTML = `<div style="padding:20px;color:var(--text-dim);font-size:.85rem;text-align:center">${t('ah_no_public_apps')}</div>`; return; }
+      const categoryKey = 'apphub_apps_category';
+      const categories = [...new Set(apps.map(a => a.category || 'Utilities'))].sort((a, b) => a.localeCompare(b));
+      let selectedCategory = localStorage.getItem(categoryKey) || 'all';
+      if (selectedCategory !== 'all' && !categories.includes(selectedCategory)) selectedCategory = 'all';
 
       c.innerHTML = `
         <div style="padding:12px 16px;font-size:.78rem;color:var(--text-dim);border-bottom:1px solid var(--border)">
           ${t('ah_public_apps_hint')}
         </div>
+        <div style="padding:10px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <label for="ah-apps-category" style="font-size:.78rem;color:var(--text-dim)">${t('ah_apps_category')}</label>
+          <select id="ah-apps-category" class="s-inp" style="width:auto;padding:5px 8px;font-size:.8rem">
+            <option value="all">${t('ah_apps_all_categories')}</option>
+            ${categories.map(category => `<option value="${esc(category)}"${category===selectedCategory?' selected':''}>${esc(category)}</option>`).join('')}
+          </select>
+        </div>
         <div id="ah-apps-list"></div>`;
 
       function render(list) {
-        list.innerHTML = apps.map(a => `
+        const visibleApps = selectedCategory === 'all' ? apps : apps.filter(a => (a.category || 'Utilities') === selectedCategory);
+        list.innerHTML = visibleApps.map(a => `
           <div style="display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid var(--border)">
             <span style="font-size:1.4rem">${esc(a.icon)}</span>
             <div style="flex:1;min-width:0">
@@ -413,6 +425,11 @@ const AppHub = (() => {
           };
         });
       }
+      c.querySelector('#ah-apps-category').onchange = e => {
+        selectedCategory = e.target.value;
+        localStorage.setItem(categoryKey, selectedCategory);
+        render(c.querySelector('#ah-apps-list'));
+      };
       render(c.querySelector('#ah-apps-list'));
     }
 

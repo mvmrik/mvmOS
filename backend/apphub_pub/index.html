@@ -4,6 +4,10 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Apps Hub</title>
+<link rel="manifest" href="/pub/apphub/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/pub/apphub/icon-192.png">
+<meta name="theme-color" content="#1e1e2e">
+<meta name="apple-mobile-web-app-capable" content="yes">
 <style>
   *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
   :root{--bg:#1e1e2e;--surface1:#181825;--surface2:#313244;--border:#45475a;--fg:#cdd6f4;--fg2:#a6adc8;--accent:#89b4fa;--green:#a6e3a1;--red:#f38ba8;--yellow:#f9e2af}
@@ -37,9 +41,20 @@
 </head>
 <body>
 <div id="app"></div>
+<button id="pwa-install" hidden style="position:fixed;right:16px;bottom:16px;z-index:20;border:0;border-radius:999px;padding:10px 16px;background:var(--accent);color:#1e1e2e;font-weight:700;box-shadow:0 4px 16px #0008"></button>
 <script src="/i18n/i18n.js"></script>
 <script src="/pub/apphub/avatar.js"></script>
 <script>
+let _installPrompt;
+const installButton = document.getElementById('pwa-install');
+(window.mvmOS?.i18nReady || Promise.resolve()).then(() => { installButton.textContent = t('ah_pwa_install'); });
+window.addEventListener('beforeinstallprompt', event => { event.preventDefault(); _installPrompt=event; installButton.hidden=false; });
+installButton.onclick=async()=>{
+  if (!_installPrompt)return;
+  _installPrompt.prompt(); await _installPrompt.userChoice; _installPrompt=null; installButton.hidden=true;
+};
+window.addEventListener('appinstalled',()=>installButton.hidden=true);
+if('serviceWorker' in navigator) navigator.serviceWorker.register('/pub/apphub/sw.js').catch(()=>{});
 const BASE = '/api/pub/apphub';
 const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;');
 
@@ -224,6 +239,7 @@ window.MvmApphub = {
 // ── Apps tab ────────────────────────────────────────────────────
 
 const SORT_KEY  = 'apphub_apps_sort';
+const CATEGORY_KEY = 'apphub_apps_category';
 const USAGE_KEY = 'apphub_apps_usage';
 
 function _getUsage() {
@@ -236,6 +252,11 @@ function _recordUsage(id) {
 }
 function _getSortPref() { return localStorage.getItem(SORT_KEY) || 'alpha'; }
 function _setSortPref(v) { localStorage.setItem(SORT_KEY, v); }
+function _getCategoryPref(categories) {
+  const value = localStorage.getItem(CATEGORY_KEY) || 'all';
+  return value === 'all' || categories.includes(value) ? value : 'all';
+}
+function _setCategoryPref(v) { localStorage.setItem(CATEGORY_KEY, v); }
 
 function _sortApps(apps, mode) {
   const usage = _getUsage();
@@ -281,9 +302,16 @@ async function renderApps(c) {
     return;
   }
 
+  const categories = [...new Set(apps.map(a => a.category || 'Utilities'))].sort((a, b) => a.localeCompare(b));
+  const categoryMode = _getCategoryPref(categories);
   const sortMode = _getSortPref();
   c.innerHTML = `
-    <div style="display:flex;align-items:center;justify-content:flex-end;gap:8px;padding:12px 16px 0">
+    <div style="display:flex;align-items:center;justify-content:flex-end;gap:8px;padding:12px 16px 0;flex-wrap:wrap">
+      <span style="font-size:.78rem;color:var(--fg2)">${t('ah_apps_category')}</span>
+      <select class="inp" id="apps-category" style="width:auto;padding:5px 10px;font-size:.8rem">
+        <option value="all">${t('ah_apps_all_categories')}</option>
+        ${categories.map(category => `<option value="${esc(category)}"${categoryMode===category?' selected':''}>${esc(category)}</option>`).join('')}
+      </select>
       <span style="font-size:.78rem;color:var(--fg2)">${t('ah_pub_sort_by')}</span>
       <select class="inp" id="apps-sort" style="width:auto;padding:5px 10px;font-size:.8rem">
         <option value="alpha"${sortMode==='alpha'?' selected':''}>${t('ah_pub_sort_alpha')}</option>
@@ -294,7 +322,9 @@ async function renderApps(c) {
     <div class="app-grid" id="apps-grid"></div>`;
 
   const renderGrid = () => {
-    const sorted = _sortApps(apps, _getSortPref());
+    const selectedCategory = _getCategoryPref(categories);
+    const filtered = selectedCategory === 'all' ? apps : apps.filter(a => (a.category || 'Utilities') === selectedCategory);
+    const sorted = _sortApps(filtered, _getSortPref());
     c.querySelector('#apps-grid').innerHTML = sorted.map(a => `
       <a class="app-card" href="${esc(a.public_url)}" data-id="${esc(a.id)}">
         <div class="app-icon">${esc(a.icon)}${badges[a.id] ? '<span class="app-badge"></span>' : ''}</div>
@@ -308,6 +338,7 @@ async function renderApps(c) {
   renderGrid();
 
   c.querySelector('#apps-sort').onchange = e => { _setSortPref(e.target.value); renderGrid(); };
+  c.querySelector('#apps-category').onchange = e => { _setCategoryPref(e.target.value); renderGrid(); };
 
   clearInterval(_badgePoll);
   _badgePoll = setInterval(async () => {
@@ -511,8 +542,9 @@ function renderProfile(c) {
 // follows the user to every /pub/<app>/ page (layout.js reads it on load).
 
 const THEME_SWATCHES = [
-  { id: 'dark',  bg: '#1e1e2e', fg: '#cdd6f4', accent: '#89b4fa' },
-  { id: 'light', bg: '#f6f8fa', fg: '#1f2328', accent: '#0969da' },
+  { id: 'auto',  bg: 'linear-gradient(135deg,#1e1e2e 0 50%,#f6f8fa 50% 100%)', fg: '#cdd6f4', accent: '#89b4fa', label: 'ah_pub_theme_auto' },
+  { id: 'dark',  bg: '#1e1e2e', fg: '#cdd6f4', accent: '#89b4fa', label: 'ah_pub_theme_dark' },
+  { id: 'light', bg: '#f6f8fa', fg: '#1f2328', accent: '#0969da', label: 'ah_pub_theme_light' },
 ];
 const FONT_SIZES = ['sm', 'md', 'lg', 'xl', 'xxl', 'xxxl'];
 const FONT_PREVIEW_PX = { sm: 13, md: 15, lg: 17, xl: 19, xxl: 21, xxxl: 23 };
@@ -541,9 +573,10 @@ function renderSettings(c) {
     themeWrap.innerHTML = THEME_SWATCHES.map(sw => `
       <button type="button" class="st-swatch" data-theme="${sw.id}" style="cursor:pointer;border-radius:10px;padding:0;overflow:hidden;
         border:2px solid ${theme===sw.id?'var(--accent)':'var(--border)'};background:${sw.bg};width:76px;height:56px;
-        display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px">
+        display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px" aria-label="${t(sw.label)}">
         <span style="font-weight:700;font-size:15px;color:${sw.fg}">Aa</span>
         <span style="width:20px;height:4px;border-radius:2px;background:${sw.accent}"></span>
+        <span style="font-size:9px;line-height:1;background:rgba(24,24,37,.82);color:#fff;padding:2px 4px;border-radius:3px">${t(sw.label)}</span>
       </button>`).join('');
     themeWrap.querySelectorAll('.st-swatch').forEach(btn => {
       btn.onclick = () => { theme = btn.dataset.theme; renderThemeSwatches(); save(); };

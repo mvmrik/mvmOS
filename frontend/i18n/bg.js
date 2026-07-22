@@ -575,6 +575,7 @@ window._i18n = {
   'ah_edit_profile':              'Редактирай профил ↗',
   'ah_logout':                    'Изход',
   'ah_account_active':            'Твоят Apps Hub акаунт е активен. Приложенията, поддържащи Apps Hub, ще те разпознават автоматично.',
+  'ah_pwa_install':               'Инсталирай Apps Hub',
   'ah_find_people':                'Намери хора',
   'ah_search_people_ph':          'Търси по име или потребителско име…',
   'ah_saved_favourites':          'Запазени любими',
@@ -626,6 +627,8 @@ window._i18n = {
   'ah_pub_loading_apps':           'Зареждане на приложения…',
   'ah_pub_no_apps_yet':            'Все още няма публични приложения.',
   'ah_pub_sort_by':                'Подреди по',
+  'ah_apps_category':              'Категория',
+  'ah_apps_all_categories':        'Всички категории',
   'ah_pub_sort_alpha':             'По азбучен ред',
   'ah_pub_sort_recent':            'Скоро използвани',
   'ah_pub_sort_frequent':         'Най-използвани',
@@ -640,6 +643,9 @@ window._i18n = {
   'ah_pub_your_balance':           'Твоят баланс',
   'ah_pub_credits_unit':           'кредита',
   'ah_pub_settings_theme_label':  'Цвят на фон и текст',
+  'ah_pub_theme_dark':            'Тъмна',
+  'ah_pub_theme_light':           'Светла',
+  'ah_pub_theme_auto':            'Автоматично',
   'ah_pub_settings_font_label':   'Размер на текста',
 
   // ── Widget Store ──────────────────────────────────────────────────────────

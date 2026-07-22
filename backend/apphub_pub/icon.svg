@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Apps Hub">
+  <defs>
+    <linearGradient id="bg" x1="72" y1="40" x2="440" y2="472" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#89b4fa"/>
+      <stop offset="1" stop-color="#cba6f7"/>
+    </linearGradient>
+    <filter id="shadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="14" stdDeviation="14" flood-color="#11111b" flood-opacity=".32"/>
+    </filter>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="#1e1e2e"/>
+  <rect x="34" y="34" width="444" height="444" rx="90" fill="url(#bg)"/>
+  <g filter="url(#shadow)" fill="#1e1e2e">
+    <rect x="122" y="122" width="122" height="122" rx="31"/>
+    <rect x="268" y="122" width="122" height="122" rx="31"/>
+    <rect x="122" y="268" width="122" height="122" rx="31"/>
+    <rect x="268" y="268" width="122" height="122" rx="31"/>
+  </g>
+  <g fill="#89b4fa">
+    <circle cx="183" cy="183" r="14"/>
+    <circle cx="329" cy="183" r="14"/>
+    <circle cx="183" cy="329" r="14"/>
+  </g>
+  <path d="M314 302h30c0 15 20 15 20 0h10c9 0 16 7 16 16v30h-30c0-15-20-15-20 0h-26v-30c-15 0-15-20 0-20z" fill="#f9e2af"/>
+</svg>

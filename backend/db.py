@@ -15,15 +15,32 @@ OFFICIAL_THEMES_STORE_URL  = "https://raw.githubusercontent.com/mvmrik/mvmos-sto
 # into the `plugins` table on every backend startup so it participates in
 # Start Menu recent/most-used tracking like any store app.
 SYSTEM_APPS = [
-    {"id": "terminal",        "name": "Terminal",         "icon": "🖥️", "category": "System"},
-    {"id": "filemanager",     "name": "File Manager",     "icon": "🗂️", "category": "System"},
-    {"id": "msc",             "name": "Sites",            "icon": "🛠️", "category": "System"},
-    {"id": "appstore",        "name": "App Store",        "icon": "📦", "category": "System"},
-    {"id": "startup-manager", "name": "Startup Manager",  "icon": "🚀", "category": "System"},
-    {"id": "apphub",          "name": "Apps Hub",         "icon": "🧩", "category": "System"},
-    {"id": "settings",        "name": "Settings",         "icon": "⚙️", "category": "System"},
-    {"id": "notifications",  "name": "Notifications",    "icon": "🔔", "category": "System"},
+    {"id": "terminal",        "name": "Terminal",         "icon": "🖥️", "category": "Developer Tools"},
+    {"id": "filemanager",     "name": "File Manager",     "icon": "🗂️", "category": "Utilities"},
+    {"id": "msc",             "name": "Sites",            "icon": "🛠️", "category": "Creative"},
+    {"id": "appstore",        "name": "App Store",        "icon": "📦", "category": "System & Administration"},
+    {"id": "startup-manager", "name": "Startup Manager",  "icon": "🚀", "category": "System & Administration"},
+    {"id": "apphub",          "name": "Apps Hub",         "icon": "🧩", "category": "Communication"},
+    {"id": "settings",        "name": "Settings",         "icon": "⚙️", "category": "System & Administration"},
+    {"id": "notifications",  "name": "Notifications",    "icon": "🔔", "category": "Communication"},
 ]
+
+# Existing Store apps keep their installed database row when mvmOS itself is
+# updated. Apply this map at startup so their Start Menu category follows the
+# current Store taxonomy without requiring a reinstall.
+STORE_APP_CATEGORIES = {
+    "beambuilder": "Creative", "budget": "Finance", "calculator": "Utilities",
+    "calendar": "Productivity", "chat": "Communication", "cost-splitter": "Finance",
+    "cron-manager": "System & Administration", "findyourself": "Games",
+    "gamehub": "Games", "git-manager": "Developer Tools", "mvm2factor": "Security & Privacy",
+    "mvmai": "AI", "mvmsitebuilder": "Creative", "process-manager": "System & Administration",
+    "qbit-dashboard": "Media", "queuedesk": "Business", "quotebuilder": "Business",
+    "rssfeed": "Media", "server-manager": "System & Administration",
+    "server-monitor": "System & Administration", "shoppinglist": "Productivity",
+    "statetracker": "System & Administration", "sudofall": "Games",
+    "system-info": "System & Administration", "tasks": "Productivity",
+    "telegramhub": "Communication", "yoursql": "Developer Tools",
+}
 
 
 def get_conn():
@@ -183,9 +200,16 @@ def init_db():
         conn.execute("CREATE INDEX IF NOT EXISTS idx_notifications_ref ON notifications(username, source, ref)")
         for app in SYSTEM_APPS:
             conn.execute(
-                "INSERT OR IGNORE INTO plugins (id, name, icon, category, version, description, is_system) "
-                "VALUES (?, ?, ?, ?, '1.0.0', '', 1)",
+                "INSERT INTO plugins (id, name, icon, category, version, description, is_system) "
+                "VALUES (?, ?, ?, ?, '1.0.0', '', 1) "
+                "ON CONFLICT(id) DO UPDATE SET name=excluded.name, icon=excluded.icon, "
+                "category=excluded.category, is_system=1",
                 (app["id"], app["name"], app["icon"], app["category"]),
+            )
+        for app_id, category in STORE_APP_CATEGORIES.items():
+            conn.execute(
+                "UPDATE plugins SET category=? WHERE id=? AND is_system=0",
+                (category, app_id),
             )
         conn.execute(
             "INSERT OR IGNORE INTO stores (name, manifest_url, official) VALUES (?, ?, 1)",
