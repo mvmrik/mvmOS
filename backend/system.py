@@ -193,8 +193,11 @@ async def do_update(session=Depends(get_current_session)):
             pass
 
         yield "data: Update applied.\n\n"
+        # Schedule before notifying the browser. The browser reloads as soon as
+        # it receives __RESTARTING__, which otherwise cancels this generator
+        # before the restart callback has been registered.
+        asyncio.get_running_loop().call_later(2, _restart)
         yield "data: __RESTARTING__\n\n"
-        asyncio.get_event_loop().call_later(1, _restart)
 
     return StreamingResponse(generate(), media_type="text/event-stream",
                              headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
