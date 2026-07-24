@@ -146,14 +146,20 @@ const AppHub = (() => {
       }
     }
 
-    function _renderLogin(c) {
+    async function _renderLogin(c) {
+      let regAllowed = true;
+      try {
+        const rr = await fetch('/api/pub/apphub/registration');
+        if (rr.ok) regAllowed = !!(await rr.json()).allowed;
+      } catch (_) {}
+
       c.innerHTML = `
         <div style="padding:20px;display:flex;flex-direction:column;gap:16px;max-width:340px">
           <div style="font-weight:600;font-size:.95rem">${t('ah_signin_title')}</div>
-          <div style="display:flex;gap:0;background:var(--surface2);border-radius:8px;padding:3px">
+          ${regAllowed ? `<div style="display:flex;gap:0;background:var(--surface2);border-radius:8px;padding:3px">
             <button id="ah-tab-login" style="flex:1;border:none;border-radius:6px;padding:6px;font-size:.82rem;font-family:inherit;cursor:pointer;background:var(--accent);color:#1e1e2e;font-weight:600">${t('ah_login')}</button>
             <button id="ah-tab-reg"   style="flex:1;border:none;border-radius:6px;padding:6px;font-size:.82rem;font-family:inherit;cursor:pointer;background:none;color:var(--text-dim)">${t('ah_register')}</button>
-          </div>
+          </div>` : ''}
           <div id="ah-login-form"></div>
           <div id="ah-reg-form" style="display:none;flex-direction:column;gap:10px"></div>
         </div>`;
@@ -162,8 +168,9 @@ const AppHub = (() => {
       const regForm   = c.querySelector('#ah-reg-form');
 
       function showLogin() {
-        c.querySelector('#ah-tab-login').style.cssText = 'flex:1;border:none;border-radius:6px;padding:6px;font-size:.82rem;font-family:inherit;cursor:pointer;background:var(--accent);color:#1e1e2e;font-weight:600';
-        c.querySelector('#ah-tab-reg').style.cssText   = 'flex:1;border:none;border-radius:6px;padding:6px;font-size:.82rem;font-family:inherit;cursor:pointer;background:none;color:var(--text-dim)';
+        const tl = c.querySelector('#ah-tab-login'), tr = c.querySelector('#ah-tab-reg');
+        if (tl) tl.style.cssText = 'flex:1;border:none;border-radius:6px;padding:6px;font-size:.82rem;font-family:inherit;cursor:pointer;background:var(--accent);color:#1e1e2e;font-weight:600';
+        if (tr) tr.style.cssText = 'flex:1;border:none;border-radius:6px;padding:6px;font-size:.82rem;font-family:inherit;cursor:pointer;background:none;color:var(--text-dim)';
         loginForm.style.display = '';
         regForm.style.display   = 'none';
         loginForm.innerHTML = `
@@ -238,8 +245,9 @@ const AppHub = (() => {
         };
       }
 
-      c.querySelector('#ah-tab-login').onclick = showLogin;
-      c.querySelector('#ah-tab-reg').onclick   = showReg;
+      const tlBtn = c.querySelector('#ah-tab-login'), trBtn = c.querySelector('#ah-tab-reg');
+      if (tlBtn) tlBtn.onclick = showLogin;
+      if (trBtn) trBtn.onclick = showReg;
       showLogin();
     }
 
@@ -484,18 +492,27 @@ const AppHub = (() => {
       c.innerHTML = '<div style="padding:20px;color:var(--text-dim);font-size:.85rem">…</div>';
       if (!_pubUser) _pubUser = await getUser();
       if (_favs === null) await _loadFavs();
-      const [statsRes, usersRes] = await Promise.all([
+      const [statsRes, usersRes, setRes] = await Promise.all([
         fetch('/api/apphub/stats').catch(()=>null),
         fetch('/api/apphub/users').catch(()=>null),
+        fetch('/api/apphub/settings').catch(()=>null),
       ]);
 
       let stats = null;
       if (statsRes?.ok) stats = await statsRes.json();
       if (!usersRes?.ok) { c.innerHTML = `<div style="padding:20px;color:#f38ba8;font-size:.85rem">${t('ah_error_loading_users')}</div>`; return; }
       const users = await usersRes.json();
+      const settings = setRes?.ok ? await setRes.json() : null;
 
       c.innerHTML = `
-        ${stats ? `<div style="display:flex;gap:8px;padding:12px 16px;border-bottom:1px solid var(--border)">
+        ${settings ? `<div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;flex-direction:column;gap:8px">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+            <input type="checkbox" id="ah-reg-toggle" ${settings.registrations_enabled?'checked':''} style="width:16px;height:16px;cursor:pointer">
+            <span style="font-size:.85rem;font-weight:500">${t('ah_allow_registrations')}</span>
+          </label>
+          <div style="font-size:.72rem;color:var(--text-dim)">${t('ah_registrations_hint')}</div>
+        </div>` : ''}
+        ${stats ? `<div style="display:flex;gap:8px;padding:12px 16px;border-bottom:1px solid var(--border);align-items:center">
           <div style="flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px;text-align:center">
             <div style="font-size:1.3rem;font-weight:700">${stats.total_users}</div>
             <div style="font-size:.72rem;color:var(--text-dim)">${t('ah_total_users')}</div>
@@ -505,7 +522,19 @@ const AppHub = (() => {
             <div style="font-size:.72rem;color:var(--text-dim)">${t('ah_active_sessions')}</div>
           </div>
         </div>` : ''}
+        <div style="padding:10px 16px;border-bottom:1px solid var(--border)">
+          <button id="ah-add-user" class="s-btn s-btn-sm" style="background:var(--accent);color:#1e1e2e;font-weight:600;cursor:pointer">＋ ${t('ah_add_user')}</button>
+        </div>
         <div id="ah-users-list"></div>`;
+
+      const regToggle = c.querySelector('#ah-reg-toggle');
+      if (regToggle) regToggle.onchange = async () => {
+        await fetch('/api/apphub/settings', {
+          method: 'PUT', headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({ registrations_enabled: regToggle.checked }),
+        }).catch(()=>null);
+      };
+      c.querySelector('#ah-add-user').onclick = () => _openUserModal(null, () => renderUsers(c));
 
       if (!users.length) {
         c.querySelector('#ah-users-list').innerHTML = `<div style="padding:24px;color:var(--text-dim);font-size:.85rem;text-align:center">${t('ah_no_users_yet')}</div>`;
@@ -530,9 +559,18 @@ const AppHub = (() => {
             <input type="checkbox" class="ah-admin" data-id="${u.id}" ${u.is_admin?'checked':''} style="width:15px;height:15px;cursor:pointer">
             <span style="font-size:.78rem;color:${u.is_admin?'var(--accent)':'var(--text-dim)'}">${t('ah_admin')}</span>
           </label>
+          <button class="ah-edit" data-id="${u.id}"
+                  style="border:none;background:none;color:var(--accent);font-size:.78rem;cursor:pointer;padding:4px 8px;border-radius:6px">${t('ah_edit')}</button>
           <button class="ah-del" data-id="${u.id}" data-name="${esc(u.display_name)}"
                   style="border:none;background:none;color:#f38ba8;font-size:.78rem;cursor:pointer;padding:4px 8px;border-radius:6px">${t('ah_delete')}</button>
         </div>`).join('');
+
+      c.querySelectorAll('.ah-edit').forEach(btn => {
+        btn.onclick = () => {
+          const u = users.find(x => x.id === btn.dataset.id);
+          if (u) _openUserModal(u, () => renderUsers(c));
+        };
+      });
 
       c.querySelectorAll('.ah-admin').forEach(cb => {
         cb.onchange = async () => {
@@ -561,12 +599,64 @@ const AppHub = (() => {
       c.querySelectorAll('.ah-del').forEach(btn => {
         btn.onclick = async () => {
           const id = btn.dataset.id, name = btn.dataset.name;
-          window.mvmOS?.confirm(t('ah_delete_user_confirm', {name}), async () => {
+          if (await window.mvmOS?.confirm(t('ah_delete_user_confirm', {name}))) {
             await fetch(`/api/apphub/users/${id}`, {method:'DELETE'}).catch(()=>null);
             renderUsers(c);
-          });
+          }
         };
       });
+    }
+
+    // ── Admin: create / edit a user ────────────────────────────────
+    function _openUserModal(user, onSave) {
+      const isEdit = !!user;
+      const overlay = document.createElement('div');
+      overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:10000;display:flex;align-items:center;justify-content:center';
+      overlay.innerHTML = `
+        <div style="background:var(--surface1,#181825);border:1px solid var(--border);border-radius:12px;width:340px;max-width:92vw;display:flex;flex-direction:column;overflow:hidden">
+          <div style="padding:14px 16px;border-bottom:1px solid var(--border);font-weight:600;font-size:.92rem">${isEdit?t('ah_edit_user_title'):t('ah_new_user_title')}</div>
+          <div style="padding:16px;display:flex;flex-direction:column;gap:10px">
+            <input class="s-inp" id="um-dn" placeholder="${t('ah_display_name_ph')}" value="${isEdit?esc(user.display_name):''}">
+            <input class="s-inp" id="um-un" placeholder="${t('ah_username_ph')}" autocomplete="off" value="${isEdit?esc(user.username):''}">
+            <input class="s-inp" id="um-pw" type="password" placeholder="${isEdit?t('ah_password_keep_ph'):t('ah_password_min_ph')}" autocomplete="new-password">
+            <div class="s-err" id="um-err" style="color:#f38ba8;font-size:.8rem;min-height:16px"></div>
+          </div>
+          <div style="padding:10px 16px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px">
+            <button id="um-cancel" class="s-btn s-btn-sm" style="cursor:pointer">${t('ah_cancel')}</button>
+            <button id="um-save" class="s-btn s-btn-sm" style="background:var(--accent);color:#1e1e2e;font-weight:600;cursor:pointer">${t('ah_save')}</button>
+          </div>
+        </div>`;
+      document.body.appendChild(overlay);
+      const close = () => overlay.remove();
+      overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+      overlay.querySelector('#um-cancel').onclick = close;
+
+      overlay.querySelector('#um-save').onclick = async () => {
+        const dn  = overlay.querySelector('#um-dn').value.trim();
+        const un  = overlay.querySelector('#um-un').value.trim();
+        const pw  = overlay.querySelector('#um-pw').value;
+        const err = overlay.querySelector('#um-err');
+        if (!dn || !un || (!isEdit && !pw)) { err.textContent = t('ah_fill_all_fields'); return; }
+        const body = { display_name: dn, username: un, avatar_color: user?.avatar_color || '#89b4fa' };
+        if (pw) body.password = pw;
+        const btn = overlay.querySelector('#um-save'); btn.disabled = true; err.textContent = '';
+        const r = await fetch(isEdit ? `/api/apphub/users/${user.id}` : '/api/apphub/users', {
+          method: isEdit ? 'PUT' : 'POST',
+          headers: {'Content-Type':'application/json'},
+          body: JSON.stringify(body),
+        }).catch(()=>null);
+        if (r?.ok) { close(); onSave && onSave(); return; }
+        const d = r ? await r.json().catch(()=>({})) : {};
+        // Free-tier cap reached — show the same premium upsell as elsewhere.
+        if (r && r.status === 403 && String(d.detail||'').startsWith('registration_premium')) {
+          close();
+          window.mvmOS?.premium?.showUpsell();
+          return;
+        }
+        err.textContent = d.detail || t('ah_registration_failed');
+        btn.disabled = false;
+      };
+      setTimeout(() => overlay.querySelector('#um-dn').focus(), 50);
     }
 
     // ── Admin: per-user credits panel ──────────────────────────────

@@ -596,6 +596,16 @@ window._i18n = {
   'ah_total_users':               'Total users',
   'ah_active_sessions':           'Active sessions',
   'ah_no_users_yet':              'No registered users yet.',
+  'ah_registration_closed':       'Registration is currently closed.',
+  'ah_allow_registrations':       'Allow public registrations',
+  'ah_registrations_hint':        'When off, the public Apps Hub page only lets people sign in.',
+  'ah_add_user':                  'Add user',
+  'ah_new_user_title':            'New user',
+  'ah_edit_user_title':           'Edit user',
+  'ah_edit':                      'Edit',
+  'ah_save':                      'Save',
+  'ah_cancel':                    'Cancel',
+  'ah_password_keep_ph':          'Password (leave blank to keep)',
   'ah_admin':                      'Admin',
   'ah_admin_title':                'Admin rights — used by other apps (e.g. Telegram Hub) to gate owner-only features',
   'ah_delete':                     'Delete',
@@ -1151,4 +1161,10 @@ window._i18n = {
   'ssh_access_start_prompt':      'Start time (HH:MM)',
   'ssh_access_end_prompt':        'End time (HH:MM, or 24:00)',
   'ssh_access_action_error':      'SSH access change failed.',
+
+  // Premium
+  'prem_title':          'Premium feature',
+  'prem_body':           'This is a premium feature. mvmOS stays free — Premium just adds a few extras. See what’s included, the plans and pricing on the site.',
+  'prem_feature_intro':  '“{feature}” is a premium feature. mvmOS stays free — Premium just adds a few extras. See what’s included, the plans and pricing on the site.',
+  'prem_learn_more':     'See plans',
 };

@@ -97,8 +97,14 @@ async function boot() {
 
 // ── Auth ────────────────────────────────────────────────────────
 
-function showAuth(tab) {
+async function showAuth(tab) {
   tab = tab || 'login';
+  let regAllowed = true;
+  try {
+    const r = await fetch(BASE + '/registration');
+    if (r.ok) regAllowed = !!(await r.json()).allowed;
+  } catch (_) {}
+  if (!regAllowed) tab = 'login';
   app.innerHTML = `
     <div style="flex:1;display:flex;align-items:center;justify-content:center;padding:24px">
       <div class="card" style="width:100%;max-width:360px;padding:28px;display:flex;flex-direction:column;gap:18px">
@@ -107,16 +113,19 @@ function showAuth(tab) {
           <div style="font-weight:700;font-size:1.2rem;margin-top:6px">Apps Hub</div>
           <div style="font-size:.82rem;color:var(--fg2);margin-top:4px">${t('ah_pub_tagline')}</div>
         </div>
+        ${regAllowed ? `
         <div style="display:flex;gap:0;background:var(--surface2);border-radius:8px;padding:3px">
           <button id="a-login" style="flex:1;border:none;border-radius:6px;padding:7px;font-size:.88rem;font-weight:600;background:${tab==='login'?'var(--surface1)':'transparent'};color:${tab==='login'?'var(--fg)':'var(--fg2)'}">${t('ah_pub_log_in')}</button>
           <button id="a-reg"   style="flex:1;border:none;border-radius:6px;padding:7px;font-size:.88rem;font-weight:600;background:${tab==='register'?'var(--surface1)':'transparent'};color:${tab==='register'?'var(--fg)':'var(--fg2)'}">${t('ah_register')}</button>
-        </div>
+        </div>` : ''}
         <div id="a-form"></div>
       </div>
     </div>`;
-  app.querySelector('#a-login').onclick = () => { renderLoginForm(); _setAuthTab('login'); };
-  app.querySelector('#a-reg').onclick   = () => { renderRegForm();   _setAuthTab('register'); };
-  if (tab === 'register') renderRegForm(); else renderLoginForm();
+  if (regAllowed) {
+    app.querySelector('#a-login').onclick = () => { renderLoginForm(); _setAuthTab('login'); };
+    app.querySelector('#a-reg').onclick   = () => { renderRegForm();   _setAuthTab('register'); };
+  }
+  if (regAllowed && tab === 'register') renderRegForm(); else renderLoginForm();
 }
 
 function _setAuthTab(t) {

@@ -1418,6 +1418,40 @@ var mvmOS = (() => {
         input.addEventListener('keydown', e => { if (e.key === 'Enter') ok(); if (e.key === 'Escape') { ov.remove(); resolve(null); } });
       });
     },
+    // Premium gate. Any premium action goes through require(): if the user is
+    // premium it runs, otherwise the upsell window explains it and links to the
+    // site. Stage 1 — status is a local flag only; the real status will be a
+    // signed server response cached here. Set localStorage.mvmos_premium_test=1
+    // to preview the granted path during development.
+    premium: {
+      site: 'https://mvmos.org/premium',
+      isPremium() {
+        return localStorage.getItem('mvmos_premium_test') === '1';
+      },
+      require(feature, onAllowed) {
+        if (this.isPremium()) { if (onAllowed) onAllowed(); return true; }
+        this.showUpsell(feature);
+        return false;
+      },
+      showUpsell(feature) {
+        const _t = (k, v) => (window.t ? window.t(k, v) : k);
+        const ov = document.createElement('div');
+        ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center';
+        ov.innerHTML = `<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius,6px);padding:26px;max-width:400px;width:90%;box-shadow:var(--shadow);display:flex;flex-direction:column;gap:14px;text-align:center">
+          <div style="font-size:2.2rem">💎</div>
+          <div style="font-size:1.1rem;font-weight:700">${_t('prem_title')}</div>
+          <div style="font-size:.9rem;line-height:1.55;color:var(--text-dim)">${feature ? _t('prem_feature_intro', { feature }) : _t('prem_body')}</div>
+          <div style="display:flex;gap:8px;justify-content:center;margin-top:4px">
+            <button id="_pm-close" class="s-btn s-btn-sm">${_t('close')}</button>
+            <a href="${this.site}" target="_blank" rel="noopener" class="s-btn s-btn-sm s-btn-primary" style="text-decoration:none">${_t('prem_learn_more')}</a>
+          </div></div>`;
+        document.body.appendChild(ov);
+        const close = () => ov.remove();
+        ov.querySelector('#_pm-close').onclick = close;
+        ov.querySelector('a').onclick = close;
+        ov.addEventListener('click', e => { if (e.target === ov) close(); });
+      },
+    },
     _loadPlugin,
     _loadWidget,
     _removeFromStartMenu,

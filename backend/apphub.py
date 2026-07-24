@@ -96,6 +96,10 @@ def _init_db():
                 app_id     TEXT PRIMARY KEY,
                 enabled    INTEGER NOT NULL DEFAULT 0
             );
+            CREATE TABLE IF NOT EXISTS hub_config (
+                key   TEXT PRIMARY KEY,
+                value TEXT
+            );
             CREATE TABLE IF NOT EXISTS favourites (
                 user_id      TEXT NOT NULL REFERENCES public_users(id) ON DELETE CASCADE,
                 favourite_id TEXT NOT NULL REFERENCES public_users(id) ON DELETE CASCADE,
@@ -136,6 +140,61 @@ def is_app_public(app_id: str) -> bool:
     with _db() as conn:
         row = conn.execute("SELECT enabled FROM public_apps WHERE app_id=?", (app_id,)).fetchone()
     return bool(row and row["enabled"])
+
+
+# ── Config, registrations & premium gate ────────────────────────────
+# The free tier allows up to FREE_USER_LIMIT accounts. Premium (server-wide,
+# stored in hub_config) lifts the cap. Separately, an admin can turn public
+# self-registration off entirely. Public self-registration is allowed only
+# when BOTH are satisfied; an admin creating a user is limited only by the
+# premium cap (never by the manual public toggle).
+
+FREE_USER_LIMIT = 10
+
+
+def get_config(key: str, default: Optional[str] = None) -> Optional[str]:
+    with _db() as conn:
+        row = conn.execute("SELECT value FROM hub_config WHERE key=?", (key,)).fetchone()
+    return row["value"] if row else default
+
+
+def set_config(key: str, value: str) -> None:
+    with _db() as conn:
+        conn.execute("INSERT OR REPLACE INTO hub_config(key,value) VALUES(?,?)", (key, str(value)))
+        conn.commit()
+
+
+def is_premium() -> bool:
+    return get_config("premium", "0") == "1"
+
+
+def registrations_enabled() -> bool:
+    return get_config("registrations_enabled", "1") == "1"
+
+
+def user_count() -> int:
+    with _db() as conn:
+        return conn.execute("SELECT COUNT(*) FROM public_users").fetchone()[0]
+
+
+def registration_status() -> dict:
+    """Whether a NEW public self-registration is currently allowed, plus the
+    reason it isn't (`premium` = free cap reached, `disabled` = admin turned
+    registrations off). The reason stays server-side; the public page only
+    ever shows/hides the register option."""
+    if not is_premium() and user_count() >= FREE_USER_LIMIT:
+        return {"allowed": False, "reason": "premium"}
+    if not registrations_enabled():
+        return {"allowed": False, "reason": "disabled"}
+    return {"allowed": True, "reason": None}
+
+
+def can_admin_create_user() -> dict:
+    """Admin creating a user from inside the system: only the premium cap
+    applies — the manual public toggle does not restrict the admin."""
+    if not is_premium() and user_count() >= FREE_USER_LIMIT:
+        return {"allowed": False, "reason": "premium"}
+    return {"allowed": True, "reason": None}
 
 
 def _detect_public_apps() -> list:
@@ -542,6 +601,11 @@ class RegisterBody(BaseModel):
 
 @_pub.post("/register")
 async def register(body: RegisterBody):
+    status = registration_status()
+    if not status["allowed"]:
+        # 403 with a machine-readable code; the page just shows a generic
+        # "registration closed" message and never mentions premium.
+        raise HTTPException(403, detail="registration_" + (status["reason"] or "disabled"))
     if len(body.password) < 4:
         raise HTTPException(400, detail="Password too short")
     uid = str(uuid.uuid4())[:8]
@@ -585,6 +649,13 @@ async def login(body: LoginBody):
         "avatar_data": row["avatar_data"], "avatar_svg": row["avatar_svg"],
         "theme": row["theme"], "font_size": row["font_size"],
     }})
+
+
+@_pub.get("/registration")
+async def registration_info_pub():
+    """Public: may a visitor create a new account? Only exposes the boolean —
+    the reason (cap reached vs. admin turned off) stays private."""
+    return JSONResponse({"allowed": registration_status()["allowed"]})
 
 
 @_pub.post("/logout")
@@ -807,7 +878,8 @@ async def toggle_app_api(app_id: str, body: AppApiToggle, session=Depends(get_cu
 async def list_users(session=Depends(get_current_session)):
     with _db() as conn:
         rows = conn.execute(
-            "SELECT id,username,display_name,avatar_color,is_admin,created_at FROM public_users ORDER BY created_at DESC"
+            "SELECT id,username,display_name,avatar_color,avatar_svg,avatar_data,is_admin,created_at "
+            "FROM public_users ORDER BY created_at DESC"
         ).fetchall()
     return JSONResponse([dict(r) for r in rows])
 
@@ -821,6 +893,8 @@ class UserBody(BaseModel):
 
 @_admin.post("/users")
 async def create_user_admin(body: UserBody, session=Depends(get_current_session)):
+    if not can_admin_create_user()["allowed"]:
+        raise HTTPException(403, detail="registration_premium")
     uid  = str(uuid.uuid4())[:8]
     now  = datetime.now(timezone.utc).isoformat()
     phash = _hash_pw(body.password) if body.password else None
@@ -873,6 +947,27 @@ async def toggle_user_admin(uid: str, body: AdminToggle, session=Depends(get_cur
     with _db() as conn:
         conn.execute("UPDATE public_users SET is_admin=? WHERE id=?", (1 if body.is_admin else 0, uid))
         conn.commit()
+    return JSONResponse({"ok": True})
+
+
+@_admin.get("/settings")
+async def get_settings_admin(session=Depends(get_current_session)):
+    return JSONResponse({
+        "registrations_enabled": registrations_enabled(),
+        "premium":               is_premium(),
+        "user_count":            user_count(),
+        "user_limit":            FREE_USER_LIMIT,
+    })
+
+
+class SettingsBody(BaseModel):
+    registrations_enabled: Optional[bool] = None
+
+
+@_admin.put("/settings")
+async def update_settings_admin(body: SettingsBody, session=Depends(get_current_session)):
+    if body.registrations_enabled is not None:
+        set_config("registrations_enabled", "1" if body.registrations_enabled else "0")
     return JSONResponse({"ok": True})
 
 
