@@ -84,7 +84,7 @@ var mvmOS = (() => {
       _flyout.appendChild(sep);
     }
     const cats = {};
-    Object.values(_apps).forEach(app => {
+    Object.values(_apps).filter(app => app.id !== 'settings').forEach(app => {
       const cat = app.category || 'Utilities';
       if (!cats[cat]) cats[cat] = [];
       cats[cat].push(app);
@@ -145,7 +145,7 @@ var mvmOS = (() => {
       try {
         const res = await fetch('/api/plugins');
         const data = await res.json();
-        const plugins = (data.plugins || data || []).filter(p => _apps[p.id]);
+        const plugins = (data.plugins || data || []).filter(p => _apps[p.id] && p.id !== 'settings');
         recentApps = [...plugins].filter(p => p.last_opened_at).sort((a, b) => b.last_opened_at - a.last_opened_at).slice(0, prefs.recent);
         frequentApps = [...plugins].sort((a, b) => (b.open_count || 0) - (a.open_count || 0)).slice(0, prefs.frequent);
       } catch (_) {}
@@ -155,7 +155,7 @@ var mvmOS = (() => {
     function _blockItems(blockId) {
       if (blockId === 'recent') return recentApps;
       if (blockId === 'frequent') return frequentApps;
-      return prefs.custom.map(id => _apps[id]).filter(Boolean);
+      return prefs.custom.map(id => _apps[id]).filter(app => app && app.id !== 'settings');
     }
 
     // check if anything to show
@@ -1418,39 +1418,45 @@ var mvmOS = (() => {
         input.addEventListener('keydown', e => { if (e.key === 'Enter') ok(); if (e.key === 'Escape') { ov.remove(); resolve(null); } });
       });
     },
-    // Premium gate. Any premium action goes through require(): if the user is
-    // premium it runs, otherwise the upsell window explains it and links to the
-    // site. Stage 1 — status is a local flag only; the real status will be a
-    // signed server response cached here. Set localStorage.mvmos_premium_test=1
-    // to preview the granted path during development.
-    premium: {
-      site: 'https://mvmos.org/premium',
-      isPremium() {
-        return localStorage.getItem('mvmos_premium_test') === '1';
-      },
-      require(feature, onAllowed) {
-        if (this.isPremium()) { if (onAllowed) onAllowed(); return true; }
-        this.showUpsell(feature);
-        return false;
-      },
-      showUpsell(feature) {
-        const _t = (k, v) => (window.t ? window.t(k, v) : k);
+    // Cosmetic gate for a premium-only control (checkbox/button/select). Not
+    // an access boundary — that lives server-side in mvmos.org, this just
+    // keeps the control visibly locked and explains why when clicked.
+    premiumStatus: 'free',
+    premiumGate(el, text) {
+      if (!el) return;
+      const lockId = '_pg-lock-' + Math.random().toString(36).slice(2);
+      const apply = () => {
+        const locked = window.mvmOS.premiumStatus !== 'premium';
+        el.classList.toggle('premium-locked', locked);
+        el.style.opacity = locked ? '.5' : '';
+        el.style.cursor = locked ? 'not-allowed' : '';
+        el.dataset.premiumLockId = locked ? lockId : '';
+      };
+      apply();
+      window.addEventListener('premium-changed', apply);
+      const stop = e => {
+        if (window.mvmOS.premiumStatus === 'premium') return;
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        const _t = k => window._i18n?.[k] || window.mvmOS?.t?.(k) || k;
         const ov = document.createElement('div');
         ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center';
-        ov.innerHTML = `<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius,6px);padding:26px;max-width:400px;width:90%;box-shadow:var(--shadow);display:flex;flex-direction:column;gap:14px;text-align:center">
-          <div style="font-size:2.2rem">💎</div>
-          <div style="font-size:1.1rem;font-weight:700">${_t('prem_title')}</div>
-          <div style="font-size:.9rem;line-height:1.55;color:var(--text-dim)">${feature ? _t('prem_feature_intro', { feature }) : _t('prem_body')}</div>
-          <div style="display:flex;gap:8px;justify-content:center;margin-top:4px">
-            <button id="_pm-close" class="s-btn s-btn-sm">${_t('close')}</button>
-            <a href="${this.site}" target="_blank" rel="noopener" class="s-btn s-btn-sm s-btn-primary" style="text-decoration:none">${_t('prem_learn_more')}</a>
+        ov.innerHTML = `<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius,6px);padding:24px;max-width:380px;width:90%;box-shadow:var(--shadow);display:flex;flex-direction:column;gap:14px">
+          <div style="font-size:.92rem;line-height:1.5">🔒 ${text || ''}</div>
+          <div style="font-size:.82rem;line-height:1.5;color:var(--text-dim)">${_t('premium_locked_generic')}</div>
+          <div style="display:flex;gap:8px;justify-content:flex-end">
+            <button id="_pg-close" class="s-btn s-btn-sm">${_t('cancel') || 'Close'}</button>
+            <button id="_pg-open" class="s-btn s-btn-sm s-btn-primary">${_t('premium_locked_open')}</button>
           </div></div>`;
         document.body.appendChild(ov);
-        const close = () => ov.remove();
-        ov.querySelector('#_pm-close').onclick = close;
-        ov.querySelector('a').onclick = close;
-        ov.addEventListener('click', e => { if (e.target === ov) close(); });
-      },
+        ov.querySelector('#_pg-close').onclick = () => ov.remove();
+        ov.querySelector('#_pg-open').onclick = () => {
+          ov.remove();
+          window.dispatchEvent(new CustomEvent('open-subscription-settings'));
+        };
+      };
+      el.addEventListener('click', stop, true);
+      el.addEventListener('mousedown', stop, true);
     },
     _loadPlugin,
     _loadWidget,

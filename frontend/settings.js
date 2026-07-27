@@ -129,25 +129,52 @@ const Settings = (() => {
     window.dispatchEvent(new CustomEvent('fm-prefs-changed', { detail: p }));
   }
 
+  // The window body renders asynchronously, so a tab requested while it is still
+  // loading is remembered here and picked up by render() instead of being lost.
+  let _pendingTab = null;
+
   function openWindow(tab) {
     if (document.querySelector('.window[data-win-id="settings"]')) {
       Desktop.focusWindow('settings');
-      if (tab) switchTab(tab);
+      if (tab) { _pendingTab = tab; switchTab(tab); }
       return;
     }
+    _pendingTab = tab || null;
     Desktop.createWindow({
       id: 'settings',
       title: `⚙️ ${t('app_settings')}`,
       width: 620,
       height: 480,
       onMount(body) {
-        Promise.all([loadSettings(), window.mvmOS?.i18nReady || Promise.resolve()]).then(([s]) => {
-          render(body, s, tab);
+        Promise.all([loadSettings(), loadPremium(), window.mvmOS?.i18nReady || Promise.resolve()]).then(([s, premium]) => {
+          render(body, s, _pendingTab || tab, premium);
+          _pendingTab = null;
           Desktop.initMobileSidebar(body);
         });
       },
     });
     Desktop.focusWindow('settings');
+  }
+
+  async function loadPremium() {
+    try {
+      const res = await fetch('/api/premium');
+      if (res.ok) return await res.json();
+    } catch (_) {}
+    return { status: 'free', expires_at: null, license_key_set: false, license_key_hint: '', site: '' };
+  }
+
+  function formatDate(iso, format, timezone) {
+    if (!iso) return '';
+    const normalized = /(?:Z|[+-]\d\d:\d\d)$/.test(iso) ? iso : iso.replace(' ', 'T') + 'Z';
+    const date = new Date(normalized);
+    if (Number.isNaN(date.getTime())) return iso;
+    const v = Object.fromEntries(new Intl.DateTimeFormat('en-GB', {
+      timeZone: timezone || 'UTC', year: 'numeric', month: '2-digit', day: '2-digit',
+    }).formatToParts(date).filter(p => p.type !== 'literal').map(p => [p.type, p.value]));
+    if (format === 'MM/DD/YYYY') return `${v.month}/${v.day}/${v.year}`;
+    if (format === 'YYYY-MM-DD') return `${v.year}-${v.month}-${v.day}`;
+    return `${v.day}/${v.month}/${v.year}`;
   }
 
   function switchTab(tab) {
@@ -161,16 +188,23 @@ const Settings = (() => {
     if (panEl) panEl.classList.add('active');
   }
 
-  function render(body, s, activeTab) {
+  function render(body, s, activeTab, premium) {
     activeTab = activeTab || 'display';
     const d = loadDisplay();
     const fm = loadFMPrefs();
+    premium = premium || { status: 'free', expires_at: null, license_key_set: false, license_key_hint: '', site: '' };
+    const isPremium = premium.status === 'premium';
+    const expiry = formatDate(premium.expires_at, s.date_format, s.timezone);
+    const esc = v => String(v || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    const hint = esc(premium.license_key_hint);
+    const site = esc(premium.site || 'https://mvmos.org/premium');
     body.style.overflow = 'hidden';
     body.style.padding = '0';
     body.innerHTML = `
       <div class="settings-wrap as-wrap">
 
         <nav class="settings-tabs as-sidebar">
+          <div class="settings-tab ${activeTab==='subscription'?'active':''}" data-tab="subscription">${t('settings_subscription')}</div>
           <div class="settings-tab ${activeTab==='display'?'active':''}" data-tab="display">${t('settings_display')}</div>
           <div class="settings-tab ${activeTab==='screensaver'?'active':''}" data-tab="screensaver">${t('settings_screensaver')}</div>
           <div class="settings-tab ${activeTab==='wallpaper'?'active':''}" data-tab="wallpaper">${t('settings_wallpaper')}</div>
@@ -186,6 +220,52 @@ const Settings = (() => {
         </nav>
 
         <div class="settings-panels as-main">
+
+          <!-- Subscription panel -->
+          <div class="settings-panel ${activeTab==='subscription'?'active':''}" id="sp-subscription">
+            <div class="settings-section">
+              <div class="settings-section-title">💎 ${t('subscription_title')}</div>
+              <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:14px 16px">
+                <div style="display:flex;align-items:center;gap:8px;font-weight:600">
+                  <span style="color:${isPremium ? 'var(--accent)' : 'var(--text-dim)'}">${isPremium ? '\u25c6' : '\u25cb'}</span>
+                  <span>${isPremium ? t('subscription_premium') : t('subscription_free')}</span>
+                </div>
+                <div style="font-size:.82rem;color:var(--text-dim);margin-top:6px;line-height:1.45">
+                  ${isPremium ? t('subscription_active_until', {date: expiry}) : t('subscription_free_desc')}
+                </div>
+              </div>
+              ${premium.reason === 'duplicate' ? `<div style="font-size:.82rem;color:#e0a355;line-height:1.5;margin-top:12px">${t('subscription_duplicate')}</div>` : ''}
+              <div style="font-size:.8rem;color:var(--text-dim);line-height:1.5;margin-top:12px">${t('subscription_keeps_working')}</div>
+              ${isPremium ? '' : `<a class="s-btn" href="${site}" target="_blank" rel="noopener" style="display:inline-block;margin-top:12px;text-decoration:none">${t('subscription_buy')}</a>`}
+            </div>
+
+            <div class="settings-section">
+              <div class="settings-section-title">${t('subscription_key_title')}</div>
+              ${premium.license_key_set ? `
+                <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+                  <div style="flex:1;min-width:140px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:8px 10px;font-family:var(--mono,monospace);font-size:.85rem">${hint}</div>
+                  <button class="s-btn" id="prem-recheck">${t('subscription_recheck')}</button>
+                  <button class="s-btn" id="prem-remove">${t('subscription_remove')}</button>
+                </div>
+              ` : `
+                <div style="font-size:.82rem;color:var(--text-dim);line-height:1.45;margin-bottom:12px">${t('subscription_key_desc')}</div>
+                <label style="display:flex;flex-direction:column;gap:6px">
+                  <span style="font-size:.82rem">${t('subscription_key')}</span>
+                  <input class="s-input" id="prem-key" type="text" autocomplete="off" spellcheck="false" placeholder="${t('subscription_key_ph')}">
+                </label>
+                <div style="margin-top:12px"><button class="s-btn" id="prem-save">${t('subscription_save')}</button></div>
+              `}
+              <div id="prem-status" style="font-size:.8rem;color:var(--text-dim);margin-top:10px"></div>
+            </div>
+
+            ${premium.license_key_set ? `
+            <div class="settings-section">
+              <div class="settings-section-title">${t('subscription_devices_title')}</div>
+              <div style="font-size:.82rem;color:var(--text-dim);line-height:1.45;margin-bottom:12px">${t('subscription_devices_desc')}</div>
+              <div id="prem-devices"><div style="font-size:.82rem;color:var(--text-dim)">${t('subscription_checking')}</div></div>
+            </div>
+            ` : ''}
+          </div>
 
           <!-- Display panel -->
           <div class="settings-panel ${activeTab==='display'?'active':''}" id="sp-display">
@@ -486,6 +566,7 @@ const Settings = (() => {
         if (tab.dataset.tab === 'system') renderSystem(body);
         if (tab.dataset.tab === 'backup') renderBackup(body);
         if (tab.dataset.tab === 'sshaccess') renderSshAccess(body);
+        if (tab.dataset.tab === 'subscription') renderPremiumDevices();
       });
     });
 
@@ -498,6 +579,108 @@ const Settings = (() => {
     if (activeTab === 'wallpaper') initWallpaper(body);
     if (activeTab === 'system') renderSystem(body);
     if (activeTab === 'backup') renderBackup(body);
+
+    // ── Subscription ────────────────────────────────────────────────────
+    const premStatus = () => body.querySelector('#prem-status');
+    const showPremState = state => {
+      window.dispatchEvent(new CustomEvent('premium-changed', { detail: state }));
+      render(body, s, 'subscription', state);
+    };
+    const premMsg = (msg, bad) => {
+      const el = premStatus();
+      if (!el) return;
+      el.textContent = msg;
+      el.style.color = bad ? '#e05555' : 'var(--text-dim)';
+    };
+    const premError = validation => {
+      if (!validation) return t('subscription_save_failed');
+      if (validation.reason === 'unreachable') return t('subscription_unreachable');
+      if (validation.reason === 'expired') return t('subscription_expired');
+      if (validation.reason === 'seats_full') return t('subscription_seats_full');
+      if (validation.reason === 'duplicate') return t('subscription_duplicate');
+      return t('subscription_invalid');
+    };
+
+    async function renderPremiumDevices() {
+      const wrap = body.querySelector('#prem-devices');
+      if (!wrap) return;
+      const res = await fetch('/api/premium/devices').catch(() => null);
+      if (!res?.ok) {
+        wrap.innerHTML = `<div style="font-size:.82rem;color:var(--text-dim)">${t('subscription_unreachable')}</div>`;
+        return;
+      }
+      const data = await res.json();
+      const devices = data.devices || [];
+      if (!devices.length) {
+        wrap.innerHTML = `<div style="font-size:.82rem;color:var(--text-dim)">${t('subscription_devices_none')}</div>`;
+        return;
+      }
+      wrap.innerHTML = devices.map(d => {
+        const here = d.device_id === data.this_device;
+        const name = d.name || t('subscription_device_unnamed');
+        const flagged = d.duplicates > 0;
+        return `
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:9px 12px;margin-bottom:8px">
+            <div style="flex:1;min-width:150px">
+              <div style="font-size:.88rem">${name}${here ? ` <span style="color:var(--accent);font-size:.76rem;white-space:nowrap">${t('subscription_device_this')}</span>` : ''}</div>
+              <div style="font-size:.75rem;color:var(--text-dim);margin-top:2px">${t('subscription_device_last_seen', {date: formatDate(d.last_seen, s.date_format, s.timezone)})}</div>
+              ${flagged ? `<div style="font-size:.75rem;color:#e0a355;margin-top:2px">${t('subscription_device_conflicts', {count: d.duplicates})}</div>` : ''}
+            </div>
+            ${here ? '' : `<button class="s-btn-sm prem-release" data-device="${d.device_id}">${t('subscription_device_release')}</button>`}
+          </div>`;
+      }).join('');
+      wrap.querySelectorAll('.prem-release').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          btn.disabled = true;
+          await fetch('/api/premium/devices/release', {
+            method: 'POST', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({device_id: btn.dataset.device}),
+          }).catch(() => null);
+          renderPremiumDevices();
+        });
+      });
+    }
+    if (activeTab === 'subscription') renderPremiumDevices();
+
+    body.querySelector('#prem-save')?.addEventListener('click', async e => {
+      const input = body.querySelector('#prem-key');
+      const key = input.value.trim();
+      if (!key) { premMsg(t('subscription_key_required'), true); return; }
+      e.target.disabled = true;
+      premMsg(t('subscription_checking'));
+      const res = await fetch('/api/premium/license', {
+        method: 'PUT', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({license_key: key}),
+      }).catch(() => null);
+      const data = res?.ok ? await res.json() : null;
+      if (!data) { premMsg(t('subscription_save_failed'), true); e.target.disabled = false; return; }
+      if (data.status === 'premium') {
+        showPremState(data);
+        premMsg(t('subscription_downloading'));
+        return;
+      }
+      showPremState(data);
+      premMsg(premError(data.validation), true);
+    });
+
+    body.querySelector('#prem-recheck')?.addEventListener('click', async e => {
+      e.target.disabled = true;
+      premMsg(t('subscription_checking'));
+      const res = await fetch('/api/premium?refresh=true').catch(() => null);
+      const data = res?.ok ? await res.json() : null;
+      if (!data) { premMsg(t('subscription_unreachable'), true); e.target.disabled = false; return; }
+      showPremState(data);
+      if (data.status !== 'premium') premMsg(t('subscription_expired'), true);
+    });
+
+    body.querySelector('#prem-remove')?.addEventListener('click', async e => {
+      e.target.disabled = true;
+      const res = await fetch('/api/premium/license', {method: 'DELETE'}).catch(() => null);
+      const data = res?.ok ? await res.json() : null;
+      if (!data) { premMsg(t('subscription_remove_failed'), true); e.target.disabled = false; return; }
+      showPremState(data);
+    });
+
     if (activeTab === 'sshaccess') renderSshAccess(body);
 
     // Display — auto-save on slider change

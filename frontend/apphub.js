@@ -647,12 +647,6 @@ const AppHub = (() => {
         }).catch(()=>null);
         if (r?.ok) { close(); onSave && onSave(); return; }
         const d = r ? await r.json().catch(()=>({})) : {};
-        // Free-tier cap reached — show the same premium upsell as elsewhere.
-        if (r && r.status === 403 && String(d.detail||'').startsWith('registration_premium')) {
-          close();
-          window.mvmOS?.premium?.showUpsell();
-          return;
-        }
         err.textContent = d.detail || t('ah_registration_failed');
         btn.disabled = false;
       };

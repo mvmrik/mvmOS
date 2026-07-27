@@ -33,6 +33,7 @@ from .terminal import router as terminal_router
 from .files import router as files_router
 from .desktop import router as desktop_router
 from .settings import router as settings_router
+from .premium import router as premium_router
 from .users import router as users_router
 from .packages import router as packages_router
 from .plugins import router as plugins_router
@@ -65,6 +66,7 @@ app.include_router(terminal_router)
 app.include_router(files_router)
 app.include_router(desktop_router)
 app.include_router(settings_router)
+app.include_router(premium_router)
 app.include_router(users_router)
 app.include_router(packages_router)
 app.include_router(plugins_router)
@@ -88,6 +90,15 @@ app_backends.load_all(app)
 @app.on_event("startup")
 async def _run_startup_apps():
     await run_startup_apps()
+
+
+@app.on_event("startup")
+async def _premium_heartbeat():
+    import asyncio
+
+    from .premium import heartbeat_loop
+
+    asyncio.create_task(heartbeat_loop())
 
 
 @app.exception_handler(404)

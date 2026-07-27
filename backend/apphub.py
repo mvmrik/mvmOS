@@ -142,14 +142,10 @@ def is_app_public(app_id: str) -> bool:
     return bool(row and row["enabled"])
 
 
-# ── Config, registrations & premium gate ────────────────────────────
-# The free tier allows up to FREE_USER_LIMIT accounts. Premium (server-wide,
-# stored in hub_config) lifts the cap. Separately, an admin can turn public
-# self-registration off entirely. Public self-registration is allowed only
-# when BOTH are satisfied; an admin creating a user is limited only by the
-# premium cap (never by the manual public toggle).
-
-FREE_USER_LIMIT = 10
+# ── Config & registrations ──────────────────────────────────────────
+# There is no account limit. An admin can turn public self-registration off
+# entirely; that toggle never restricts an admin creating a user from inside
+# the system.
 
 
 def get_config(key: str, default: Optional[str] = None) -> Optional[str]:
@@ -164,10 +160,6 @@ def set_config(key: str, value: str) -> None:
         conn.commit()
 
 
-def is_premium() -> bool:
-    return get_config("premium", "0") == "1"
-
-
 def registrations_enabled() -> bool:
     return get_config("registrations_enabled", "1") == "1"
 
@@ -179,22 +171,38 @@ def user_count() -> int:
 
 def registration_status() -> dict:
     """Whether a NEW public self-registration is currently allowed, plus the
-    reason it isn't (`premium` = free cap reached, `disabled` = admin turned
-    registrations off). The reason stays server-side; the public page only
-    ever shows/hides the register option."""
-    if not is_premium() and user_count() >= FREE_USER_LIMIT:
-        return {"allowed": False, "reason": "premium"}
+    reason it isn't (`disabled` = admin turned registrations off). The reason
+    stays server-side; the public page only ever shows/hides the register
+    option."""
     if not registrations_enabled():
         return {"allowed": False, "reason": "disabled"}
     return {"allowed": True, "reason": None}
 
 
-def can_admin_create_user() -> dict:
-    """Admin creating a user from inside the system: only the premium cap
-    applies — the manual public toggle does not restrict the admin."""
-    if not is_premium() and user_count() >= FREE_USER_LIMIT:
-        return {"allowed": False, "reason": "premium"}
-    return {"allowed": True, "reason": None}
+class RegistrationBlocked(Exception):
+    def __init__(self, reason: str):
+        self.reason = reason
+
+
+def create_user_row(uid: str, body: "UserBody", password_hash: Optional[str], now: str,
+                    public_registration: bool) -> None:
+    """Create a user, re-checking the registration toggle in the same write
+    transaction so it can't change between the check and the insert."""
+    with _db() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        config = dict(conn.execute(
+            "SELECT key,value FROM hub_config WHERE key='registrations_enabled'"
+        ).fetchall())
+        registrations_open = config.get("registrations_enabled", "1") == "1"
+        if public_registration and not registrations_open:
+            raise RegistrationBlocked("disabled")
+        conn.execute(
+            "INSERT INTO public_users(id,username,display_name,avatar_color,password_hash,theme,created_at)"
+            " VALUES(?,?,?,?,?,?,?)",
+            (uid, body.username.strip().lower(), body.display_name.strip(),
+             body.avatar_color, password_hash, "auto", now)
+        )
+        conn.commit()
 
 
 def _detect_public_apps() -> list:
@@ -601,24 +609,16 @@ class RegisterBody(BaseModel):
 
 @_pub.post("/register")
 async def register(body: RegisterBody):
-    status = registration_status()
-    if not status["allowed"]:
-        # 403 with a machine-readable code; the page just shows a generic
-        # "registration closed" message and never mentions premium.
-        raise HTTPException(403, detail="registration_" + (status["reason"] or "disabled"))
     if len(body.password) < 4:
         raise HTTPException(400, detail="Password too short")
     uid = str(uuid.uuid4())[:8]
     now = datetime.now(timezone.utc).isoformat()
     try:
-        with _db() as conn:
-            conn.execute(
-                "INSERT INTO public_users(id,username,display_name,avatar_color,password_hash,theme,created_at)"
-                " VALUES(?,?,?,?,?,?,?)",
-                (uid, body.username.strip().lower(), body.display_name.strip(),
-                 body.avatar_color, _hash_pw(body.password), "auto", now)
-            )
-            conn.commit()
+        create_user_row(uid, body, _hash_pw(body.password), now, public_registration=True)
+    except RegistrationBlocked as blocked:
+        # 403 with a machine-readable code; the page just shows a generic
+        # "registration closed" message.
+        raise HTTPException(403, detail="registration_" + blocked.reason)
     except sqlite3.IntegrityError:
         raise HTTPException(400, detail="Username already exists")
     token = issue_pub_token(uid)
@@ -893,20 +893,11 @@ class UserBody(BaseModel):
 
 @_admin.post("/users")
 async def create_user_admin(body: UserBody, session=Depends(get_current_session)):
-    if not can_admin_create_user()["allowed"]:
-        raise HTTPException(403, detail="registration_premium")
     uid  = str(uuid.uuid4())[:8]
     now  = datetime.now(timezone.utc).isoformat()
     phash = _hash_pw(body.password) if body.password else None
     try:
-        with _db() as conn:
-            conn.execute(
-                "INSERT INTO public_users(id,username,display_name,avatar_color,password_hash,theme,created_at)"
-                " VALUES(?,?,?,?,?,?,?)",
-                (uid, body.username.strip().lower(), body.display_name.strip(),
-                 body.avatar_color, phash, "auto", now)
-            )
-            conn.commit()
+        create_user_row(uid, body, phash, now, public_registration=False)
     except sqlite3.IntegrityError:
         raise HTTPException(400, detail="Username already exists")
     return JSONResponse({"id": uid})
@@ -954,9 +945,7 @@ async def toggle_user_admin(uid: str, body: AdminToggle, session=Depends(get_cur
 async def get_settings_admin(session=Depends(get_current_session)):
     return JSONResponse({
         "registrations_enabled": registrations_enabled(),
-        "premium":               is_premium(),
         "user_count":            user_count(),
-        "user_limit":            FREE_USER_LIMIT,
     })
 
 

@@ -1002,11 +1002,10 @@ const Desktop = (() => {
     const apps = [
       { id: 'terminal',    label: t('app_terminal'),     emoji: '🖥️' },
       { id: 'filemanager', label: t('app_filemanager'),  emoji: '📁' },
-      { id: 'settings',    label: t('app_settings'),     emoji: '⚙️' },
       { id: 'appstore',    label: t('app_appstore'),     emoji: '📦' },
       { id: 'msc',         label: t('app_msc'),          emoji: '🛠️' },
     ];
-    Object.values(window.mvmOS?._apps || {}).forEach(a => {
+    Object.values(window.mvmOS?._apps || {}).filter(a => a.id !== 'settings').forEach(a => {
       apps.push({ id: a.id, label: a.name, emoji: a.icon || '📦' });
     });
     return apps;
@@ -1052,6 +1051,10 @@ const Desktop = (() => {
       startResults.style.display = 'none';
       startMain.style.display = '';
     }
+  });
+  document.getElementById('start-settings-btn').addEventListener('click', () => {
+    openApp('settings');
+    startMenu.classList.remove('open');
   });
   startMenu.querySelectorAll('[data-app]').forEach(item => {
     item.addEventListener('click', () => {
@@ -1373,11 +1376,41 @@ const Desktop = (() => {
       window._hostname = sysinfo.hostname || '';
       const el = document.getElementById('current-user-label');
       if (el) el.textContent = whoami.effective_user;
+      refreshPremiumBadge();
       if (whoami.effective_user || sysinfo.hostname) {
         document.title = `mvmOS — ${whoami.effective_user}@${sysinfo.hostname || 'localhost'}`;
       }
     } catch (_) {}
   }
+
+  // Cosmetic only — access to premium content is decided by mvmos.org at
+  // download time, never by this badge.
+  function updatePremiumBadge(state) {
+    if (window.mvmOS) window.mvmOS.premiumStatus = state?.status === 'premium' ? 'premium' : 'free';
+    const badge = document.getElementById('current-user-premium');
+    const label = document.getElementById('current-user-premium-label');
+    if (!badge || !label) return;
+    const premium = state?.status === 'premium';
+    label.textContent = t(premium ? 'start_premium' : 'start_get_premium');
+    badge.style.display = 'inline-flex';
+    badge.style.opacity = premium ? '1' : '.75';
+  }
+  async function refreshPremiumBadge() {
+    try {
+      const res = await fetch('/api/premium');
+      if (res.ok) updatePremiumBadge(await res.json());
+    } catch (_) {}
+  }
+  window.addEventListener('premium-changed', e => updatePremiumBadge(e.detail));
+  document.getElementById('current-user-premium').addEventListener('click', () => {
+    openApp('settings');
+    Settings.openWindow('subscription');
+    startMenu.classList.remove('open');
+  });
+  window.addEventListener('open-subscription-settings', () => {
+    openApp('settings');
+    Settings.openWindow('subscription');
+  });
 
   function openSwitchUser() {
     startMenu.classList.remove('open');
