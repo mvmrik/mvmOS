@@ -255,17 +255,24 @@ def is_app_api_enabled(app_id: str) -> bool:
 
 
 def _detect_app_apis() -> list:
-    """Scan backend/apps/ for directories with api.py — these are app-API-capable."""
-    base = os.path.join(os.path.dirname(__file__), "apps")
-    result = []
-    if not os.path.isdir(base):
-        return result
-    for app_id in sorted(os.listdir(base)):
-        if app_id.startswith("_"):
-            continue
-        if os.path.isfile(os.path.join(base, app_id, "api.py")):
-            result.append(app_id)
-    return result
+    """Apps exposing an app-to-app API: apps/<id>/app_api.py in the current
+    layout, backend/apps/<id>/api.py in the older one — same two locations
+    _load_app_api() actually loads from."""
+    result = set()
+
+    live = os.path.join(os.path.dirname(__file__), "..", "apps")
+    if os.path.isdir(live):
+        for app_id in sorted(os.listdir(live)):
+            if not app_id.startswith("_") and os.path.isfile(os.path.join(live, app_id, "app_api.py")):
+                result.add(app_id)
+
+    old = os.path.join(os.path.dirname(__file__), "apps")
+    if os.path.isdir(old):
+        for app_id in sorted(os.listdir(old)):
+            if not app_id.startswith("_") and os.path.isfile(os.path.join(old, app_id, "api.py")):
+                result.add(app_id)
+
+    return sorted(result)
 
 
 _api_modules: dict = {}  # app_id -> loaded api.py module (or None if load failed)
@@ -833,8 +840,6 @@ async def list_public_apps_admin(session=Depends(get_current_session)):
             m = json.load(open(mpath)) if os.path.isfile(mpath) else {}
         except Exception:
             m = {}
-        if m.get("public_directory") is False:
-            continue
         meta = _CORE_APP_META.get(app_id, {})
         result.append({
             "id":      app_id,

@@ -119,9 +119,9 @@ async def _sync_premium(plugin_id: str) -> None:
 def _install_from_zip(zip_bytes: bytes, plugin_id: str, install_backend: bool) -> dict:
     """
     Extract a zip and distribute files:
-      main.js, manifest.json, *.css, *.html  → apps/<id>/
-      backend/ folder                         → backend/apps/<id>/
-      public/ folder                          → backend/apps/<id>/public/
+      manifest.json, db.json, premium/, api.py/desktop.py/other root .py → apps/<id>/
+      everything else (main.js, css, html, public/*)                    → apps/<id>/public/
+      backend/ folder (only for apps approved for one)                  → backend/apps/<id>/
     Returns the parsed manifest dict.
     """
     app_dir = _app_dir(plugin_id)
