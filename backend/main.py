@@ -27,6 +27,20 @@ class _MvmStaticFiles(StaticFiles):
                     await PlainTextResponse("Not Found", status_code=404)(scope, receive, send)
                     return
         await super().__call__(scope, receive, send)
+
+
+class _AppStaticFiles(StaticFiles):
+    """An app folder is a project, not a document root: only apps/<id>/public/
+    is reachable. /apps/<id>/main.js therefore reads apps/<id>/public/main.js,
+    and everything sitting beside that folder — data.db, db.json, the app's own
+    server code — has no URL that reaches it."""
+    async def get_response(self, path, scope):
+        app_id, _, rest = path.partition("/")
+        if not rest:
+            return PlainTextResponse("Not Found", status_code=404)
+        return await super().get_response(f"{app_id}/public/{rest}", scope)
+
+
 from .db import init_db, get_conn
 from .auth import router as auth_router, get_current_session
 from .terminal import router as terminal_router
@@ -50,9 +64,10 @@ from .ssh_access import router as ssh_access_router, init_ssh_access_db
 from .startup import router as startup_router, _init_startup_db, run_startup_apps
 from .apphub import router as apphub_router, public_page_router as apphub_public_router, _init_db as _init_apphub_db, is_app_public
 from .notifications import router as notifications_router
+from .platform_api import router as platform_router
 from .notfound import render_404_html
 from .db import APPS_DIR, WIDGETS_DIR, THEMES_DIR
-from . import app_backends, public_loader, projects
+from . import app_backends, app_isolation, public_loader, projects
 
 app = FastAPI(title="mvmOS", redirect_slashes=False)
 
@@ -84,6 +99,7 @@ app.include_router(startup_router)
 app.include_router(apphub_router)
 app.include_router(apphub_public_router, prefix="/pub/apphub")
 app.include_router(notifications_router)
+app.include_router(platform_router)
 
 app_backends.load_all(app)
 
@@ -118,8 +134,7 @@ def _public_pwa_meta(app_id: str):
     """Metadata for a public app's standalone PWA, or None when unavailable."""
     if app_id == "apphub" or not _PWA_APP_ID_RE.fullmatch(app_id):
         return None
-    public_module = os.path.join(os.path.dirname(__file__), "apps", app_id, "public.py")
-    if not os.path.isfile(public_module) or not is_app_public(app_id):
+    if public_loader._source_path(app_id) is None or not is_app_public(app_id):
         return None
     mpath = os.path.join(APPS_DIR, app_id, "manifest.json")
     try:
@@ -249,7 +264,10 @@ async def auth_middleware(request: Request, call_next):
         return Response(status_code=404)
 
     public = {"/login", "/login/totp", "/favicon.ico", "/api/auth/login-users"}
-    if path in public or path.startswith("/api/scheduler/") or path.startswith("/static") or path.startswith("/pub/") or path.startswith("/api/pub/") or path.endswith((".js", ".css", ".ico", ".png", ".svg", ".woff", ".woff2", ".webmanifest")) or "/public/" in path or path.endswith("/public"):
+    # /api/platform/ is reachable with an Apps Hub token instead of a desktop
+    # session — a public page has no session cookie at all. Each endpoint
+    # checks the identity it needs and 401s on its own.
+    if path in public or path.startswith("/api/scheduler/") or path.startswith("/api/platform/") or path.startswith("/static") or path.startswith("/pub/") or path.startswith("/api/pub/") or path.endswith((".js", ".css", ".ico", ".png", ".svg", ".woff", ".woff2", ".webmanifest")) or "/public/" in path or path.endswith("/public"):
         return await call_next(request)
 
     # Generic opt-out for app-backend routes that are already protected by
@@ -460,13 +478,19 @@ async def _dispatch_public(app_id: str, subpath: str, request: Request) -> Respo
 
 
 
+# Confine apps/<id>/ server code to its own folder before any of it is loaded.
+# Core and backend/apps/<id>/ are unaffected — only an app's own module and
+# routes run confined, so an app cannot open core data.db or a sibling app's
+# files. Anything it legitimately needs goes through /api/platform/.
+app_isolation.install()
+
 # Load app-specific public routes after the core public PWA routes above.
 # This keeps /pub/<app>/manifest.webmanifest and its worker from being
 # swallowed by an app's optional SPA catch-all route.
 public_loader.load_all(app)
 projects.init(app)
 
-app.mount("/apps", StaticFiles(directory=APPS_DIR, html=True), name="apps")
+app.mount("/apps", _AppStaticFiles(directory=APPS_DIR, html=True), name="apps")
 app.mount("/widgets", StaticFiles(directory=WIDGETS_DIR), name="widgets")
 app.mount("/themes", StaticFiles(directory=THEMES_DIR), name="themes")
 app.mount("/", _MvmStaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")

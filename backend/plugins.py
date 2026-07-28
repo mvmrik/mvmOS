@@ -3,6 +3,7 @@ import io
 import json
 import os
 import shutil
+import sys
 import tempfile
 import time
 import zipfile
@@ -98,6 +99,23 @@ def _apply_schema(db_path: str, schema: dict):
         conn.close()
 
 
+async def _sync_premium(plugin_id: str) -> None:
+    """Install/update hook for the premium build.
+
+    Always wipes any existing premium/ first, then re-fetches from mvmos.org
+    only if this installation is licensed right now — so an app can never be
+    left with a premium build made for a different version of itself, and a
+    lapsed licence loses it on the next update.
+
+    Never raises: an unreachable mvmos.org must not fail an install that has
+    already written its files and its DB row.
+    """
+    try:
+        await sys.modules["backend.premium"].sync_premium(plugin_id)
+    except Exception as e:
+        print(f"[plugins] premium sync failed for {plugin_id}: {e}")
+
+
 def _install_from_zip(zip_bytes: bytes, plugin_id: str, install_backend: bool) -> dict:
     """
     Extract a zip and distribute files:
@@ -155,17 +173,22 @@ def _install_from_zip(zip_bytes: bytes, plugin_id: str, install_backend: bool) -
                 os.makedirs(os.path.dirname(dest), exist_ok=True)
                 open(dest, "wb").write(data)
 
-            elif parts[0] == "public":
-                sub = "/".join(parts[1:])
-                pub_dir = os.path.join(backend_app_dir, "public")
-                os.makedirs(pub_dir, exist_ok=True)
-                dest = os.path.join(pub_dir, sub)
+            elif rel == "db.json" or parts[0] == "premium" or (
+                    len(parts) == 1 and rel.endswith(".py")):
+                # Schema, the app's own server code (api.py, desktop.py, and
+                # plugin files like telegram.py / mp_game.py / scheduler.py)
+                # and its premium/ build all belong beside public/, never
+                # inside it — none of this may ever be reachable by URL.
+                dest = os.path.join(app_dir, rel)
                 os.makedirs(os.path.dirname(dest), exist_ok=True)
                 open(dest, "wb").write(data)
 
             else:
-                # frontend files — main.js, css, html, etc.
-                dest = os.path.join(app_dir, rel)
+                # Everything the browser loads — main.js, css, the public page.
+                # A zip may list these flat or under public/; both land in
+                # public/, the app's only served folder.
+                sub = "/".join(parts[1:]) if parts[0] == "public" else rel
+                dest = os.path.join(app_dir, "public", sub)
                 os.makedirs(os.path.dirname(dest), exist_ok=True)
                 open(dest, "wb").write(data)
 
@@ -408,6 +431,10 @@ async def list_plugins(session=Depends(get_current_session)):
                 mf = json.load(f)
             item["settings"] = mf.get("settings", [])
             item["replaces_widget"] = mf.get("replaces_widget")
+            # manifest.json sits beside public/, not inside it, so the loader
+            # cannot fetch it over HTTP any more — it reads entry/css here.
+            item["entry"] = mf.get("entry", "main.js")
+            item["css"] = mf.get("css")
             # public_directory: false means the app has no single public page of
             # its own (e.g. mvmSiteBuilder — each site gets its own URL under
             # /pub/mvmsitebuilder/<slug>, so the bare public_url is meaningless) —
@@ -482,6 +509,10 @@ async def install_plugin(body: InstallRequest, session=Depends(get_current_sessi
                      mf.get("version", body.version), mf.get("description", body.description),
                      body.store_id or None, body.id),
                 )
+            # Always: clears any premium build left from the previous version,
+            # then re-fetches it only if this installation is licensed right
+            # now. Without this an update silently keeps a stale premium/.
+            await _sync_premium(body.id)
             return JSONResponse({"ok": True, "entry": mf.get("entry", "main.js")})
 
         if body.base_url:
@@ -604,6 +635,7 @@ async def install_plugin(body: InstallRequest, session=Depends(get_current_sessi
             (body.id, mf.get("name", body.name), mf.get("icon", body.icon), body.category,
              mf.get("version", body.version), mf.get("description", body.description), body.store_id or None, body.id),
         )
+    await _sync_premium(body.id)
     return JSONResponse({"ok": True, "entry": entry_path})
 
 

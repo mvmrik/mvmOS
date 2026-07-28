@@ -106,9 +106,15 @@ async def scheduler_tick():
         if not scheduler_file:
             continue
 
-        # Look in backend/apps/<id>/<scheduler_file>
-        sched_path = os.path.join(BACKENDS_DIR, app_id, scheduler_file)
-        if not os.path.isfile(sched_path):
+        # apps/<id>/<scheduler_file> in the current layout,
+        # backend/apps/<id>/<scheduler_file> in the older one.
+        sched_path = next(
+            (p for p in (os.path.join(APPS_DIR, app_id, scheduler_file),
+                         os.path.join(BACKENDS_DIR, app_id, scheduler_file))
+             if os.path.isfile(p)),
+            None,
+        )
+        if sched_path is None:
             continue
 
         db_path = os.path.join(APPS_DIR, app_id, "data.db")

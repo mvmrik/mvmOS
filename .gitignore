@@ -12,6 +12,8 @@ themes/
 CLAUDE.md
 TODO.md
 *.db
+*.db-wal
+*.db-shm
 backend/app-backends/
 backend/apphub_data/
 error-reports/

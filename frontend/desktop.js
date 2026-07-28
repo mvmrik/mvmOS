@@ -999,21 +999,20 @@ const Desktop = (() => {
   const startMain = document.getElementById('start-menu-main');
 
   function _startMenuAllApps() {
-    const apps = [
-      { id: 'terminal',    label: t('app_terminal'),     emoji: '🖥️' },
-      { id: 'filemanager', label: t('app_filemanager'),  emoji: '📁' },
-      { id: 'appstore',    label: t('app_appstore'),     emoji: '📦' },
-      { id: 'msc',         label: t('app_msc'),          emoji: '🛠️' },
-    ];
-    Object.values(window.mvmOS?._apps || {}).filter(a => a.id !== 'settings').forEach(a => {
-      apps.push({ id: a.id, label: a.name, emoji: a.icon || '📦' });
-    });
-    return apps;
+    // _apps is the whole list already — system apps are merged into it from
+    // _SYSTEM_APP_DEFS(). Listing any of them separately here duplicated every
+    // core app in the search results.
+    return Object.values(window.mvmOS?._apps || {}).map(a => ({
+      id: a.id, label: a.name, emoji: a.icon || '📦',
+    }));
   }
 
   startSearch.addEventListener('input', () => {
     const q = startSearch.value.trim().toLowerCase();
-    if (!q) {
+    // One or two letters match nearly every app, so the menu was replaced by a
+    // full-height list before the query meant anything. Keep the normal menu
+    // until there is enough to narrow it down.
+    if (q.length < 3) {
       startResults.style.display = 'none';
       startMain.style.display = '';
       return;

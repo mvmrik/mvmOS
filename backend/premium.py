@@ -185,22 +185,50 @@ def _is_stale(state: dict) -> bool:
 
 
 def load_premium_backend(app_id: str):
-    """Import backend/apps/<app_id>/premium/backend.py if it was downloaded,
-    else return None. An app's own backend.py calls this to reach premium-only
-    server logic — the module simply does not exist when the build was never
-    fetched (no licence, or fetch not yet run), so callers naturally fall back
-    to the free behaviour without a separate feature flag to check.
-    """
-    import importlib.util
+    """Import an app's premium/backend.py if it was downloaded, else None.
 
-    path = os.path.join(_premium_backend_dir(app_id), "backend.py")
-    if not os.path.isfile(path):
-        return None
-    mod_name = f"app_backend_{app_id}_premium"
-    spec = importlib.util.spec_from_file_location(mod_name, path)
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
+    Looked up in apps/<app_id>/premium/ first — ordinary app code, loaded
+    confined to its own folder exactly like api.py, since a premium module is
+    not a reason for an app to have a backend. backend/apps/<app_id>/premium/
+    is the older location, still honoured for apps that do have one.
+
+    There is nothing to feature-flag: the module simply does not exist unless
+    sync_premium() fetched it for a licensed install, so a caller that finds
+    None falls back to the free behaviour. That absence — not a check inside
+    the module — is what makes premium unforgeable.
+    """
+    for path, confined in (
+        (os.path.join(_premium_app_dir(app_id), "backend.py"), True),
+        (os.path.join(_premium_backend_dir(app_id), "backend.py"), False),
+    ):
+        if not os.path.isfile(path):
+            continue
+        mod_name = f"app_backend_{app_id}_premium"
+        if not confined:
+            import importlib.util
+
+            spec = importlib.util.spec_from_file_location(mod_name, path)
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+            return mod
+        import types
+
+        import sys as _sys
+
+        isolation = _sys.modules.get("backend.app_isolation")
+        with open(path) as fh:
+            source = fh.read()
+        mod = types.ModuleType(mod_name)
+        mod.__file__ = path
+        _sys.modules[mod_name] = mod
+        app_dir = os.path.realpath(os.path.dirname(os.path.dirname(path)))
+        if isolation is None:
+            exec(compile(source, path, "exec"), mod.__dict__)
+        else:
+            with isolation.confine(app_dir):
+                exec(compile(source, path, "exec"), mod.__dict__)
+        return mod
+    return None
 
 
 def is_premium() -> bool:
@@ -260,31 +288,42 @@ async def save_license(body: LicenseBody, _session=Depends(get_current_session))
 _SAFE_NAME = __import__("re").compile(r"^[A-Za-z0-9._-]+$")
 
 
+def _premium_app_dir(app_id: str) -> str:
+    """Where a premium build belongs: inside the app, like the rest of it."""
+    from .db import APPS_DIR
+
+    return os.path.join(APPS_DIR, app_id, "premium")
+
+
 def _premium_backend_dir(app_id: str) -> str:
+    """The older location, for apps that genuinely have a backend."""
     return os.path.join(os.path.dirname(__file__), "apps", app_id, "premium")
 
 
 def clear_premium_dir(app_id: str) -> None:
-    """Wipe both halves of the premium build (apps/<id>/premium/ on the
-    frontend side, backend/apps/<id>/premium/ on the backend side) so a stale
-    build can never sit next to code it was not made for. Called before every
-    fresh install/update, whether or not the installation ends up premium.
+    """Wipe the premium build from both possible locations so a stale build can
+    never sit next to code it was not made for. Called before every fresh
+    install/update, whether or not the installation ends up premium.
     """
     import shutil
 
-    from .db import APPS_DIR
-
-    for target in (os.path.join(APPS_DIR, app_id, "premium"), _premium_backend_dir(app_id)):
+    for target in (_premium_app_dir(app_id), _premium_backend_dir(app_id)):
         if os.path.isdir(target):
             shutil.rmtree(target)
 
 
 async def download_premium(app_id: str) -> bool:
-    """Fetch apps/<app_id>/premium.zip from mvmos.org and extract it, same
-    frontend/backend split as a regular app zip: a top-level backend/ folder
-    goes to backend/apps/<app_id>/premium/, everything else to
-    apps/<app_id>/premium/. Nothing in premium.zip is ever visible without a
-    valid licence — it is not part of the public app zip at all.
+    """Fetch apps/<app_id>/premium.zip from mvmos.org and extract it into
+    apps/<app_id>/premium/ — including premium/backend.py, which runs confined
+    to the app's folder like the rest of its server code.
+
+    A top-level backend/ folder in the zip still goes to
+    backend/apps/<app_id>/premium/, but only for an app that already has a
+    backend the user approved; needing premium is not itself such a reason.
+
+    Nothing in premium.zip is ever visible without a valid licence — it is not
+    part of the public app zip at all, and this request is the only way to it.
+    The licence code goes out in the headers here and never reaches the app.
 
     There is exactly one premium build per app — no filename or version to
     track, mvmos.org always serves whatever is currently there. Returns False
@@ -317,8 +356,12 @@ async def download_premium(app_id: str) -> bool:
     if r.status_code != 200:
         raise RuntimeError("Cannot fetch premium build")
 
-    frontend_target = os.path.join(app_dir, "premium")
-    backend_target = _premium_backend_dir(app_id)
+    frontend_target = _premium_app_dir(app_id)
+    # A backend/ folder in the zip only lands in backend/apps/ when the app
+    # already has one the user approved at install time. Otherwise it belongs
+    # with the app, isolated like everything else it ships.
+    has_backend = os.path.isdir(os.path.join(os.path.dirname(__file__), "apps", app_id))
+    backend_target = _premium_backend_dir(app_id) if has_backend else frontend_target
     with zipfile.ZipFile(io.BytesIO(r.content)) as zf:
         for name in zf.namelist():
             if name.endswith("/") or name.startswith("/") or ".." in name:

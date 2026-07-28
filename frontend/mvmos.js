@@ -663,12 +663,11 @@ var mvmOS = (() => {
     if (_projectNoApp.has(id)) return;
     try {
       const base = `/apps/${id}`;
-      let entry = 'main.js';
-      let css = null;
-      try {
-        const mf = await fetch(`${base}/manifest.json?_=${Date.now()}`);
-        if (mf.ok) { const j = await mf.json(); entry = j.entry || 'main.js'; css = j.css || null; }
-      } catch (_) {}
+      // manifest.json sits beside public/, not inside it, so it has no URL of
+      // its own — /api/plugins carries entry/css and is already loaded here.
+      const meta = _pluginsCache.find(p => p.id === id) || {};
+      const entry = meta.entry || 'main.js';
+      const css = meta.css || null;
       const res = await fetch(`${base}/${entry}?_=${Date.now()}`);
       if (!res.ok) {
         if (_projectIds.has(id)) return;

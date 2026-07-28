@@ -42,23 +42,138 @@ var CodeEditor = (() => {
     },
 
     // ── Backend boilerplate ──────────────────────────────────────────────────
+    // An app's server code lives in apps/<id>/api.py — loaded in-process, and
+    // may declare either or both routers below. An app stays inside its own
+    // folder: whatever it needs from mvmOS it asks the Platform API for, and it
+    // never opens core data.db or another app's files. backend/apps/<id>/ is
+    // the rare exception, for work that is structurally impossible here
+    // (subprocess, system files) — which is why installing such an app asks for
+    // the password.
+    //
+    // This is enforced, not advisory (backend/app_isolation.py): open() and
+    // sqlite3.connect() are confined to apps/<id>/ while the app's module
+    // loads and while its routes run. Core data.db, /etc, another app's
+    // data.db — all raise AppIsolationError. An app that tries it does not
+    // even load.
     {
       group: 'Backend',
-      name: 'APIRouter (public.py)',
-      desc: 'FastAPI public router skeleton',
+      name: 'router (api.py)',
+      desc: 'Public page router — mounted at /pub/<app-id>',
       snippet: "from fastapi import APIRouter\n\nrouter = APIRouter()\n\n\n@router.get('/')\nasync def index():\n    return {'ok': True}",
     },
     {
       group: 'Backend',
-      name: 'get_current_session',
-      desc: 'Require login — get current user',
-      snippet: "from fastapi import APIRouter, Depends\nfrom .auth import get_current_session\n\nrouter = APIRouter()\n\n\n@router.get('/me')\nasync def me(session=Depends(get_current_session)):\n    username = session['effective_user']\n    return {'user': username}",
+      name: 'desktop_router (api.py)',
+      desc: 'Desktop router — /api/apps/<app-id>, behind the session',
+      snippet: "from fastapi import APIRouter\n\ndesktop_router = APIRouter()\n\n\n@desktop_router.get('/items')\nasync def items():\n    return []",
     },
     {
       group: 'Backend',
-      name: 'get_conn()',
-      desc: 'SQLite connection (mvmOS shared DB)',
-      snippet: "from .db import get_conn\n\nwith get_conn() as conn:\n    rows = conn.execute('SELECT * FROM plugins').fetchall()\n    return [dict(r) for r in rows]",
+      name: 'router (desktop.py)',
+      desc: 'Same as desktop_router, in its own file when api.py grows big',
+      snippet: "# apps/<app-id>/desktop.py — mounted at /api/apps/<app-id>\nfrom fastapi import APIRouter\n\nrouter = APIRouter()\n\n\n@router.get('/items')\nasync def items():\n    return []",
+    },
+    {
+      group: 'Backend',
+      name: 'get_current_session',
+      desc: 'Current desktop user inside a route',
+      snippet: "import sys\nfrom fastapi import APIRouter, Depends\n\ncurrent_session = sys.modules['backend.auth'].get_current_session\n\ndesktop_router = APIRouter()\n\n\n@desktop_router.get('/me')\nasync def me(session=Depends(current_session)):\n    return {'user': session['effective_user']}",
+    },
+    {
+      group: 'Backend',
+      name: "App's own database",
+      desc: 'SQLite in apps/<app-id>/data.db — never another app’s',
+      snippet: "import os\nimport sqlite3\n\n_DB_PATH = os.path.join(os.path.dirname(__file__), 'data.db')\n\n\ndef _conn():\n    conn = sqlite3.connect(_DB_PATH)\n    conn.row_factory = sqlite3.Row\n    return conn",
+    },
+    {
+      group: 'Backend',
+      name: 'Folder isolation (enforced)',
+      desc: 'open() and sqlite3.connect() cannot leave apps/<app-id>/',
+      snippet: "# Allowed — inside the app's own folder:\n_DB_PATH = os.path.join(os.path.dirname(__file__), 'data.db')\nsqlite3.connect(_DB_PATH)\nopen(os.path.join(os.path.dirname(__file__), 'public', 'x.json'))\n\n# AppIsolationError — core data.db, another app, the system:\n# sqlite3.connect('../../data.db')\n# sqlite3.connect('../budget/data.db')\n# open('/etc/passwd')\n\n# Need something from mvmOS? Use the Platform API.\n# Need the system itself? That is backend/apps/<app-id>/,\n# and installing the app then asks the user for the password.",
+    },
+
+    // ── Platform API ─────────────────────────────────────────────────────────
+    // The documented way an app gets anything from outside its own folder.
+    // In-process (an app's api.py) call the function directly; over HTTP works
+    // from a public page or another process. Same data either way.
+    {
+      group: 'Platform API',
+      name: 'get_settings()',
+      desc: 'Install-wide currency, locale, date_format (in-process)',
+      snippet: "import sys\n\ncfg = sys.modules['backend.platform_api'].get_settings()\ncurrency = cfg['currency']        # 'EUR'\ndate_format = cfg['date_format']  # 'DD/MM/YYYY'",
+    },
+    {
+      group: 'Platform API',
+      name: 'GET /api/platform/settings',
+      desc: 'Same settings over HTTP (public page / other process)',
+      snippet: "const cfg = await fetch('/api/platform/settings').then(r => r.json());\nconsole.log(cfg.currency, cfg.locale, cfg.date_format);",
+    },
+    {
+      group: 'Platform API',
+      name: 'GET /api/platform/whoami',
+      desc: 'Who is calling — desktop user and/or Apps Hub account',
+      snippet: "const who = await fetch('/api/platform/whoami', {\n  headers: { 'X-Pub-Token': token }  // only on a public page\n}).then(r => r.json());\nconsole.log(who.user);          // desktop user, or null\nconsole.log(who.pub_user_id);   // Apps Hub account id, or null",
+    },
+    {
+      group: 'Platform API',
+      name: 'GET /api/platform/apps',
+      desc: 'Installed app ids — degrade gracefully if one is missing',
+      snippet: "const { apps } = await fetch('/api/platform/apps').then(r => r.json());\nif (apps.includes('budget')) { /* offer the integration */ }",
+    },
+    {
+      group: 'Platform API',
+      name: 'POST /api/platform/apps/{id}/call',
+      desc: "Call another app's api.py (its API must be enabled in Apps Hub)",
+      snippet: "const res = await fetch('/api/platform/apps/budget/call', {\n  method: 'POST',\n  headers: { 'Content-Type': 'application/json' },\n  body: JSON.stringify({\n    method: 'add_to_category',\n    kwargs: { category: 'Savings', amount: 10 }\n  })\n}).then(r => r.json());\n// user_id is filled in from the real caller — never send your own",
+    },
+    {
+      group: 'Platform API',
+      name: 'GET /api/platform/credits',
+      desc: 'Apps Hub credit balance for the calling account',
+      snippet: "const { balance } = await fetch('/api/platform/credits', {\n  headers: { 'X-Pub-Token': token }\n}).then(r => r.json());",
+    },
+    {
+      group: 'Platform API',
+      name: 'POST /api/platform/credits/spend',
+      desc: 'Spend credits — 402 when the balance is short',
+      snippet: "const res = await fetch('/api/platform/credits/spend', {\n  method: 'POST',\n  headers: { 'Content-Type': 'application/json', 'X-Pub-Token': token },\n  body: JSON.stringify({\n    app_id: 'my-app',\n    amount: 5,\n    reason: 'export',\n    idempotency_key: crypto.randomUUID()  // always — a retry must not charge twice\n  })\n});\nif (res.status === 402) { /* not enough credits */ }",
+    },
+    {
+      group: 'Platform API',
+      name: 'POST /api/platform/notify',
+      desc: 'Raise an mvmOS notification for the logged-in desktop user',
+      snippet: "await fetch('/api/platform/notify', {\n  method: 'POST',\n  headers: { 'Content-Type': 'application/json' },\n  body: JSON.stringify({ title: 'Done', body: 'Export finished', app_id: 'my-app' })\n});",
+    },
+    {
+      group: 'Platform API',
+      name: 'GET /api/platform/premium',
+      desc: 'Is this install licensed — for what the UI offers, not for gating',
+      snippet: "const p = await fetch('/api/platform/premium?app_id=my-app')\n  .then(r => r.json());\np.premium  // this installation holds a valid licence\np.build    // this app's premium/ code is actually on disk\n\n// Use it to label a control, not to protect a feature. The real gate is\n// that an unlicensed install never receives premium/ at all.",
+    },
+
+    // ── Premium ──────────────────────────────────────────────────────────────
+    // Premium code lives in apps/<id>/premium/ — ordinary app code, loaded
+    // confined to the app's own folder. Needing premium is NOT a reason for an
+    // app to have a backend.
+    //
+    // The gate is delivery, not a check. premium.zip is hosted on mvmos.org and
+    // never travels in the public store zip; on install/update sync_premium()
+    // wipes premium/ and re-fetches it only for a licensed install. Unlicensed
+    // means the file is simply absent — there is nothing to bypass.
+    //
+    // The base app always keeps its schema and its UI controls whole. What is
+    // premium is only whether the control does anything.
+    {
+      group: 'Premium',
+      name: 'Base app: call the premium module',
+      desc: 'Returns None with no licence — fall back to free behaviour',
+      snippet: "import sys\n\n\ndef _feature_enforced(x):\n    mod = sys.modules['backend.premium'].load_premium_backend('my-app')\n    if mod is None or not hasattr(mod, 'is_enforced'):\n        return False   # no premium build: the stored value stays inert\n    return mod.is_enforced(x)",
+    },
+    {
+      group: 'Premium',
+      name: 'apps/<id>/premium/backend.py',
+      desc: 'The premium half — always re-check is_premium() for expiry',
+      snippet: "import sys\n\n\ndef is_enforced(x):\n    # The file being here proves you were licensed when it was fetched,\n    # not that you still are. A licence that lapsed after install leaves\n    # this file behind, so check every time — the heartbeat keeps the\n    # answer at most 10 minutes stale.\n    if not sys.modules['backend.premium'].is_premium():\n        return False\n    base = sys.modules['app_public_my-app']\n    ...",
     },
 
     // ── System API ───────────────────────────────────────────────────────────

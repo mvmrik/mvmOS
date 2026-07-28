@@ -1,3 +1,4 @@
+import sys
 import sqlite3
 import os
 
@@ -44,8 +45,25 @@ STORE_APP_CATEGORIES = {
 
 
 def get_conn():
-    conn = sqlite3.connect(DB_PATH)
+    """Core data.db. Opened with core's own access even when the caller is a
+    confined app going through a sanctioned path (the Platform API, or core
+    checking that app's session) — an app still cannot open this file itself,
+    because it never gets to name the path."""
+    isolation = sys.modules.get("backend.app_isolation")
+    if isolation is None:
+        conn = sqlite3.connect(DB_PATH)   # isolation not installed (CLI, tests)
+    else:
+        with isolation.release():
+            conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
+    # WAL lets reads run while a write is in flight — with several users on the
+    # desktop at once, this is the difference between waiting and not. The
+    # timeout is a ceiling, not a delay: a write takes a few ms, so a queued
+    # one gets its turn almost immediately and never reaches 5s in practice.
+    # Without it, two simultaneous writes fail instantly with "database is
+    # locked" instead of queuing.
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA busy_timeout=5000")
     return conn
 
 

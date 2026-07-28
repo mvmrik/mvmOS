@@ -58,10 +58,15 @@ VALID_FONT_SIZES = {"sm", "md", "lg", "xl", "xxl", "xxxl"}
 
 
 def _db():
-    os.makedirs(os.path.dirname(_DB_PATH), exist_ok=True)
-    conn = sqlite3.connect(_DB_PATH)
+    # Apps Hub's own database, opened on behalf of whoever is calling —
+    # including a confined app going through the Platform API. Core answers
+    # with its own access; the app never touches this file itself.
+    with sys.modules["backend.app_isolation"].release():
+        os.makedirs(os.path.dirname(_DB_PATH), exist_ok=True)
+        conn = sqlite3.connect(_DB_PATH)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA busy_timeout=5000")
     conn.execute("PRAGMA foreign_keys=ON")
     return conn
 
@@ -206,19 +211,35 @@ def create_user_row(uid: str, body: "UserBody", password_hash: Optional[str], no
 
 
 def _detect_public_apps() -> list:
-    """Scan backend/apps/ for directories with public.py — these are public-capable.
-    apphub's own public page is core-wired (backend/apphub_pub/, not under backend/apps/),
-    so include it explicitly."""
-    base = os.path.join(os.path.dirname(__file__), "apps")
+    """Apps able to serve a public page: apps/<id>/api.py in the current
+    layout, backend/apps/<id>/public.py in the older one. apphub's own public
+    page is core-wired (backend/apphub_pub/), so include it explicitly."""
+    here = os.path.dirname(__file__)
     result = ["apphub"]
-    if not os.path.isdir(base):
-        return result
-    for app_id in sorted(os.listdir(base)):
-        if app_id.startswith("_"):
-            continue
-        if os.path.isfile(os.path.join(base, app_id, "public.py")):
+
+    # New layout: api.py counts only when it actually serves a public page.
+    # An app with desktop_router alone (no public router) is not public.
+    live = os.path.join(here, "..", "apps")
+    if os.path.isdir(live):
+        for app_id in sorted(os.listdir(live)):
+            if app_id.startswith("_") or app_id in result:
+                continue
+            path = os.path.join(live, app_id, "api.py")
+            if not os.path.isfile(path):
+                continue
+            mod = sys.modules.get(f"app_public_{app_id}")
+            if mod is not None and getattr(mod, "router", None) is None:
+                continue
             result.append(app_id)
-    return result
+
+    old = os.path.join(here, "apps")
+    if os.path.isdir(old):
+        for app_id in sorted(os.listdir(old)):
+            if app_id.startswith("_") or app_id in result:
+                continue
+            if os.path.isfile(os.path.join(old, app_id, "public.py")):
+                result.append(app_id)
+    return sorted(result)
 
 
 # ── App-to-app API ──────────────────────────────────────────────
@@ -253,8 +274,18 @@ _api_modules: dict = {}  # app_id -> loaded api.py module (or None if load faile
 def _load_app_api(app_id: str):
     if app_id in _api_modules:
         return _api_modules[app_id]
-    path = os.path.join(os.path.dirname(__file__), "apps", app_id, "api.py")
-    if not os.path.isfile(path):
+    # In the new layout api.py holds the app's own routes, so the app-to-app
+    # surface is a separate file: apps/<id>/app_api.py. The old location
+    # (backend/apps/<id>/api.py) still works for apps that haven't moved.
+    path = None
+    for candidate in (
+        os.path.join(os.path.dirname(__file__), "..", "apps", app_id, "app_api.py"),
+        os.path.join(os.path.dirname(__file__), "apps", app_id, "api.py"),
+    ):
+        if os.path.isfile(candidate):
+            path = candidate
+            break
+    if path is None:
         _api_modules[app_id] = None
         return None
     import types
