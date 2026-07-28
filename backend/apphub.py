@@ -33,7 +33,7 @@ another app's api.py directly — so this stays the single enforceable trust
 boundary even after apps are sandboxed into separate processes down the line.
 """
 
-import hashlib, os, secrets, sqlite3, sys, uuid
+import contextlib, hashlib, os, secrets, sqlite3, sys, uuid
 from datetime import datetime, timezone, timedelta
 from fastapi import APIRouter, Depends, HTTPException, Header
 from fastapi.responses import JSONResponse, FileResponse, HTMLResponse
@@ -278,6 +278,35 @@ def _detect_app_apis() -> list:
 _api_modules: dict = {}  # app_id -> loaded api.py module (or None if load failed)
 
 
+def _confine_app(app_id: str):
+    """Confine to the target app's own folder for an app-to-app call.
+
+    A call arrives already confined to the *caller's* folder, so without this
+    the callee cannot open its own files — loading apps/<id>/app_api.py raised
+    AppIsolationError, which _load_app_api() then reported as the misleading
+    "has no api.py". Swapping the root to the callee's (rather than release()ing
+    outright) is what keeps this a boundary and not a hole: each side only ever
+    reaches its own folder. release() first, because confine() never widens an
+    already-set root.
+
+    This is not a permission check and must never be treated as one — the
+    is_app_api_enabled() gate in call_app_api() stays the sole authority on
+    whether a call is allowed at all.
+    """
+    app_dir = os.path.realpath(
+        os.path.join(os.path.dirname(__file__), "..", "apps", app_id)
+    )
+    iso = sys.modules["backend.app_isolation"]
+
+    @contextlib.contextmanager
+    def _swap():
+        with iso.release():
+            with iso.confine(app_dir):
+                yield
+
+    return _swap()
+
+
 def _load_app_api(app_id: str):
     if app_id in _api_modules:
         return _api_modules[app_id]
@@ -298,12 +327,16 @@ def _load_app_api(app_id: str):
     import types
     mod_name = f"app_api_{app_id}"
     try:
-        with open(path) as f:
-            source = f.read()
-        mod = types.ModuleType(mod_name)
-        mod.__file__ = path
-        sys.modules[mod_name] = mod
-        exec(compile(source, path, "exec"), mod.__dict__)
+        # Read/exec under the target's own root: the first call arrives inside
+        # the caller's confinement, which would otherwise make merely opening
+        # the callee's file an isolation violation.
+        with _confine_app(app_id):
+            with open(path) as f:
+                source = f.read()
+            mod = types.ModuleType(mod_name)
+            mod.__file__ = path
+            sys.modules[mod_name] = mod
+            exec(compile(source, path, "exec"), mod.__dict__)
         _api_modules[app_id] = mod
     except Exception as e:
         print(f"[app-api] failed to load api.py for {app_id}: {e}")
@@ -333,7 +366,8 @@ def call_app_api(target_app_id: str, method: str, *args, **kwargs):
     fn = getattr(mod, method, None)
     if fn is None or not callable(fn):
         raise AppApiError(f"'{target_app_id}' does not expose '{method}'")
-    return fn(*args, **kwargs)
+    with _confine_app(target_app_id):
+        return fn(*args, **kwargs)
 
 
 def _hash_pw(pw: str) -> str:
@@ -905,6 +939,10 @@ async def toggle_app_api(app_id: str, body: AppApiToggle, session=Depends(get_cu
             (app_id, 1 if body.enabled else 0)
         )
         conn.commit()
+    # Drop the cached module so toggling takes effect immediately: re-enabling
+    # re-reads from disk (picking up an updated app), and disabling leaves
+    # nothing loaded behind the now-closed gate.
+    _api_modules.pop(app_id, None)
     return JSONResponse({"ok": True})
 
 
