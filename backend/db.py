@@ -34,7 +34,7 @@ STORE_APP_CATEGORIES = {
     "calendar": "Productivity", "chat": "Communication", "cost-splitter": "Finance",
     "cron-manager": "System & Administration", "findyourself": "Games",
     "gamehub": "Games", "git-manager": "Developer Tools", "mvm2factor": "Security & Privacy",
-    "mvmai": "AI", "mvmsitebuilder": "Creative", "process-manager": "System & Administration",
+    "mvmai": "AI", "mvmsitebuilder": "Developer Tools", "process-manager": "System & Administration",
     "qbit-dashboard": "Media", "queuedesk": "Business", "quotebuilder": "Business",
     "rssfeed": "Media", "server-manager": "System & Administration",
     "server-monitor": "System & Administration", "shoppinglist": "Productivity",
