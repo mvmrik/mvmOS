@@ -13,6 +13,7 @@ On each tick, this module:
      config    — dict of app settings from the app's cfg table (if exists)
 """
 
+import importlib
 import importlib.util
 import json
 import os
@@ -135,10 +136,13 @@ async def scheduler_tick():
             continue
         config = _get_system_config(sys_sched["id"])
         try:
-            mod_name = f"_scheduler_{sys_sched['id']}"
-            spec = importlib.util.spec_from_file_location(mod_name, sys_sched["path"])
-            mod = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(mod)
+            # System schedulers are part of the backend package. Importing
+            # them by file path loses that package context, so relative
+            # imports such as ``from .auth import ...`` fail (SSH Access).
+            module_name = "backend." + os.path.splitext(
+                os.path.basename(sys_sched["scheduler"])
+            )[0]
+            mod = importlib.import_module(module_name)
             mod.run(now, "", config)
             results.append({"app": sys_sched["id"], "ok": True})
         except Exception as e:

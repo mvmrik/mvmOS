@@ -10,6 +10,7 @@ apps/
 widgets/
 themes/
 CLAUDE.md
+AGENTS.md
 TODO.md
 *.db
 *.db-wal

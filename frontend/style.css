@@ -529,6 +529,8 @@ html, body {
 .window-footer-brand { opacity: 0.7; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-shrink: 0; }
 .window-footer-custom { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: right; }
 .window-footer-custom:empty { display: none; }
+.window-footer-actions { margin-left: auto; display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.window-footer-actions:empty { display: none; }
 .window-footer-link {
   color: var(--text-dim);
   text-decoration: none;
@@ -536,6 +538,22 @@ html, body {
   flex-shrink: 0;
 }
 .window-footer-link:hover { color: var(--accent, #89b4fa); }
+.window-footer-extension { background:none;border:0;font:inherit;padding:0;cursor:pointer; }
+.ext-overlay { position:fixed;inset:0;background:rgba(0,0,0,.62);z-index:100000;display:flex;align-items:center;justify-content:center;padding:20px; }
+.ext-dialog { position:relative;width:min(470px,95vw);background:var(--surface,#313244);color:var(--text,#cdd6f4);border:1px solid var(--border,#45475a);border-radius:14px;padding:22px;box-shadow:0 18px 60px rgba(0,0,0,.55); }
+.ext-close { position:absolute;right:12px;top:10px;background:none;border:0;color:var(--text-muted,#a6adc8);cursor:pointer;font-size:1rem; }
+.ext-head { display:flex;align-items:center;gap:12px;padding-right:28px; }
+.ext-app-icon { font-size:2.2rem; }
+.ext-head h2 { margin:0 0 4px;font-size:1.1rem; }
+.ext-browser { color:var(--text-muted,#a6adc8);font-size:.82rem; }
+.ext-server { margin:18px 0 14px;padding:12px;background:var(--bg,#1e1e2e);border-radius:8px;display:flex;flex-direction:column;gap:5px;font-size:.82rem; }
+.ext-server code { color:var(--accent,#89b4fa);overflow-wrap:anywhere; }
+.ext-server span,.ext-instructions { color:var(--text-muted,#a6adc8);font-size:.82rem;line-height:1.5;white-space:pre-line; }
+.ext-actions { display:flex;gap:8px;flex-wrap:wrap;margin-top:15px; }
+.ext-primary { display:inline-flex;align-items:center;justify-content:center;background:var(--accent,#89b4fa);color:var(--bg,#1e1e2e);border:0;border-radius:7px;padding:9px 14px;font-weight:700;text-decoration:none;cursor:pointer; }
+.ext-primary:disabled { opacity:.6;cursor:wait; }
+.ext-status { min-height:20px;margin-top:10px;color:var(--green,#a6e3a1);font-size:.8rem; }
+.ext-status.error,.ext-error { color:var(--red,#f38ba8); }
 .window.window-mobile-fullscreen .window-footer { display: none; }
 
 .window-resize {

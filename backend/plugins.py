@@ -173,7 +173,7 @@ def _install_from_zip(zip_bytes: bytes, plugin_id: str, install_backend: bool) -
                 os.makedirs(os.path.dirname(dest), exist_ok=True)
                 open(dest, "wb").write(data)
 
-            elif rel == "db.json" or parts[0] == "premium" or (
+            elif rel in ("db.json", "extension.json") or parts[0] == "premium" or (
                     len(parts) == 1 and rel.endswith(".py")):
                 # Schema, the app's own server code (api.py, desktop.py, and
                 # plugin files like telegram.py / mp_game.py / scheduler.py)
@@ -440,6 +440,16 @@ async def list_plugins(session=Depends(get_current_session)):
             # /pub/mvmsitebuilder/<slug>, so the bare public_url is meaningless) —
             # same flag backend/apphub.py's public-apps listing already honors.
             item["public_url"] = mf.get("public_url") if mf.get("public_directory") is not False else None
+            try:
+                from .extensions import load_extension_metadata
+                ext = load_extension_metadata(r["id"])
+                item["browser_extension"] = {
+                    "version": ext["version"],
+                    "targets": ext["targets"],
+                    "distribution": ext["distribution"],
+                } if ext else None
+            except Exception:
+                item["browser_extension"] = None
         except Exception:
             item["settings"] = []
             item["replaces_widget"] = None
@@ -448,6 +458,7 @@ async def list_plugins(session=Depends(get_current_session)):
             # manifest-driven), so it needs a hardcoded public_url or its
             # desktop window never gets the shared footer's public-page link.
             item["public_url"] = "/pub/apphub/" if r["id"] == "apphub" else None
+            item["browser_extension"] = None
         result.append(item)
     return JSONResponse(result)
 

@@ -65,6 +65,7 @@ from .startup import router as startup_router, _init_startup_db, run_startup_app
 from .apphub import router as apphub_router, public_page_router as apphub_public_router, _init_db as _init_apphub_db, is_app_public
 from .notifications import router as notifications_router
 from .platform_api import router as platform_router
+from .extensions import router as extensions_router
 from .notfound import render_404_html
 from .db import APPS_DIR, WIDGETS_DIR, THEMES_DIR
 from . import app_backends, app_isolation, public_loader, projects
@@ -100,6 +101,7 @@ app.include_router(apphub_router)
 app.include_router(apphub_public_router, prefix="/pub/apphub")
 app.include_router(notifications_router)
 app.include_router(platform_router)
+app.include_router(extensions_router)
 
 app_backends.load_all(app)
 

@@ -1273,6 +1273,18 @@ var mvmOS = (() => {
       const base = winId.includes('-') ? winId.slice(0, winId.lastIndexOf('-')) : null;
       return base ? (_pluginsCache.find(p => p.id === base)?.public_url || null) : null;
     },
+    getPluginExtension: (winId) => {
+      const exact = _pluginsCache.find(p => p.id === winId);
+      if (exact) return exact.browser_extension || null;
+      const base = winId.includes('-') ? winId.slice(0, winId.lastIndexOf('-')) : null;
+      return base ? (_pluginsCache.find(p => p.id === base)?.browser_extension || null) : null;
+    },
+    getPluginMeta: (winId) => {
+      const exact = _pluginsCache.find(p => p.id === winId);
+      if (exact) return exact;
+      const base = winId.includes('-') ? winId.slice(0, winId.lastIndexOf('-')) : null;
+      return base ? (_pluginsCache.find(p => p.id === base) || null) : null;
+    },
     notify,
     storage,
     multiplayer: {

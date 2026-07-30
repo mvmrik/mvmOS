@@ -665,6 +665,7 @@ const Desktop = (() => {
       ${mobileFullscreen ? '' : `<div class="window-footer">
         <span class="window-footer-brand">mvmOS</span>
         <span class="window-footer-custom"></span>
+        <span class="window-footer-actions"></span>
       </div>`}
       ${!mobile ? '<div class="window-resize"></div>' : ''}
     `;
@@ -673,8 +674,23 @@ const Desktop = (() => {
     const body     = el.querySelector('.window-body');
     const footer   = el.querySelector('.window-footer');
     const footerCustom = el.querySelector('.window-footer-custom');
+    const footerActions = el.querySelector('.window-footer-actions');
 
-    if (footer) {
+    if (footerActions) {
+      const extension = window.mvmOS?.getPluginExtension?.(id);
+      if (extension && window.Extensions) {
+        const plugin = window.mvmOS?.getPluginMeta?.(id);
+        const currentBrowser = window.Extensions.browser();
+        const button = document.createElement('button');
+        button.className = 'window-footer-link window-footer-extension';
+        button.type = 'button';
+        button.title = t('win_browser_extension');
+        button.textContent = currentBrowser.icon;
+        button.onclick = () => window.Extensions.open(
+          plugin?.id || id, plugin?.name || title, plugin?.icon || icon || '🧩', extension
+        );
+        footerActions.appendChild(button);
+      }
       const publicUrl = window.mvmOS?.getPluginPublicUrl?.(id);
       if (publicUrl) {
         const a = document.createElement('a');
@@ -684,7 +700,7 @@ const Desktop = (() => {
         a.rel = 'noopener';
         a.title = t('win_public_page');
         a.textContent = '🔗';
-        footer.appendChild(a);
+        footerActions.appendChild(a);
       }
     }
 
