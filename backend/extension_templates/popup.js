@@ -26,8 +26,16 @@
     document.body.style.maxWidth = width + 'px';
   }
 
+  // Height is deliberately never set here. A browser action popup sizes itself
+  // to its content up to the browser's own limit (600px), and it is the browser
+  // that knows how much room the screen actually has. Writing a height onto the
+  // document overrides that measurement with a guess: ask for more than the
+  // browser will grant and the popup is still drawn at the limit while the
+  // document believes it is taller, leaving the surplus off-screen with no
+  // viewport left to scroll it back — which is how the list and the dialog both
+  // ended up cut off at the bottom. Letting html/body stay auto-height and
+  // giving the frame a fixed pixel height below keeps the two in agreement.
   applyWidth(config.surface.width);
-  document.documentElement.style.height = config.surface.height + 'px';
   document.getElementById('icon').textContent = config.appIcon;
   document.getElementById('name').textContent = config.appName;
   document.getElementById('settings').title = bg ? 'Настройки' : 'Settings';
@@ -152,24 +160,49 @@
     if (handler) { try { handler(message); } catch (_) {} }
   });
 
-  Promise.all([getStorage(defaults()), getActiveTab()]).then(function (values) {
-    var settings = values[0];
-    runtimeSettings = settings;
-    activeTab = values[1];
-    applyWidth(settings.extension_width);
-    try {
-      var parsed = new URL(String(settings.server_url || '').trim());
-      if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error();
-      serverOrigin = parsed.origin;
-    } catch (_) {
-      api.runtime.openOptionsPage();
-      window.close();
-      return;
-    }
+  // The iframe only needs server_url to start loading, so that one setting is
+  // read on its own and the page begins fetching while the remaining settings
+  // and the active tab are still being resolved. Waiting for all of them first
+  // left the popup blank for the whole round trip — the app's page, its scripts
+  // and its own data all queued behind a tabs.query that the frame never needed.
+  var frameLoaded = false;
+  frame.addEventListener('load', function () { frameLoaded = true; });
+
+  // App scripts run after this one and may still call setFrameQuery(), so the
+  // src is set on the next task rather than the moment storage answers: by then
+  // every app script has executed and the query string is final. This is a turn
+  // of the event loop, not a wait on anything.
+  var serverReady = Promise.all([
+    getStorage({server_url: config.initialServer}),
+    new Promise(function (resolve) { setTimeout(resolve, 0); })
+  ]).then(function (values) {
+    var parsed = new URL(String(values[0].server_url || '').trim());
+    if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error();
+    serverOrigin = parsed.origin;
     document.getElementById('server').textContent = new URL(serverOrigin).host;
+    // ext=1 tells the server this page is a popup's whole interface, so it is
+    // served without the Apps Hub header/footer chrome. The same URL opened in
+    // a normal tab still gets it.
+    var query = 'ext=1' + (frameQuery ? '&' + frameQuery : '');
     frame.src = serverOrigin + config.publicUrl +
-      (frameQuery ? (config.publicUrl.indexOf('?') >= 0 ? '&' : '?') + frameQuery : '');
-    frame.addEventListener('load', function () { sendContext(settings); });
+      (config.publicUrl.indexOf('?') >= 0 ? '&' : '?') + query;
+  });
+
+  serverReady.catch(function () {
+    api.runtime.openOptionsPage();
+    window.close();
+  });
+
+  Promise.all([serverReady, getStorage(defaults()), getActiveTab()]).then(function (values) {
+    var settings = values[1];
+    runtimeSettings = settings;
+    activeTab = values[2];
+    applyWidth(settings.extension_width);
+    // The frame may already have loaded while these were resolving, in which
+    // case its load event is long gone and the context has to be sent straight
+    // away; otherwise it goes as soon as the frame is there.
+    if (frameLoaded) sendContext(settings);
+    else frame.addEventListener('load', function () { sendContext(settings); });
   }).catch(function () {
     frame.style.display = 'none';
     errorEl.style.display = 'block';

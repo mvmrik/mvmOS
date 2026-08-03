@@ -1,3 +1,4 @@
+import json
 import sys
 import sqlite3
 import os
@@ -25,24 +26,6 @@ SYSTEM_APPS = [
     {"id": "settings",        "name": "Settings",         "icon": "⚙️", "category": "System & Administration"},
     {"id": "notifications",  "name": "Notifications",    "icon": "🔔", "category": "Communication"},
 ]
-
-# Existing Store apps keep their installed database row when mvmOS itself is
-# updated. Apply this map at startup so their Start Menu category follows the
-# current Store taxonomy without requiring a reinstall.
-STORE_APP_CATEGORIES = {
-    "beambuilder": "Creative", "budget": "Finance", "calculator": "Utilities",
-    "calendar": "Productivity", "chat": "Communication", "cost-splitter": "Finance",
-    "cron-manager": "System & Administration", "findyourself": "Games",
-    "gamehub": "Games", "git-manager": "Developer Tools", "mvm2factor": "Security & Privacy",
-    "mvmai": "AI", "mvmpasswordmanager": "Security & Privacy",
-    "mvmsitebuilder": "Developer Tools", "process-manager": "System & Administration",
-    "qbit-dashboard": "Media", "queuedesk": "Business", "quotebuilder": "Business",
-    "rssfeed": "Media", "server-manager": "System & Administration",
-    "server-monitor": "System & Administration", "shoppinglist": "Productivity",
-    "statetracker": "System & Administration", "sudofall": "Games",
-    "system-info": "System & Administration", "tasks": "Productivity",
-    "telegramhub": "Communication", "yoursql": "Developer Tools",
-}
 
 
 def get_conn():
@@ -225,11 +208,22 @@ def init_db():
                 "category=excluded.category, is_system=1",
                 (app["id"], app["name"], app["icon"], app["category"]),
             )
-        for app_id, category in STORE_APP_CATEGORIES.items():
-            conn.execute(
-                "UPDATE plugins SET category=? WHERE id=? AND is_system=0",
-                (category, app_id),
-            )
+        # An installed app's own manifest is the authority on its identity, so
+        # re-read it at startup: an app that changed its name, icon or category
+        # in the Store follows without a reinstall, and a renamed app never has
+        # to be listed anywhere in core.
+        for row in conn.execute("SELECT id FROM plugins WHERE is_system=0").fetchall():
+            try:
+                with open(os.path.join(APPS_DIR, row["id"], "manifest.json")) as f:
+                    mf = json.load(f)
+            except Exception:
+                continue          # uninstalled, unreadable or hand-made app row
+            fields = {k: mf[k] for k in ("name", "icon", "category") if mf.get(k)}
+            if fields:
+                conn.execute(
+                    "UPDATE plugins SET " + ", ".join(f"{k}=?" for k in fields) + " WHERE id=?",
+                    (*fields.values(), row["id"]),
+                )
         conn.execute(
             "INSERT OR IGNORE INTO stores (name, manifest_url, official) VALUES (?, ?, 1)",
             ("mvmOS Store", OFFICIAL_STORE_URL),

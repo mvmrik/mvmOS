@@ -134,9 +134,14 @@ def load_extension_metadata(app_id: str) -> dict | None:
         return None
     permissions = list(dict.fromkeys([*permissions, "storage"]))
     surface = extension.get("surface") or {}
+    # Width only. An app does not get to declare a popup height: the browser caps
+    # a popup at 600px and enforces it silently, so a declared height is either
+    # ignored or, worse, written onto the document and believed — which puts the
+    # surplus off-screen with no viewport left to scroll it back. The shell gives
+    # the frame the largest height a popup can actually show and nothing states a
+    # height anywhere else. A "height" left in an extension.json is ignored.
     try:
         width = min(800, max(300, int(surface.get("width", 640))))
-        height = min(800, max(360, int(surface.get("height", 620))))
     except (TypeError, ValueError):
         return None
     settings = extension.get("settings") or []
@@ -188,7 +193,7 @@ def load_extension_metadata(app_id: str) -> dict | None:
         "popup_scripts": popup_scripts,
         "commands": commands,
         "min_browser_version": {k: str(v) for k, v in min_browser.items()},
-        "surface": {"width": width, "height": height},
+        "surface": {"width": width},
         "settings": settings,
         "distribution": {
             "chrome_store_url": distribution.get("chrome_store_url"),

@@ -38,7 +38,17 @@ class _AppStaticFiles(StaticFiles):
         app_id, _, rest = path.partition("/")
         if not rest:
             return PlainTextResponse("Not Found", status_code=404)
-        return await super().get_response(f"{app_id}/public/{rest}", scope)
+        response = await super().get_response(f"{app_id}/public/{rest}", scope)
+        # App assets are revalidated, never cached blind. A ?v=<version> URL is
+        # tempting to mark immutable, but the version only moves on a release
+        # while the file changes with every edit — so an immutable answer means
+        # a developer, and anyone mid-update, is served stale code with no way
+        # to refresh short of clearing the cache. Revalidation keeps almost all
+        # of the saving (an unchanged file answers 304, a few hundred bytes)
+        # and can never hand back a file that no longer exists on disk.
+        if response.status_code == 200:
+            response.headers["cache-control"] = "no-cache"
+        return response
 
 
 from .db import init_db, get_conn
@@ -369,6 +379,13 @@ async def layout_inject_middleware(request: Request, call_next):
         return response
     app_id = m.group(1)
     if not _app_wants_public_chrome(app_id):
+        return response
+    # A browser-extension popup embeds this page as its whole interface, so the
+    # Apps Hub header, footer and navigation have nothing to offer there — the
+    # popup already shows the app name and its own settings button, and the
+    # chrome only costs a visible extra load. The same page opened normally is
+    # untouched: the flag is set by the extension shell, not by the app.
+    if request.query_params.get("ext") == "1":
         return response
 
     body = b""
