@@ -200,8 +200,10 @@ function renderRegForm() {
 
 // ── Dashboard ───────────────────────────────────────────────────
 
+let _activeTab = 'apps';
+
 function showDashboard(activeTab) {
-  activeTab = activeTab || 'apps';
+  activeTab = _activeTab = activeTab || 'apps';
   app.innerHTML = `
     <div class="tab-bar">
       <button class="tab${activeTab==='apps'?' active':''}" data-t="apps">${t('ah_pub_tab_apps')}</button>
@@ -214,11 +216,21 @@ function showDashboard(activeTab) {
     t.onclick = () => {
       app.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
       t.classList.add('active');
+      _activeTab = t.dataset.t;
       renderTab(t.dataset.t);
     };
   });
   renderTab(activeTab);
 }
+
+// A language change (Settings tab, applied live by layout.js without a full
+// page reload) re-fires this once the new i18n table has loaded, so the tab
+// bar / whatever tab is open picks up the new language immediately instead
+// of needing a manual refresh. Auth screens have no i18n-driven chrome that
+// survives a rebuild worth doing here, so this only matters once logged in.
+window.addEventListener('i18n-loaded', () => {
+  if (_me && app.querySelector('.tab-bar')) showDashboard(_activeTab);
+});
 
 function renderTab(t) {
   clearInterval(_badgePoll);
@@ -249,16 +261,40 @@ window.MvmApphub = {
 
 const SORT_KEY  = 'apphub_apps_sort';
 const CATEGORY_KEY = 'apphub_apps_category';
-const USAGE_KEY = 'apphub_apps_usage';
 
-function _getUsage() {
-  try { return JSON.parse(localStorage.getItem(USAGE_KEY)) || {}; } catch(_) { return {}; }
-}
+// Usage (open_count / last_opened_at) lives server-side per Apps Hub
+// account (backend/apphub.py: app_usage table) so recent/frequent sort
+// order and the stats shown on each card agree across every device the
+// same account logs in from, instead of drifting per browser.
 function _recordUsage(id) {
-  const u = _getUsage();
-  u[id] = { count: (u[id]?.count || 0) + 1, last: Date.now() };
-  localStorage.setItem(USAGE_KEY, JSON.stringify(u));
+  if (!_token) return;
+  // The card is a plain <a href>, so the click that calls this navigates away
+  // immediately and the browser cancels whatever is still in flight — which is
+  // why the counter stayed at zero however often an app was opened. keepalive
+  // lets the request outlive the page; sendBeacon cannot be used here because
+  // it has no way to send the X-Pub-Token header.
+  fetch(BASE + '/apps/' + encodeURIComponent(id) + '/open', {
+    method: 'POST', headers: {'X-Pub-Token': _token}, keepalive: true
+  }).catch(() => {});
 }
+
+function _relativeTime(iso) {
+  if (!iso) return t('ah_pub_usage_never');
+  const then = new Date(iso).getTime();
+  const days = Math.floor((Date.now() - then) / 86400000);
+  if (days <= 0) return t('ah_pub_usage_today');
+  if (days === 1) return t('ah_pub_usage_yesterday');
+  if (days < 30) return t('ah_pub_usage_days_ago', {n: days});
+  // Years are counted off the same 30-day month as the step above, not off 365
+  // days: mixing the two dropped days 360-364 past "11 months" into
+  // Math.floor(days / 365) === 0 and printed "0 years ago".
+  const months = Math.floor(days / 30);
+  if (months < 12) return months === 1 ? t('ah_pub_usage_month_ago')
+                                       : t('ah_pub_usage_months_ago', {n: months});
+  const years = Math.floor(months / 12);
+  return years === 1 ? t('ah_pub_usage_year_ago') : t('ah_pub_usage_years_ago', {n: years});
+}
+
 function _getSortPref() { return localStorage.getItem(SORT_KEY) || 'alpha'; }
 function _setSortPref(v) { localStorage.setItem(SORT_KEY, v); }
 function _getCategoryPref(categories) {
@@ -268,12 +304,11 @@ function _getCategoryPref(categories) {
 function _setCategoryPref(v) { localStorage.setItem(CATEGORY_KEY, v); }
 
 function _sortApps(apps, mode) {
-  const usage = _getUsage();
   const sorted = apps.slice();
   if (mode === 'recent') {
-    sorted.sort((a, b) => (usage[b.id]?.last || 0) - (usage[a.id]?.last || 0));
+    sorted.sort((a, b) => new Date(b.last_opened_at || 0) - new Date(a.last_opened_at || 0));
   } else if (mode === 'frequent') {
-    sorted.sort((a, b) => (usage[b.id]?.count || 0) - (usage[a.id]?.count || 0));
+    sorted.sort((a, b) => (b.open_count || 0) - (a.open_count || 0));
   } else {
     sorted.sort((a, b) => a.name.localeCompare(b.name));
   }
@@ -298,7 +333,10 @@ async function renderApps(c) {
   c.innerHTML = `<div style="padding:32px;text-align:center;color:var(--fg2);font-size:.9rem">${t('ah_pub_loading_apps')}</div>`;
   let apps = [];
   try {
-    const r = await fetch(BASE + '/apps');
+    // With the token, /apps answers with this account's open_count and
+    // last_opened_at per app; without it the server has no identity to look
+    // usage up for and every card reads "never / 0".
+    const r = await fetch(BASE + '/apps', _token ? {headers: {'X-Pub-Token': _token}} : undefined);
     if (r.ok) apps = await r.json();
   } catch(_) {}
   let badges = await _loadBadges();
@@ -316,13 +354,11 @@ async function renderApps(c) {
   const sortMode = _getSortPref();
   c.innerHTML = `
     <div style="display:flex;align-items:center;justify-content:flex-end;gap:8px;padding:12px 16px 0;flex-wrap:wrap">
-      <span style="font-size:.78rem;color:var(--fg2)">${t('ah_apps_category')}</span>
-      <select class="inp" id="apps-category" style="width:auto;padding:5px 10px;font-size:.8rem">
+      <select class="inp" id="apps-category" aria-label="${esc(t('ah_apps_category'))}" title="${esc(t('ah_apps_category'))}" style="width:auto;padding:5px 10px;font-size:.8rem">
         <option value="all">${t('ah_apps_all_categories')}</option>
         ${categories.map(category => `<option value="${esc(category)}"${categoryMode===category?' selected':''}>${esc(category)}</option>`).join('')}
       </select>
-      <span style="font-size:.78rem;color:var(--fg2)">${t('ah_pub_sort_by')}</span>
-      <select class="inp" id="apps-sort" style="width:auto;padding:5px 10px;font-size:.8rem">
+      <select class="inp" id="apps-sort" aria-label="${esc(t('ah_pub_sort_by'))}" title="${esc(t('ah_pub_sort_by'))}" style="width:auto;padding:5px 10px;font-size:.8rem">
         <option value="alpha"${sortMode==='alpha'?' selected':''}>${t('ah_pub_sort_alpha')}</option>
         <option value="recent"${sortMode==='recent'?' selected':''}>${t('ah_pub_sort_recent')}</option>
         <option value="frequent"${sortMode==='frequent'?' selected':''}>${t('ah_pub_sort_frequent')}</option>
@@ -338,7 +374,8 @@ async function renderApps(c) {
       <a class="app-card" href="${esc(a.public_url)}" data-id="${esc(a.id)}">
         <div class="app-icon">${esc(a.icon)}${badges[a.id] ? '<span class="app-badge"></span>' : ''}</div>
         <div class="app-name">${esc(a.name)}</div>
-        ${a.description ? `<div class="app-desc">${esc(a.description.slice(0,60))}${a.description.length>60?'…':''}</div>` : ''}
+        <div class="app-desc">${esc(t('ah_pub_usage_last'))}: ${esc(_relativeTime(a.last_opened_at))}</div>
+        <div class="app-desc">${esc(t('ah_pub_usage_count'))}: ${a.open_count || 0}</div>
       </a>`).join('');
     c.querySelectorAll('.app-card').forEach(el => {
       el.addEventListener('click', () => _recordUsage(el.dataset.id));
@@ -557,10 +594,16 @@ const THEME_SWATCHES = [
 ];
 const FONT_SIZES = ['sm', 'md', 'lg', 'xl', 'xxl', 'xxxl'];
 const FONT_PREVIEW_PX = { sm: 13, md: 15, lg: 17, xl: 19, xxl: 21, xxxl: 23 };
+// Display names for known language codes; an unknown future code just shows
+// its own code so a new frontend/i18n/<code>.js file is choosable right away
+// without needing this list touched.
+const LANG_NAMES = { en: 'English', bg: 'Български' };
 
 function renderSettings(c) {
   let theme = _me.theme || 'dark';
   let fontSize = _me.font_size || 'md';
+  let language = _me.language || 'auto';
+  const availableLangs = (window.mvmOS && window.mvmOS.availableLangs) || ['en'];
 
   c.innerHTML = `
     <div class="section" style="max-width:480px;display:flex;flex-direction:column;gap:20px">
@@ -572,11 +615,16 @@ function renderSettings(c) {
         <div style="font-weight:600;font-size:13px">${t('ah_pub_settings_font_label')}</div>
         <div id="st-font" style="display:flex;flex-wrap:wrap;gap:10px"></div>
       </div>
+      <div class="card" style="padding:16px;display:flex;flex-direction:column;gap:12px">
+        <div style="font-weight:600;font-size:13px">${t('ah_pub_settings_language_label')}</div>
+        <div id="st-lang" style="display:flex;flex-wrap:wrap;gap:10px"></div>
+      </div>
       <div class="err" id="st-err"></div>
     </div>`;
 
   const themeWrap = c.querySelector('#st-theme');
   const fontWrap  = c.querySelector('#st-font');
+  const langWrap  = c.querySelector('#st-lang');
 
   function renderThemeSwatches() {
     themeWrap.innerHTML = THEME_SWATCHES.map(sw => `
@@ -603,27 +651,50 @@ function renderSettings(c) {
     });
   }
 
-  let _saving = false;
+  function renderLangButtons() {
+    langWrap.innerHTML = ['auto'].concat(availableLangs).map(code => `
+      <button type="button" class="st-lang-btn" data-lang="${code}" style="cursor:pointer;border-radius:8px;padding:10px 16px;
+        border:2px solid ${language===code?'var(--accent)':'var(--border)'};background:var(--surface2);color:var(--fg);font-size:13px;font-weight:600">
+        ${code === 'auto' ? esc(t('ah_pub_settings_language_auto')) : esc(LANG_NAMES[code] || code)}
+      </button>`).join('');
+    langWrap.querySelectorAll('.st-lang-btn').forEach(btn => {
+      btn.onclick = () => { language = btn.dataset.lang; renderLangButtons(); save(); };
+    });
+  }
+
+  let _saving = false, _dirty = false;
   async function save() {
+    // Applied to _me up front, not after the PUT answers: applyLanguage() below
+    // ends in an 'i18n-loaded' event that re-runs showDashboard('settings'), and
+    // a re-render that read the old _me.language would highlight the previous
+    // language while the page was already showing the new one.
+    _me.theme = theme; _me.font_size = fontSize; _me.language = language;
     window.MvmLayout && MvmLayout.applyTheme(theme, fontSize);
-    if (_saving) return;
+    window.MvmLayout && MvmLayout.applyLanguage && MvmLayout.applyLanguage(language);
+    // A click landing mid-save used to be applied on screen and then dropped;
+    // remember it instead and send the latest state once the PUT in flight
+    // returns, so what the server has always matches what is displayed.
+    if (_saving) { _dirty = true; return; }
     _saving = true;
     const errEl = c.querySelector('#st-err');
-    const r = await fetch(BASE + '/me', {
-      method: 'PUT',
-      headers: {'Content-Type':'application/json','X-Pub-Token':_token},
-      body: JSON.stringify({ theme, font_size: fontSize })
-    });
+    do {
+      _dirty = false;
+      const r = await fetch(BASE + '/me', {
+        method: 'PUT',
+        headers: {'Content-Type':'application/json','X-Pub-Token':_token},
+        body: JSON.stringify({ theme, font_size: fontSize, language })
+      });
+      if (!r.ok) {
+        if (errEl) errEl.textContent = t('ah_pub_error_saving');
+        break;
+      }
+    } while (_dirty);
     _saving = false;
-    if (r.ok) {
-      _me.theme = theme; _me.font_size = fontSize;
-    } else if (errEl) {
-      errEl.textContent = t('ah_pub_error_saving');
-    }
   }
 
   renderThemeSwatches();
   renderFontButtons();
+  renderLangButtons();
 }
 
 // ── Credits tab ─────────────────────────────────────────────────

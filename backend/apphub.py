@@ -57,6 +57,21 @@ VALID_THEMES     = {"dark", "light", "auto"}
 VALID_FONT_SIZES = {"sm", "md", "lg", "xl", "xxl", "xxxl"}
 
 
+def valid_languages() -> set:
+    """'auto' (navigator.language on the client) plus whatever languages core
+    actually ships — derived from frontend/i18n/*.js rather than a hardcoded
+    list, so a new language file is enough to make it choosable here too."""
+    i18n_dir = os.path.join(os.path.dirname(__file__), "..", "frontend", "i18n")
+    langs = {"auto"}
+    try:
+        for fname in os.listdir(i18n_dir):
+            if fname.endswith(".js") and fname != "i18n.js":
+                langs.add(fname[:-3])
+    except OSError:
+        pass
+    return langs
+
+
 def _db():
     # Apps Hub's own database, opened on behalf of whoever is calling —
     # including a confined app going through the Platform API. Core answers
@@ -85,6 +100,7 @@ def _init_db():
                 is_admin      INTEGER NOT NULL DEFAULT 0,
                 theme         TEXT NOT NULL DEFAULT 'auto',
                 font_size     TEXT NOT NULL DEFAULT 'md',
+                language      TEXT NOT NULL DEFAULT 'auto',
                 created_at    TEXT NOT NULL
             );
             CREATE TABLE IF NOT EXISTS pub_tokens (
@@ -130,6 +146,13 @@ def _init_db():
                 WHERE idempotency_key IS NOT NULL;
             CREATE INDEX IF NOT EXISTS idx_credit_tx_user
                 ON credit_transactions(user_id, created_at);
+            CREATE TABLE IF NOT EXISTS app_usage (
+                user_id        TEXT NOT NULL REFERENCES public_users(id) ON DELETE CASCADE,
+                app_id         TEXT NOT NULL,
+                open_count     INTEGER NOT NULL DEFAULT 0,
+                last_opened_at TEXT,
+                PRIMARY KEY (user_id, app_id)
+            );
         """)
         cols = {r[1] for r in conn.execute("PRAGMA table_info(public_users)")}
         if "is_admin" not in cols:
@@ -138,6 +161,8 @@ def _init_db():
             conn.execute("ALTER TABLE public_users ADD COLUMN theme TEXT NOT NULL DEFAULT 'dark'")
         if "font_size" not in cols:
             conn.execute("ALTER TABLE public_users ADD COLUMN font_size TEXT NOT NULL DEFAULT 'md'")
+        if "language" not in cols:
+            conn.execute("ALTER TABLE public_users ADD COLUMN language TEXT NOT NULL DEFAULT 'auto'")
         conn.commit()
 
 
@@ -698,7 +723,7 @@ async def register(body: RegisterBody):
         "id": uid, "username": body.username.strip().lower(),
         "display_name": body.display_name.strip(), "avatar_color": body.avatar_color,
         "avatar_data": None, "avatar_svg": None,
-        "theme": "auto", "font_size": "md",
+        "theme": "auto", "font_size": "md", "language": "auto",
     }})
 
 
@@ -719,7 +744,7 @@ async def login(body: LoginBody):
         "id": row["id"], "username": row["username"],
         "display_name": row["display_name"], "avatar_color": row["avatar_color"],
         "avatar_data": row["avatar_data"], "avatar_svg": row["avatar_svg"],
-        "theme": row["theme"], "font_size": row["font_size"],
+        "theme": row["theme"], "font_size": row["font_size"], "language": row["language"],
     }})
 
 
@@ -743,7 +768,7 @@ async def me_pub(x_pub_token: Optional[str] = Header(default=None)):
     if not u:
         raise HTTPException(401)
     return JSONResponse({k: u[k] for k in
-        ("id", "username", "display_name", "avatar_color", "avatar_data", "avatar_svg", "theme", "font_size")})
+        ("id", "username", "display_name", "avatar_color", "avatar_data", "avatar_svg", "theme", "font_size", "language")})
 
 
 class MeUpdateBody(BaseModel):
@@ -754,6 +779,7 @@ class MeUpdateBody(BaseModel):
     avatar_svg:   Optional[str] = None
     theme:        Optional[str] = None
     font_size:    Optional[str] = None
+    language:     Optional[str] = None
 
 
 @_pub.put("/me")
@@ -785,6 +811,10 @@ async def update_me_pub(body: MeUpdateBody, x_pub_token: Optional[str] = Header(
         if body.font_size not in VALID_FONT_SIZES:
             raise HTTPException(400, detail="Invalid font_size")
         fields.append("font_size=?"); vals.append(body.font_size)
+    if body.language is not None:
+        if body.language not in valid_languages():
+            raise HTTPException(400, detail="Invalid language")
+        fields.append("language=?"); vals.append(body.language)
     if fields:
         vals.append(u["id"])
         with _db() as conn:
@@ -828,11 +858,22 @@ async def remove_favourite_pub(fav_id: str, x_pub_token: Optional[str] = Header(
 
 
 @_pub.get("/apps")
-async def list_public_apps():
+async def list_public_apps(x_pub_token: Optional[str] = Header(default=None)):
     """Return enabled public apps (have public.py + enabled in DB)."""
     import json
     enabled = _detect_public_apps()
     apps_dir = os.path.join(os.path.dirname(__file__), "..", "apps")
+
+    u = get_pub_session(x_pub_token)
+    usage = {}
+    if u:
+        with _db() as conn:
+            rows = conn.execute(
+                "SELECT app_id, open_count, last_opened_at FROM app_usage WHERE user_id=?",
+                (u["id"],),
+            ).fetchall()
+        usage = {r["app_id"]: {"open_count": r["open_count"], "last_opened_at": r["last_opened_at"]} for r in rows}
+
     result = []
     for app_id in enabled:
         if app_id == "apphub":
@@ -846,15 +887,44 @@ async def list_public_apps():
             m = {}
         if m.get("public_directory") is False:
             continue
+        au = usage.get(app_id, {})
         result.append({
-            "id":          app_id,
-            "name":        m.get("name", app_id),
-            "icon":        m.get("icon", "📦"),
-            "category":    m.get("category", "Utilities"),
-            "description": m.get("description", ""),
-            "public_url":  f"/pub/{app_id}/",
+            "id":             app_id,
+            "name":           m.get("name", app_id),
+            "icon":           m.get("icon", "📦"),
+            "category":       m.get("category", "Utilities"),
+            "description":    m.get("description", ""),
+            "public_url":     f"/pub/{app_id}/",
+            "open_count":     au.get("open_count", 0),
+            "last_opened_at": au.get("last_opened_at"),
         })
     return JSONResponse(result)
+
+
+@_pub.post("/apps/{app_id}/open")
+async def record_app_open(app_id: str, x_pub_token: Optional[str] = Header(default=None)):
+    """Called by the Apps Hub grid when a user actually opens an app, so
+    open_count/last_opened_at live per account in the database instead of
+    per browser in localStorage — the same account then sees identical
+    recent/frequent ordering from any device."""
+    u = get_pub_session(x_pub_token)
+    if not u:
+        raise HTTPException(401)
+    # Only apps the grid can actually offer. Without this any logged-in account
+    # could fill app_usage with rows for ids that will never be listed again.
+    if app_id not in _detect_public_apps():
+        raise HTTPException(404)
+    now = datetime.now(timezone.utc).isoformat()
+    with _db() as conn:
+        conn.execute(
+            """INSERT INTO app_usage(user_id, app_id, open_count, last_opened_at)
+               VALUES (?, ?, 1, ?)
+               ON CONFLICT(user_id, app_id)
+               DO UPDATE SET open_count = open_count + 1, last_opened_at = excluded.last_opened_at""",
+            (u["id"], app_id, now),
+        )
+        conn.commit()
+    return JSONResponse({"ok": True})
 
 
 # ── Admin: public apps management ─────────────────────────────────

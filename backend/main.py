@@ -356,6 +356,65 @@ def _app_wants_public_chrome(app_id: str) -> bool:
 
 _PUBLIC_THEME_BOOTSTRAP = """<script>(function(){try{var r=document.documentElement,t=localStorage.getItem('apphub_theme'),f=localStorage.getItem('apphub_font_size')||'md',s={sm:'90%',md:'100%',lg:'112%',xl:'125%',xxl:'140%',xxxl:'155%'};if(t==='auto')t=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';r.style.fontSize=s[f]||s.md;if(t==='light'){r.style.cssText+=';--bg:#f6f8fa;--surface1:#ffffff;--surface2:#eaeef2;--border:#d0d7de;--fg:#1f2328;--fg2:#656d76;--accent:#0969da;--green:#1a7f37;--red:#cf222e;--yellow:#9a6700;--pub-bg:#f6f8fa;--pub-surface1:#ffffff;--pub-surface2:#eaeef2;--pub-border:#d0d7de;--pub-fg:#1f2328;--pub-fg2:#656d76;--pub-dim:#8c959f;--pub-crust:#eef1f4;--pub-accent:#0969da;--pub-accent-hover:#0860ca;--pub-green:#1a7f37;--pub-red:#cf222e;--pub-yellow:#9a6700;--pub-warning:#9a6700'}}catch(e){}})();</script>"""
 
+_LANG_BOOTSTRAP_CACHE: dict = {}
+
+def _public_lang_bootstrap() -> str:
+    """Runs before /i18n/i18n.js (included later, in <body>) so that loader
+    sees window.mvmOS.pubLang already set and never touches the desktop-only
+    /api/settings endpoint (401s with no OS session — see
+    frontend/i18n/i18n.js). Mirrors the theme bootstrap above: last-known
+    preference is cached in localStorage by apphub_pub/index.html's Settings
+    tab, 'auto' resolved here from navigator.language against whatever
+    languages core actually ships (frontend/i18n/*.js) rather than a
+    hardcoded pair, so a newly added language file is picked up for real
+    per-visitor detection with no change needed here."""
+    i18n_dir = os.path.join(os.path.dirname(__file__), "..", "frontend", "i18n")
+    # Cached on the directory's own mtime instead of listed per request: this
+    # runs for every public HTML response, while the listing only changes when a
+    # language file is added or removed — which still takes effect at once, with
+    # no reload needed.
+    try:
+        stamp = os.stat(i18n_dir).st_mtime
+    except OSError:
+        stamp = None
+    if _LANG_BOOTSTRAP_CACHE.get("stamp") == stamp and _LANG_BOOTSTRAP_CACHE.get("html"):
+        return _LANG_BOOTSTRAP_CACHE["html"]
+    try:
+        entries = sorted(
+            (f[:-3], int(os.path.getmtime(os.path.join(i18n_dir, f))))
+            for f in os.listdir(i18n_dir) if f.endswith(".js") and f != "i18n.js"
+        )
+    except OSError:
+        entries = [("en", 0)]
+    langs_js  = json.dumps([code for code, _ in entries])
+    stamps_js = json.dumps({code: mt for code, mt in entries})
+    # document.write is deliberate. The language is only knowable on the client
+    # (localStorage, then navigator.language), so the server cannot put a plain
+    # <script src> here — and every other way of loading it is asynchronous,
+    # which means the page paints before the table exists. That is what made the
+    # header render "Home"/"Profile" from layout.js's English fallbacks and then
+    # visibly flip to Bulgarian a moment later. Written during head parsing this
+    # blocks until the table is in place, so the first paint is already
+    # translated. The stamp is each file's mtime rather than Date.now(), so the
+    # browser really caches it instead of re-fetching ~80 KB on every page.
+    html = (
+        "<script>(function(){try{window.mvmOS=window.mvmOS||{};"
+        "var avail=" + langs_js + ",stamps=" + stamps_js + ";"
+        "window.mvmOS.availableLangs=avail;"
+        "window.mvmOS.langStamps=stamps;"
+        "var l=localStorage.getItem('apphub_language')||'auto';"
+        "if(l==='auto'){"
+        "var nav=(navigator.language||'en').toLowerCase();"
+        "l=avail.find(function(x){return nav.indexOf(x)===0})||'en';"
+        "}"
+        "window.mvmOS.pubLang=l;"
+        "document.write('<scr'+'ipt src=\"/i18n/'+l+'.js?v='+(stamps[l]||0)+'\"><\\/scr'+'ipt>');"
+        "}catch(e){}})();</script>"
+    )
+    _LANG_BOOTSTRAP_CACHE["stamp"] = stamp
+    _LANG_BOOTSTRAP_CACHE["html"] = html
+    return html
+
 
 @app.middleware("http")
 async def block_apps_public_middleware(request: Request, call_next):
@@ -408,6 +467,8 @@ async def layout_inject_middleware(request: Request, call_next):
     if pwa:
         html = html.replace("</head>", pwa + "</head>", 1) if "</head>" in html else pwa + html
     html = html.replace("</head>", _PUBLIC_THEME_BOOTSTRAP + "</head>", 1) if "</head>" in html else _PUBLIC_THEME_BOOTSTRAP + html
+    lang_bootstrap = _public_lang_bootstrap()
+    html = html.replace("</head>", lang_bootstrap + "</head>", 1) if "</head>" in html else lang_bootstrap + html
 
     headers = dict(response.headers)
     for h in ("content-length", "etag", "last-modified", "accept-ranges"):

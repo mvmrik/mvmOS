@@ -8,6 +8,7 @@
   var TOKEN_KEY = 'apphub_token';
   var THEME_KEY = 'apphub_theme';
   var FONT_KEY  = 'apphub_font_size';
+  var LANG_KEY  = 'apphub_language';
 
   function esc(s) {
     return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
@@ -59,6 +60,60 @@
     }
   };
   var FONT_SCALE = { sm: '90%', md: '100%', lg: '112%', xl: '125%', xxl: '140%', xxxl: '155%' };
+
+  // ── Language ──────────────────────────────────────────────────────
+  // 'auto' resolution mirrors backend/main.py's pre-paint bootstrap (which
+  // already set window.mvmOS.pubLang before /i18n/i18n.js ran): match
+  // navigator.language against whatever core actually ships. Kept in JS
+  // here too so a language change from the Settings tab takes effect
+  // without a full page reload — the bootstrap script only runs on the
+  // next navigation.
+  function resolvedLanguage(lang, available) {
+    if (lang && lang !== 'auto') return lang;
+    var nav = (navigator.language || 'en').toLowerCase();
+    for (var i = 0; i < available.length; i++) {
+      if (nav.indexOf(available[i]) === 0) return available[i];
+    }
+    return 'en';
+  }
+
+  function applyLanguage(lang) {
+    if (!lang) return;
+    localStorage.setItem(LANG_KEY, lang);
+    var available = (window.mvmOS && window.mvmOS.availableLangs) || ['en'];
+    var resolved = resolvedLanguage(lang, available);
+    // /i18n/i18n.js owns the loader whenever the page includes it. Going through
+    // it keeps a single loader in charge of window._i18n — two racing over a
+    // wholesale assignment is what used to leave app strings rendering as raw
+    // keys — and it already knows which language is in flight, so a repeat of
+    // the one being loaded costs nothing. The loader below is only for public
+    // pages that don't include i18n.js at all, where tt() still needs a table.
+    if (window.mvmOS && window.mvmOS.setLang) { window.mvmOS.setLang(resolved); return; }
+    if (window.mvmOS && window.mvmOS.lang === resolved) return;
+    if (document.querySelector('script[data-i18n-lang="' + resolved + '"]')) return;
+    var script = document.createElement('script');
+    var stamps = (window.mvmOS && window.mvmOS.langStamps) || null;
+    var v = stamps && stamps[resolved] != null ? stamps[resolved] : Date.now();
+    script.src = '/i18n/' + resolved + '.js?v=' + v;
+    script.dataset.i18nLang = resolved;
+    script.onload = function () {
+      document.querySelectorAll('script[data-i18n-lang]').forEach(function (s) {
+        if (s !== script) s.remove();
+      });
+      document.querySelectorAll('[data-i18n]').forEach(function (el) {
+        var key = el.dataset.i18n;
+        if (window._i18n && window._i18n[key]) el.textContent = window._i18n[key];
+      });
+      document.querySelectorAll('[data-i18n-ph]').forEach(function (el) {
+        var key = el.dataset.i18nPh;
+        if (window._i18n && window._i18n[key]) el.placeholder = window._i18n[key];
+      });
+      // The window-level 'i18n-loaded' listener registered below rebuilds
+      // the header off this same event, so it isn't called again here.
+      window.dispatchEvent(new CustomEvent('i18n-loaded', { detail: resolved }));
+    };
+    document.head.appendChild(script);
+  }
 
   function resolvedTheme(theme) {
     if (theme !== 'auto') return theme;
@@ -185,11 +240,12 @@
     var crumbs = document.createElement('div');
     crumbs.className = 'mvm-crumbs';
     var homeIsCurrent = !APP_ID || APP_ID === 'apphub';
+    var homeLabel = '🧩 ' + esc(tt('ah_pub_home', 'Home'));
     if (homeIsCurrent) {
-      crumbs.innerHTML = '<span class="mvm-cur">🧩 Home</span>';
+      crumbs.innerHTML = '<span class="mvm-cur">' + homeLabel + '</span>';
     } else {
       var label = appMeta ? (esc(appMeta.icon || '') + ' ' + esc(appMeta.name || APP_ID)) : esc(APP_ID);
-      crumbs.innerHTML = '<a href="/pub/apphub/">🧩 Home</a><span class="mvm-sep">/</span><span class="mvm-cur">' + label + '</span>';
+      crumbs.innerHTML = '<a href="/pub/apphub/">' + homeLabel + '</a><span class="mvm-sep">/</span><span class="mvm-cur">' + label + '</span>';
     }
     hdr.appendChild(crumbs);
 
@@ -206,7 +262,7 @@
       box.innerHTML =
         '<button class="mvm-avatar-btn" type="button" aria-haspopup="true" aria-expanded="false">'
           + renderAvatar(user, 28)
-          + (credits != null ? '<span class="mvm-credits-pill">🪙 ' + esc(credits) + '</span>' : '')
+          + (credits ? '<span class="mvm-credits-pill">🪙 ' + esc(credits) + '</span>' : '')
         + '</button>'
         + '<div class="mvm-menu" hidden>'
           + '<div class="mvm-menu-hdr">' + renderAvatar(user, 32) + '<span class="mvm-menu-name">' + esc(user.display_name) + '</span></div>'
@@ -309,17 +365,30 @@
     return null;
   }
 
-  async function refresh() {
+  // What refresh() last fetched, so a rebuild caused purely by a language change
+  // re-renders the header from it instead of repeating the three requests.
+  var _lastResults = null;
+
+  function renderHeader() {
+    var r = _lastResults || [null, null, null];
+    var hdr = buildHeader(r[0], r[1], r[2]);
     var existingHdr = document.querySelector('.mvm-hdr');
-    var placeholderHdr = existingHdr || buildHeader(null, null, null);
-    if (!existingHdr) document.body.prepend(placeholderHdr);
+    if (existingHdr) existingHdr.replaceWith(hdr);
+    else document.body.prepend(hdr);
+    return hdr;
+  }
 
-    var results = await Promise.all([fetchAppMeta(), fetchUser(), fetchCredits()]);
-    var finalHdr = buildHeader(results[0], results[1], results[2]);
-    placeholderHdr.replaceWith(finalHdr);
+  async function refresh() {
+    renderHeader();   // placeholder, or the previous header while this reloads
 
-    var user = results[1];
-    if (user) applyTheme(user.theme, user.font_size);
+    _lastResults = await Promise.all([fetchAppMeta(), fetchUser(), fetchCredits()]);
+    renderHeader();
+
+    var user = _lastResults[1];
+    if (user) {
+      applyTheme(user.theme, user.font_size);
+      applyLanguage(user.language);
+    }
   }
 
   async function init() {
@@ -330,7 +399,18 @@
     await refresh();
   }
 
-  window.MvmLayout = { refresh: refresh, applyTheme: applyTheme, THEMES: THEMES, FONT_SCALE: FONT_SCALE };
+  window.MvmLayout = { refresh: refresh, applyTheme: applyTheme, applyLanguage: applyLanguage, THEMES: THEMES, FONT_SCALE: FONT_SCALE };
+
+  // The header is often built (via refresh() above) before /i18n/i18n.js has
+  // finished loading the actual language file, so that first buildHeader()
+  // call renders with tt()'s hardcoded fallback text. i18n.js fires
+  // 'i18n-loaded' once window.t is actually ready; rebuild the header then so
+  // "Home" etc. pick up the real translation without needing a language
+  // switch to trigger it. This re-renders from the cached fetch rather than
+  // calling refresh(), which would repeat /me and /credits on every page load.
+  window.addEventListener('i18n-loaded', function () {
+    if (document.querySelector('.mvm-hdr')) renderHeader();
+  });
 
   if (document.body) init();
   else document.addEventListener('DOMContentLoaded', init);
