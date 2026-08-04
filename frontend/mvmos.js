@@ -735,13 +735,17 @@ var mvmOS = (() => {
   // still there (title/body/read state persist) but clicking it does nothing.
   const _notifCallbacks = new Map(); // id -> { fn, label }
 
-  function _hasNotifAction(id, actionApp) {
-    return _notifCallbacks.has(id) || (!!actionApp && actionApp !== '_callback');
+  function _hasNotifAction(id, actionApp, link) {
+    return _notifCallbacks.has(id) || !!link || (!!actionApp && actionApp !== '_callback');
   }
 
-  function _runNotifAction(id, actionApp) {
+  function _runNotifAction(id, actionApp, link) {
     const cb = _notifCallbacks.get(id);
     if (cb) { cb.fn(); return; }
+    // A `link` is the public-page form of an action (see notify() in
+    // backend/notifications.py) — the app itself may well not be openable as
+    // a desktop window, so honour it before falling back to action_app.
+    if (link) { window.open(link, '_blank', 'noopener'); return; }
     if (!actionApp || actionApp === '_callback') return;
     if (actionApp === 'appstore') { AppStore.openWindow('store-1'); return; }
     if (actionApp === 'updates') { UpdateManager.openWindow(); return; }
@@ -749,6 +753,50 @@ var mvmOS = (() => {
     const app = _apps[actionApp];
     if (app) { _trackOpen(actionApp); app.launch(); }
     else { _loadPlugin(actionApp).then(() => _apps[actionApp]?.launch?.()); }
+  }
+
+  function _escHtml(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  // A notification carries its text twice over. `title`/`body` are finished
+  // sentences — the only sane form for genuinely free text. But the sender
+  // and the reader are different people who may be using different languages,
+  // and a notification is read long after it was written, so an app that
+  // knows what its notification says sends a translation key and its
+  // variables instead (see backend/notifications.py::notify). Resolve it here,
+  // at render time, in whatever language the reader is on right now; the
+  // stored sentence stays as the fallback.
+  function _notifText(n) {
+    let vars = {};
+    if (n.vars) { try { vars = JSON.parse(n.vars) || {}; } catch (_) {} }
+    const one = (key, fallback) => {
+      const table = window._i18n || {};
+      if (!key || !table[key]) return fallback || '';
+      return String(table[key]).replace(/\{(\w+)\}/g, (m, k) => (vars[k] != null ? vars[k] : ''));
+    };
+    return { title: one(n.title_key, n.title), body: one(n.body_key, n.body) };
+  }
+
+  // A store app's strings live in its own i18n.js, which only loads when the
+  // app is launched (§11) — so a notification from an app the user has never
+  // opened would show its fallback sentence for ever. Pull the table in on
+  // its own, once per app, and only when a key is actually missing.
+  const _notifI18nLoaded = new Set();
+  function _ensureNotifI18n(rows) {
+    const table = window._i18n || {};
+    (rows || []).forEach(n => {
+      const id = n.action_app;
+      const missing = (n.title_key && !table[n.title_key]) || (n.body_key && !table[n.body_key]);
+      if (!missing || !id || !/^[a-z0-9][a-z0-9_-]*$/.test(id) || _notifI18nLoaded.has(id)) return;
+      _notifI18nLoaded.add(id);
+      const s = document.createElement('script');
+      s.src = `/apps/${encodeURIComponent(id)}/i18n.js`;
+      s.onload = () => _renderNotifPanel();
+      s.onerror = () => {};
+      document.head.appendChild(s);
+    });
   }
 
   // A browser session can carry an Apps Hub identity (e.g. a Chat login)
@@ -765,6 +813,7 @@ var mvmOS = (() => {
       const res = await fetch('/api/notifications', { headers: _pubHeaders() });
       if (!res.ok) return;
       _notifs = await res.json();
+      _ensureNotifI18n(_notifs);
       _renderNotifPanel();
     } catch (_) {}
   }
@@ -782,8 +831,12 @@ var mvmOS = (() => {
       const knownIds = new Set(_notifs.map(n => n.id));
       const arrived = rows.filter(n => !knownIds.has(n.id) && n.kind === 'push' && !n.is_read);
       _notifs = rows;
+      _ensureNotifI18n(rows);
       _renderNotifPanel();
-      arrived.forEach(n => _showToast(n.title, n.body, n.id, n.action_app));
+      arrived.forEach(n => {
+        const text = _notifText(n);
+        _showToast(text.title, text.body, n.id, n.action_app, n.link);
+      });
     } catch (_) {}
   }
 
@@ -802,12 +855,19 @@ var mvmOS = (() => {
       </div>
       ${recent.length === 0
         ? `<div class="notif-empty">${t('notif_empty')}</div>`
-        : recent.map(n => `
+        : recent.map(n => {
+          // Escaped, not interpolated raw: a notification's text can come
+          // from another person entirely (someone's name, the note they
+          // typed), and that must never be able to write markup into the
+          // reader's desktop.
+          const text = _notifText(n);
+          return `
           <div class="notif-item${n.is_read ? '' : ' notif-unread'}" data-id="${n.id}">
-            <div class="notif-item-title">${n.title}${n.kind === 'push' ? `<span class="notif-type-badge">${t('notif_push_badge')}</span>` : ''}</div>
-            <div class="notif-item-body">${n.body}</div>
-            ${_hasNotifAction(n.id, n.action_app) ? `<span class="notif-item-action" data-notif-action="${n.id}">${_notifCallbacks.get(n.id)?.label || t('notif_open')}</span>` : ''}
-          </div>`).join('')}
+            <div class="notif-item-title">${_escHtml(text.title)}${n.kind === 'push' ? `<span class="notif-type-badge">${t('notif_push_badge')}</span>` : ''}</div>
+            <div class="notif-item-body">${_escHtml(text.body)}</div>
+            ${_hasNotifAction(n.id, n.action_app, n.link) ? `<span class="notif-item-action" data-notif-action="${n.id}">${_escHtml(_notifCallbacks.get(n.id)?.label || t('notif_open'))}</span>` : ''}
+          </div>`;
+        }).join('')}
       <div class="notif-footer" id="notif-view-all">${t('notif_view_all')}</div>
     `;
     panel.querySelector('#notif-clear-all')?.addEventListener('click', async () => {
@@ -833,7 +893,7 @@ var mvmOS = (() => {
         await fetch(`/api/notifications/${id}/read`, { method: 'POST', headers: _pubHeaders() });
         n.is_read = 1;
         panel.classList.remove('open');
-        _runNotifAction(n.id, n.action_app);
+        _runNotifAction(n.id, n.action_app, n.link);
         _renderNotifPanel();
       });
     });
@@ -932,13 +992,13 @@ var mvmOS = (() => {
   }
   window.addEventListener('settings-changed', e => { if (e.detail?.app === 'notifications') _loadPushDuration(); });
 
-  function _showToast(title, body, id, actionApp) {
+  function _showToast(title, body, id, actionApp, link) {
     const container = _ensureToastContainer();
     const el = document.createElement('div');
     el.className = 'toast-item';
-    el.innerHTML = `<div class="toast-title">${title}</div>${body ? `<div class="toast-body">${body}</div>` : ''}`;
+    el.innerHTML = `<div class="toast-title">${_escHtml(title)}</div>${body ? `<div class="toast-body">${_escHtml(body)}</div>` : ''}`;
     const remove = () => { el.classList.add('toast-out'); setTimeout(() => el.remove(), 200); };
-    el.addEventListener('click', () => { _runNotifAction(id, actionApp); remove(); });
+    el.addEventListener('click', () => { _runNotifAction(id, actionApp, link); remove(); });
     container.appendChild(el);
     setTimeout(remove, _pushDurationSec * 1000);
   }
@@ -1440,7 +1500,10 @@ var mvmOS = (() => {
         const locked = window.mvmOS.premiumStatus !== 'premium';
         el.classList.toggle('premium-locked', locked);
         el.style.opacity = locked ? '.5' : '';
-        el.style.cursor = locked ? 'not-allowed' : '';
+        // A locked premium block is deliberately still clickable: it opens
+        // the subscription dialog, so advertise that action rather than a
+        // forbidden cursor.
+        el.style.cursor = locked ? 'pointer' : '';
         el.dataset.premiumLockId = locked ? lockId : '';
       };
       apply();
@@ -1478,6 +1541,12 @@ var mvmOS = (() => {
     _applyTheme,
     _runNotifAction,
     _hasNotifAction,
+    // The Notifications window renders the same rows as the bell and needs
+    // the same treatment of them: the translated form, escaping, and the
+    // lazy pull of a sending app's own string table.
+    _notifText,
+    _ensureNotifI18n,
+    _escHtml,
     markNotifsRead,
     // Notifications app mutates notifications directly via fetch; call this
     // afterwards so the bell badge/panel reflect the change immediately.

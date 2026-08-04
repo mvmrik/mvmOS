@@ -100,6 +100,30 @@
         return Promise.resolve(result).catch(function () { return null; });
       } catch (_) { return Promise.resolve(null); }
     },
+    // Storage that outlives the browser, for the rare thing an app is entitled
+    // to keep that long — a "stay unlocked for 24 hours" choice is the case it
+    // exists for. Same shape and same namespacing as `session` below, so an app
+    // picks one or the other by how long the value is allowed to live and
+    // nothing else changes.
+    persist: {
+      get: function (key) {
+        var name = config.appId + ':' + key;
+        var query = {}; query[name] = null;
+        var result = api.storage.local.get(query);
+        return (result && typeof result.then === 'function' ? result
+          : new Promise(function (resolve) { api.storage.local.get(query, resolve); })
+        ).then(function (value) { return value[name]; }).catch(function () { return null; });
+      },
+      set: function (key, value) {
+        var payload = {}; payload[config.appId + ':' + key] = value;
+        var result = api.storage.local.set(payload);
+        if (result && typeof result.catch === 'function') result.catch(function () {});
+      },
+      clear: function (key) {
+        var result = api.storage.local.remove(config.appId + ':' + key);
+        if (result && typeof result.catch === 'function') result.catch(function () {});
+      }
+    },
     // Session storage, namespaced per app so two extensions cannot collide.
     session: {
       get: function (key) {

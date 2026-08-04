@@ -4,11 +4,21 @@
 *{box-sizing:border-box}body{margin:0;background:#1e1e2e;color:#cdd6f4;font-family:system-ui,sans-serif;padding:28px}
 main{max-width:620px;margin:auto;background:#313244;border-radius:12px;padding:24px}h1{font-size:20px;margin:0 0 6px}.sub{color:#a6adc8;font-size:13px;margin-bottom:22px}
 .field{margin:0 0 18px}.field label{display:block;font-size:13px;font-weight:700;margin-bottom:6px}.hint{font-size:12px;color:#a6adc8;margin-top:5px}
+/* .check sets display:flex, which outranks the browser's own [hidden] rule, so
+   a conditionally shown checkbox needs this to actually disappear. */
+.field[hidden]{display:none}
+.sub-field{margin-left:14px;padding-left:12px;border-left:2px solid #585b70}
+.shortcut{display:flex;flex-wrap:wrap;align-items:baseline;gap:8px;font-size:13px;padding:7px 0}
+.shortcut span{color:#a6adc8}kbd{background:#1e1e2e;border:1px solid #585b70;border-radius:5px;padding:2px 7px;font:inherit;font-size:12px;color:#cdd6f4}
+code{display:inline-block;background:#1e1e2e;border:1px solid #585b70;border-radius:5px;padding:3px 8px;margin-top:5px;font-size:12px;color:#cdd6f4;user-select:all}
+.ghost{background:#585b70;color:#cdd6f4;font-size:13px;padding:7px 14px;margin-top:6px}
 input,select{width:100%;background:#1e1e2e;color:#cdd6f4;border:1px solid #585b70;border-radius:7px;padding:9px 11px;font-size:14px}
 .check{display:flex;align-items:center;gap:8px}.check input{width:auto}.check label{margin:0}button{background:#89b4fa;color:#1e1e2e;border:0;border-radius:7px;padding:9px 18px;font-weight:700;cursor:pointer}
 #saved{color:#a6e3a1;font-size:13px;margin-left:10px}
 </style></head><body><main><h1 id="title"></h1><div class="sub" id="subtitle"></div><form id="form">
 <div class="field"><label id="server-label" for="server-url"></label><input id="server-url" type="url" required placeholder="https://mvmos.example.com"><div class="hint" id="server-hint"></div></div>
 <div class="field"><label id="width-label" for="extension-width"></label><input id="extension-width" type="number" min="300" max="800" required><div class="hint" id="width-hint"></div></div>
-<div id="custom-settings"></div><button type="submit" id="save"></button><span id="saved"></span>
+<div id="custom-settings"></div>
+<div class="field" id="shortcuts" hidden><label id="shortcut-label"></label><div id="shortcut-list"></div><div class="hint" id="shortcut-hint"></div><code id="shortcut-address"></code><div class="hint" id="shortcut-note"></div><button type="button" class="ghost" id="shortcut-edit"></button></div>
+<button type="submit" id="save"></button><span id="saved"></span>
 </form></main><script src="config.js"></script><script src="options.js"></script></body></html>

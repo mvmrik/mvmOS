@@ -175,7 +175,14 @@ async def scheduler_status():
                 manifest = json.load(f)
             sched = manifest.get("scheduler")
             if sched:
-                sched_path = os.path.join(BACKENDS_DIR, app_id, sched)
+                # Same lookup order as the actual tick: apps/<id>/ in the
+                # current layout, backend/apps/<id>/ in the older one.
+                sched_path = next(
+                    (p for p in (os.path.join(APPS_DIR, app_id, sched),
+                                 os.path.join(BACKENDS_DIR, app_id, sched))
+                     if os.path.isfile(p)),
+                    os.path.join(APPS_DIR, app_id, sched),
+                )
                 apps.append({
                     "id": app_id,
                     "name": name,

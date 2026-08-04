@@ -178,7 +178,23 @@ def init_db():
                 action_app TEXT,
                 ref TEXT,
                 is_read INTEGER NOT NULL DEFAULT 0,
-                created_at TEXT NOT NULL
+                created_at TEXT NOT NULL,
+                -- Who it is from, as a display name. A notification can come
+                -- from another person and not only from the machine.
+                sender TEXT,
+                -- A notification outlives the moment it was created and is read
+                -- by whoever it was addressed to, in whatever language they
+                -- happen to be using — which is not necessarily the language of
+                -- the person who caused it. So the text is stored twice: title/
+                -- body as written (the fallback, and the only form for genuinely
+                -- free text), and a translation key plus its variables, which
+                -- the reader's own client resolves at the moment it renders.
+                title_key TEXT,
+                body_key TEXT,
+                vars TEXT,
+                -- Where clicking it should go. action_app opens an app on the
+                -- desktop; this is a plain URL, which is what a public page has.
+                link TEXT
             );
             CREATE INDEX IF NOT EXISTS idx_notifications_username ON notifications(username, created_at DESC);
         """)
@@ -199,6 +215,11 @@ def init_db():
             conn.execute("ALTER TABLE notifications ADD COLUMN ref TEXT")
         except Exception:
             pass
+        for column in ("sender TEXT", "title_key TEXT", "body_key TEXT", "vars TEXT", "link TEXT"):
+            try:
+                conn.execute(f"ALTER TABLE notifications ADD COLUMN {column}")
+            except Exception:
+                pass
         conn.execute("CREATE INDEX IF NOT EXISTS idx_notifications_ref ON notifications(username, source, ref)")
         for app in SYSTEM_APPS:
             conn.execute(

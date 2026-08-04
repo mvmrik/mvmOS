@@ -57,8 +57,16 @@ const Notifications = (() => {
           const res = await fetch('/api/notifications', { headers: mvmOS._pubHeaders() }).catch(() => null);
           if (!res || !res.ok) { list.innerHTML = `<div style="padding:20px;color:#ef4444">${_t('notif_error_loading')}</div>`; return; }
           all = await res.json();
+          mvmOS._ensureNotifI18n?.(all);
           render();
         }
+
+        // Both live in mvmos.js so the bell and this window can never drift
+        // apart on how a notification reads. _esc matters as much as the
+        // translation: the text can come from another person entirely (their
+        // name, a note they typed) and must never write markup in here.
+        const _text = n => (mvmOS._notifText ? mvmOS._notifText(n) : { title: n.title, body: n.body });
+        const _esc = s => (mvmOS._escHtml ? mvmOS._escHtml(s) : String(s == null ? '' : s));
 
         function render() {
           const list = body.querySelector('#nf-list');
@@ -83,19 +91,22 @@ const Notifications = (() => {
 
           list.innerHTML = [...groups.entries()].map(([key, rows]) => `
             <div style="padding:8px 16px 4px;font-size:.72rem;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:.05em">${_dateLabel(key)}</div>
-            ${rows.map(n => `
-              <div class="nf-row${n.is_read ? '' : ' nf-row-unread'}" data-id="${n.id}" style="display:flex;gap:10px;align-items:flex-start;padding:10px 16px;border-bottom:1px solid var(--border);cursor:${mvmOS._hasNotifAction?.(n.id, n.action_app) ? 'pointer' : 'default'}">
+            ${rows.map(n => {
+              const text = _text(n);
+              return `
+              <div class="nf-row${n.is_read ? '' : ' nf-row-unread'}" data-id="${n.id}" style="display:flex;gap:10px;align-items:flex-start;padding:10px 16px;border-bottom:1px solid var(--border);cursor:${mvmOS._hasNotifAction?.(n.id, n.action_app, n.link) ? 'pointer' : 'default'}">
                 <div style="width:8px;height:8px;border-radius:50%;background:${n.is_read ? 'transparent' : 'var(--accent)'};margin-top:6px;flex-shrink:0"></div>
                 <div style="flex:1;min-width:0">
                   <div style="display:flex;align-items:center;gap:6px">
-                    <span style="font-weight:600;font-size:.87rem">${n.title}</span>
+                    <span style="font-weight:600;font-size:.87rem">${_esc(text.title)}</span>
                     ${n.kind === 'push' ? `<span class="notif-type-badge">${_t('notif_push_badge')}</span>` : ''}
                   </div>
-                  ${n.body ? `<div style="color:var(--text-dim);font-size:.8rem;margin-top:2px">${n.body}</div>` : ''}
+                  ${text.body ? `<div style="color:var(--text-dim);font-size:.8rem;margin-top:2px">${_esc(text.body)}</div>` : ''}
                   <div style="color:var(--text-dim);font-size:.7rem;margin-top:4px">${_timeLabel(n.created_at)}</div>
                 </div>
                 <div class="nf-delete" data-id="${n.id}" title="${_t('notif_delete')}" style="color:var(--text-dim);cursor:pointer;flex-shrink:0;padding:2px 4px">✕</div>
-              </div>`).join('')}
+              </div>`;
+            }).join('')}
           `).join('');
 
           list.querySelectorAll('.nf-row').forEach(row => {
@@ -110,7 +121,7 @@ const Notifications = (() => {
                 mvmOS._refreshNotifs?.();
                 render();
               }
-              if (mvmOS._hasNotifAction?.(n.id, n.action_app)) mvmOS._runNotifAction?.(n.id, n.action_app);
+              if (mvmOS._hasNotifAction?.(n.id, n.action_app, n.link)) mvmOS._runNotifAction?.(n.id, n.action_app, n.link);
             });
           });
           list.querySelectorAll('.nf-delete').forEach(el => {

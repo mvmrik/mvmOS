@@ -13,6 +13,10 @@
   // the browser language, not in an Apps Hub profile or this origin's saved
   // public-page preference.
   var BROWSER_LANGUAGE_ONLY = !!(window.mvmOS && window.mvmOS.browserLanguageOnly);
+  // A received mvmShare link is a self-contained page. Its content has its own
+  // bounded scroll areas, so the generic public-app root must not create a
+  // meaningless page scrollbar around an expired/error message.
+  var PUBLIC_SHARE_PAGE = !!(window.mvmOS && window.mvmOS.publicSharePage);
 
   function esc(s) {
     return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
@@ -393,10 +397,6 @@
       '.mvm-notif-title{font-size:12.5px;font-weight:600;color:var(--fg,#cdd6f4);word-break:break-word}' +
       '.mvm-notif-body{font-size:11.5px;color:var(--fg2,#a6adc8);word-break:break-word}' +
       '.mvm-notif-time{font-size:10.5px;color:var(--fg2,#a6adc8);opacity:.8}' +
-      /* On a phone the public-app root clips absolute descendants. The bell
-       * therefore opens as a viewport panel, not as a child of the narrow
-       * header container. */
-      '@media(max-width:600px){.mvm-notif{position:fixed;top:72px;right:12px;left:12px;width:auto;max-width:none;max-height:calc(100dvh - 84px)}.mvm-notif-list{max-height:calc(100dvh - 132px)}}' +
       '.mvm-menu{position:absolute;top:calc(100% + 8px);right:0;min-width:200px;background:var(--surface1,#181825);' +
       'border:1px solid var(--border,#45475a);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.35);' +
       'z-index:1000;display:flex;flex-direction:column;padding:6px}' +
@@ -427,7 +427,7 @@
   function reflow() {
     document.body.style.cssText += ';display:flex;flex-direction:column;align-items:stretch;justify-content:flex-start;height:100dvh;width:100%;margin:0;overflow:hidden;box-sizing:border-box';
     var root = findRoot();
-    if (root) root.style.cssText += ';flex:1 1 auto;min-height:0;overflow:auto';
+    if (root) root.style.cssText += ';flex:1 1 auto;min-height:0;overflow:' + (PUBLIC_SHARE_PAGE ? 'hidden' : 'auto');
   }
 
   // Just the avatar is always visible (name + logout used to sit right in the

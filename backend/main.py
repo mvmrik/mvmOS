@@ -358,7 +358,7 @@ _PUBLIC_THEME_BOOTSTRAP = """<script>(function(){try{var r=document.documentElem
 
 _LANG_BOOTSTRAP_CACHE: dict = {}
 
-def _public_lang_bootstrap() -> str:
+def _public_lang_bootstrap(browser_only: bool = False) -> str:
     """Runs before /i18n/i18n.js (included later, in <body>) so that loader
     sees window.mvmOS.pubLang already set and never touches the desktop-only
     /api/settings endpoint (401s with no OS session — see
@@ -367,7 +367,10 @@ def _public_lang_bootstrap() -> str:
     tab, 'auto' resolved here from navigator.language against whatever
     languages core actually ships (frontend/i18n/*.js) rather than a
     hardcoded pair, so a newly added language file is picked up for real
-    per-visitor detection with no change needed here."""
+    per-visitor detection with no change needed here. A recipient-facing
+    mvmShare link is deliberately browser-only: it must not inherit an Apps
+    Hub profile or a previous visitor's preference from this shared origin."""
+    cache_key = "browser_only" if browser_only else "default"
     i18n_dir = os.path.join(os.path.dirname(__file__), "..", "frontend", "i18n")
     # Cached on the directory's own mtime instead of listed per request: this
     # runs for every public HTML response, while the listing only changes when a
@@ -377,8 +380,9 @@ def _public_lang_bootstrap() -> str:
         stamp = os.stat(i18n_dir).st_mtime
     except OSError:
         stamp = None
-    if _LANG_BOOTSTRAP_CACHE.get("stamp") == stamp and _LANG_BOOTSTRAP_CACHE.get("html"):
-        return _LANG_BOOTSTRAP_CACHE["html"]
+    cached = _LANG_BOOTSTRAP_CACHE.get(cache_key)
+    if cached and cached.get("stamp") == stamp:
+        return cached["html"]
     try:
         entries = sorted(
             (f[:-3], int(os.path.getmtime(os.path.join(i18n_dir, f))))
@@ -402,7 +406,9 @@ def _public_lang_bootstrap() -> str:
         "var avail=" + langs_js + ",stamps=" + stamps_js + ";"
         "window.mvmOS.availableLangs=avail;"
         "window.mvmOS.langStamps=stamps;"
-        "var l=localStorage.getItem('apphub_language')||'auto';"
+        "window.mvmOS.browserLanguageOnly=" + ("true" if browser_only else "false") + ";"
+        "window.mvmOS.publicSharePage=" + ("true" if browser_only else "false") + ";"
+        "var l=" + ("'auto'" if browser_only else "localStorage.getItem('apphub_language')||'auto'") + ";"
         "if(l==='auto'){"
         "var nav=(navigator.language||'en').toLowerCase();"
         "l=avail.find(function(x){return nav.indexOf(x)===0})||'en';"
@@ -411,8 +417,7 @@ def _public_lang_bootstrap() -> str:
         "document.write('<scr'+'ipt src=\"/i18n/'+l+'.js?v='+(stamps[l]||0)+'\"><\\/scr'+'ipt>');"
         "}catch(e){}})();</script>"
     )
-    _LANG_BOOTSTRAP_CACHE["stamp"] = stamp
-    _LANG_BOOTSTRAP_CACHE["html"] = html
+    _LANG_BOOTSTRAP_CACHE[cache_key] = {"stamp": stamp, "html": html}
     return html
 
 
@@ -437,6 +442,12 @@ async def layout_inject_middleware(request: Request, call_next):
     if not m or not response.headers.get("content-type", "").startswith("text/html"):
         return response
     app_id = m.group(1)
+    # A received mvmShare link is a tiny decrypt-and-open page, not an Apps
+    # Hub destination. Its URL is replaced as soon as the browser decrypts it.
+    is_mvmshare_recipient = (
+        app_id == "mvmshare"
+        and request.url.path.startswith("/pub/mvmshare/s/")
+    )
     if not _app_wants_public_chrome(app_id):
         return response
     # A browser-extension popup embeds this page as its whole interface, so the
@@ -452,7 +463,7 @@ async def layout_inject_middleware(request: Request, call_next):
         body += chunk if isinstance(chunk, bytes) else chunk.encode()
 
     html = body.decode("utf-8", errors="ignore")
-    if "/pub/apphub/layout.js" in html:
+    if is_mvmshare_recipient or "/pub/apphub/layout.js" in html:
         snippet = ""
     else:
         layout_js_path = os.path.join(os.path.dirname(__file__), "apphub_pub", "layout.js")
@@ -463,11 +474,12 @@ async def layout_inject_middleware(request: Request, call_next):
         snippet = f'<script src="/pub/apphub/layout.js?v={v}" data-mvm-app="{app_id}"></script>'
     if snippet:
         html = html.replace("</body>", snippet + "</body>", 1) if "</body>" in html else html + snippet
-    pwa = _public_pwa_snippet(app_id)
+    pwa = None if is_mvmshare_recipient else _public_pwa_snippet(app_id)
     if pwa:
         html = html.replace("</head>", pwa + "</head>", 1) if "</head>" in html else pwa + html
     html = html.replace("</head>", _PUBLIC_THEME_BOOTSTRAP + "</head>", 1) if "</head>" in html else _PUBLIC_THEME_BOOTSTRAP + html
-    lang_bootstrap = _public_lang_bootstrap()
+    browser_language_only = is_mvmshare_recipient
+    lang_bootstrap = _public_lang_bootstrap(browser_only=browser_language_only)
     html = html.replace("</head>", lang_bootstrap + "</head>", 1) if "</head>" in html else lang_bootstrap + html
 
     headers = dict(response.headers)
