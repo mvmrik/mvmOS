@@ -86,6 +86,12 @@ def _device_id(state: dict) -> str:
     return state["device_id"]
 
 
+def installation_id() -> str:
+    """Stable installation id for services that need one vote per mvmOS."""
+    state = _load()
+    return _device_id(state)
+
+
 def license_headers() -> dict:
     """Headers identifying this installation for a premium content request.
 

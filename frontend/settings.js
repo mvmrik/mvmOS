@@ -86,9 +86,11 @@ const Settings = (() => {
   }
 
   function saveDisplay(data) {
-    localStorage.setItem(DISPLAY_KEY, JSON.stringify(data));
-    applyDisplay(data);
-    window.dispatchEvent(new CustomEvent('display-changed', { detail: data }));
+    const merged = { ...loadDisplay(), ...data };
+    localStorage.setItem(DISPLAY_KEY, JSON.stringify(merged));
+    applyDisplay(merged);
+    window.mvmOSKeyboardPreference?.apply();
+    window.dispatchEvent(new CustomEvent('display-changed', { detail: merged }));
   }
 
   // icon_size: 1-5, default 3
@@ -322,6 +324,10 @@ const Settings = (() => {
               <div class="settings-row">
                 <label>${t('display_mobile_fullscreen')}</label>
                 <input type="checkbox" id="s-mobile-fullscreen" ${(s.mobile_fullscreen !== false) ? 'checked' : ''}>
+              </div>
+              <div class="settings-row">
+                <label>${t('display_disable_software_keyboard')} <span style="color:var(--text-dim);font-size:.76rem">${t('display_per_device')}</span></label>
+                <input type="checkbox" id="s-disable-software-keyboard" ${d.disable_software_keyboard === true ? 'checked' : ''}>
               </div>
             </div>
             <div class="settings-section" style="border-top:1px solid var(--border);padding-top:16px">
@@ -725,6 +731,12 @@ const Settings = (() => {
     if (mobileFullscreen) {
       mobileFullscreen.addEventListener('change', () => {
         saveSettings({ mobile_fullscreen: mobileFullscreen.checked });
+      });
+    }
+    const disableSoftwareKeyboard = body.querySelector('#s-disable-software-keyboard');
+    if (disableSoftwareKeyboard) {
+      disableSoftwareKeyboard.addEventListener('change', () => {
+        saveDisplay({ disable_software_keyboard: disableSoftwareKeyboard.checked });
       });
     }
     ['double_tap','triple_tap','2finger_tap','3finger_tap','2finger_swipe_down','2finger_swipe_up'].forEach(key => {
@@ -1475,6 +1487,7 @@ const Settings = (() => {
     const panel = body.querySelector('#sp-startmenu');
     if (!panel) return;
     const prefs = (await loadStartMenuPrefs()) || defaultStartMenuPrefs();
+    const autofocusSearch = localStorage.getItem('mvmos_start_menu_autofocus') !== '0';
     const allApps = Object.values(window.mvmOS?._apps || {}).sort((a, b) => a.name.localeCompare(b.name));
 
     function _saveAndRedraw() { saveStartMenuPrefs(prefs); _draw(); }
@@ -1493,6 +1506,10 @@ const Settings = (() => {
             <span id="sm-opacity-val" style="font-size:.82rem;color:var(--text-dim);min-width:36px;text-align:right">${opacity}%</span>
           </div>
         </div>
+        <label style="display:flex;align-items:center;justify-content:space-between;gap:14px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:10px 14px;margin-bottom:10px;cursor:pointer">
+          <span><strong style="display:block;font-size:.84rem">${t('sm_autofocus_search')}</strong><small style="display:block;margin-top:3px;color:var(--text-dim);font-size:.76rem">${t('display_per_device')}</small></span>
+          <input id="sm-autofocus-search" type="checkbox" ${autofocusSearch ? 'checked' : ''}>
+        </label>
       ` + prefs.order.map((blockId, idx) => {
         const isFirst = idx === 0, isLast = idx === prefs.order.length - 1;
         let inner = '';
@@ -1576,6 +1593,9 @@ const Settings = (() => {
         });
       });
       const slider = panel.querySelector('#sm-opacity-slider');
+      panel.querySelector('#sm-autofocus-search')?.addEventListener('change', event => {
+        localStorage.setItem('mvmos_start_menu_autofocus', event.target.checked ? '1' : '0');
+      });
       const valEl  = panel.querySelector('#sm-opacity-val');
       if (slider) {
         slider.addEventListener('input', () => {

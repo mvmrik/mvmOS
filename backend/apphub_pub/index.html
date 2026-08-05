@@ -374,8 +374,7 @@ async function renderApps(c) {
       <a class="app-card" href="${esc(a.public_url)}" data-id="${esc(a.id)}">
         <div class="app-icon">${esc(a.icon)}${badges[a.id] ? '<span class="app-badge"></span>' : ''}</div>
         <div class="app-name">${esc(a.name)}</div>
-        <div class="app-desc">${esc(t('ah_pub_usage_last'))}: ${esc(_relativeTime(a.last_opened_at))}</div>
-        <div class="app-desc">${esc(t('ah_pub_usage_count'))}: ${a.open_count || 0}</div>
+        <div class="app-desc">${esc(t('ah_pub_usage_summary', {count: a.open_count || 0, last: _relativeTime(a.last_opened_at)}))}</div>
       </a>`).join('');
     c.querySelectorAll('.app-card').forEach(el => {
       el.addEventListener('click', () => _recordUsage(el.dataset.id));
@@ -603,6 +602,8 @@ function renderSettings(c) {
   let theme = _me.theme || 'dark';
   let fontSize = _me.font_size || 'md';
   let language = _me.language || 'auto';
+  let disableSoftwareKeyboard = false;
+  try { disableSoftwareKeyboard = JSON.parse(localStorage.getItem('apphub_public_display') || '{}').disable_software_keyboard === true; } catch (_) {}
   const availableLangs = (window.mvmOS && window.mvmOS.availableLangs) || ['en'];
 
   c.innerHTML = `
@@ -619,12 +620,20 @@ function renderSettings(c) {
         <div style="font-weight:600;font-size:13px">${t('ah_pub_settings_language_label')}</div>
         <div id="st-lang" style="display:flex;flex-wrap:wrap;gap:10px"></div>
       </div>
+      <label class="card" style="padding:16px;display:flex;align-items:center;justify-content:space-between;gap:16px;cursor:pointer">
+        <span><strong style="display:block;font-size:13px">${t('ah_pub_disable_software_keyboard')}</strong><small style="display:block;margin-top:4px;color:var(--fg2)">${t('ah_pub_per_device')}</small></span>
+        <input id="st-disable-software-keyboard" type="checkbox" ${disableSoftwareKeyboard ? 'checked' : ''}>
+      </label>
       <div class="err" id="st-err"></div>
     </div>`;
 
   const themeWrap = c.querySelector('#st-theme');
   const fontWrap  = c.querySelector('#st-font');
   const langWrap  = c.querySelector('#st-lang');
+  c.querySelector('#st-disable-software-keyboard').addEventListener('change', event => {
+    disableSoftwareKeyboard = event.target.checked;
+    window.mvmOSKeyboardPreference?.setEnabled(disableSoftwareKeyboard);
+  });
 
   function renderThemeSwatches() {
     themeWrap.innerHTML = THEME_SWATCHES.map(sw => `

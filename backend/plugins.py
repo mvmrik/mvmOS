@@ -3,6 +3,7 @@ import io
 import json
 import os
 import shutil
+import socket
 import sys
 import tempfile
 import time
@@ -14,6 +15,7 @@ from pydantic import BaseModel
 from .auth import get_current_session
 from .db import get_conn, APPS_DIR, SYSTEM_APPS
 from . import app_backends
+from . import premium
 
 router = APIRouter(prefix="/api/plugins", tags=["plugins"])
 
@@ -653,6 +655,43 @@ async def install_plugin(body: InstallRequest, session=Depends(get_current_sessi
 
 
 # ── Uninstall ─────────────────────────────────────────────────────────────────
+
+def _review_headers() -> dict:
+    return {
+        "X-mvmOS-Device": premium.installation_id(),
+        "X-mvmOS-Name": socket.gethostname()[:80],
+        "User-Agent": f"mvmOS/{_core_version()}",
+    }
+
+
+@router.get("/{plugin_id}/reviews")
+async def plugin_reviews(plugin_id: str, session=Depends(get_current_session)):
+    async with httpx.AsyncClient(timeout=10) as client:
+        response = await client.get(f"{premium.SITE}/api/reviews/apps/{plugin_id}", headers=_review_headers())
+    return JSONResponse(response.json(), status_code=response.status_code)
+
+
+class ReviewBody(BaseModel):
+    score: int
+    body: str = ""
+
+
+@router.put("/{plugin_id}/reviews")
+async def save_plugin_review(plugin_id: str, body: ReviewBody, session=Depends(get_current_session)):
+    if plugin_id not in _installed_map():
+        return JSONResponse({"error": "app_not_installed"}, status_code=403)
+    async with httpx.AsyncClient(timeout=10) as client:
+        response = await client.put(f"{premium.SITE}/api/reviews/apps/{plugin_id}", headers=_review_headers(), json=body.model_dump())
+    return JSONResponse(response.json(), status_code=response.status_code)
+
+
+@router.delete("/{plugin_id}/reviews")
+async def delete_plugin_review(plugin_id: str, session=Depends(get_current_session)):
+    if plugin_id not in _installed_map():
+        return JSONResponse({"error": "app_not_installed"}, status_code=403)
+    async with httpx.AsyncClient(timeout=10) as client:
+        response = await client.delete(f"{premium.SITE}/api/reviews/apps/{plugin_id}", headers=_review_headers())
+    return JSONResponse(response.json(), status_code=response.status_code)
 
 @router.delete("/{plugin_id}")
 async def uninstall_plugin(plugin_id: str, session=Depends(get_current_session)):

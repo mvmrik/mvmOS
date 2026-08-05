@@ -448,8 +448,7 @@ async def layout_inject_middleware(request: Request, call_next):
         app_id == "mvmshare"
         and request.url.path.startswith("/pub/mvmshare/s/")
     )
-    if not _app_wants_public_chrome(app_id):
-        return response
+    wants_public_chrome = _app_wants_public_chrome(app_id)
     # A browser-extension popup embeds this page as its whole interface, so the
     # Apps Hub header, footer and navigation have nothing to offer there — the
     # popup already shows the app name and its own settings button, and the
@@ -463,7 +462,15 @@ async def layout_inject_middleware(request: Request, call_next):
         body += chunk if isinstance(chunk, bytes) else chunk.encode()
 
     html = body.decode("utf-8", errors="ignore")
-    if is_mvmshare_recipient or "/pub/apphub/layout.js" in html:
+    keyboard_path = os.path.join(os.path.dirname(__file__), "..", "frontend", "keyboard-preference.js")
+    try:
+        keyboard_version = int(os.path.getmtime(keyboard_path))
+    except OSError:
+        keyboard_version = 0
+    keyboard_snippet = f'<script src="/keyboard-preference.js?v={keyboard_version}" data-mvm-keyboard-scope="public"></script>'
+    html = html.replace("</head>", keyboard_snippet + "</head>", 1) if "</head>" in html else keyboard_snippet + html
+
+    if is_mvmshare_recipient or not wants_public_chrome or "/pub/apphub/layout.js" in html:
         snippet = ""
     else:
         layout_js_path = os.path.join(os.path.dirname(__file__), "apphub_pub", "layout.js")
@@ -474,7 +481,7 @@ async def layout_inject_middleware(request: Request, call_next):
         snippet = f'<script src="/pub/apphub/layout.js?v={v}" data-mvm-app="{app_id}"></script>'
     if snippet:
         html = html.replace("</body>", snippet + "</body>", 1) if "</body>" in html else html + snippet
-    pwa = None if is_mvmshare_recipient else _public_pwa_snippet(app_id)
+    pwa = None if is_mvmshare_recipient or not wants_public_chrome else _public_pwa_snippet(app_id)
     if pwa:
         html = html.replace("</head>", pwa + "</head>", 1) if "</head>" in html else pwa + html
     html = html.replace("</head>", _PUBLIC_THEME_BOOTSTRAP + "</head>", 1) if "</head>" in html else _PUBLIC_THEME_BOOTSTRAP + html

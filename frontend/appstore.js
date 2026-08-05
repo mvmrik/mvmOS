@@ -464,6 +464,7 @@ const AppStore = (() => {
     list.appendChild(backBar);
 
     const appsEl = document.createElement('div');
+    appsEl.className = 'as-app-grid';
     list.appendChild(appsEl);
     renderMvmosApps(appsEl, apps.map(a => ({ ...a, official: store.official ?? 0, store_id: store.id })), body);
     body._as.refreshCurrent = () => loadCategoryApps(body, store, cat, list);
@@ -564,27 +565,24 @@ const AppStore = (() => {
   function renderMvmosApps(list, apps, body) {
     list.innerHTML = '';
     apps.forEach(app => {
-      const row = document.createElement('div');
-      row.className = 'as-pkg-row';
+      const row = document.createElement('article');
+      row.className = 'as-app-card';
       row.innerHTML = `
-        <div class="as-pkg-info" style="flex:1">
-          <div class="as-pkg-top">
-            <span class="as-pkg-name">${app.icon} ${app.name}</span>
-            <span class="as-cat-badge as-cat-sm">${app.category}</span>
-            ${app.installed ? `<span class="as-installed-badge">${t('appstore_installed_badge')}</span>` : ''}
-            ${app.update_available ? `<span class="as-update-badge">${t('appstore_update_badge')}</span>` : ''}
-          </div>
-          <span class="as-pkg-desc">${app.description || ''}</span>
-        </div>
-        <div style="display:flex;align-items:center;gap:6px;padding-left:10px;flex-shrink:0">
+        <button class="as-app-card-main" type="button" aria-label="${app.name}">
+          <span class="as-app-icon">${app.icon || '📦'}</span>
+          <span class="as-app-copy"><span class="as-app-name">${app.name}</span><span class="as-app-desc">${app.description || ''}</span></span>
+        </button>
+        <div class="as-app-actions">
           ${app.update_available ? `<button class="s-btn s-btn-sm as-mvmos-update" data-app='${JSON.stringify(app)}'>${t('um_update_btn')}</button>` : ''}
           ${app.installed
             ? `<button class="s-btn s-btn-sm as-mvmos-open" data-id="${app.id}">▶ ${t('appstore_open')}</button>
-               ${app.settings?.length ? `<button class="s-btn s-btn-sm as-mvmos-settings" data-id="${app.id}">⚙ ${t('wstore_settings')}</button>` : ''}
-               <button class="s-btn s-btn-sm s-btn-danger as-mvmos-remove" data-id="${app.id}">${t('appstore_remove')}</button>`
+               ${app.settings?.length ? `<button class="s-btn s-btn-sm as-mvmos-settings" data-id="${app.id}">⚙</button>` : ''}
+               <button class="s-btn s-btn-sm s-btn-danger as-mvmos-remove" data-id="${app.id}" data-name="${app.name}">${t('appstore_remove')}</button>`
             : `<button class="s-btn s-btn-sm as-mvmos-install" data-app='${JSON.stringify(app)}'>${t('appstore_install')}</button>`}
         </div>
       `;
+
+      row.querySelector('.as-app-card-main').addEventListener('click', () => openMvmosAppDetail(body, app));
 
       async function doInstall(appData, btn, label) {
         if (!appData.official) {
@@ -668,6 +666,58 @@ const AppStore = (() => {
 
       list.appendChild(row);
     });
+  }
+
+  async function openMvmosAppDetail(body, app) {
+    const esc = value => String(value || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    const reviewText = {
+      siteLink: t('appstore_reviews_site_link'),
+      title: t('appstore_reviews_title'),
+      loading: t('appstore_reviews_loading'),
+      unavailable: t('appstore_reviews_unavailable'),
+      empty: t('appstore_reviews_empty'),
+      yourRating: t('appstore_reviews_your_rating'),
+      placeholder: t('appstore_reviews_placeholder'),
+      save: t('appstore_reviews_save'),
+      post: t('appstore_reviews_post'),
+      delete: t('appstore_reviews_delete'),
+      noOthers: t('appstore_reviews_no_others'),
+      choose: t('appstore_reviews_choose'),
+      confirmDelete: t('appstore_reviews_confirm_delete'),
+    };
+    const detail = body.querySelector('#as-detail');
+    const detailBody = body.querySelector('#as-detail-body');
+    body.querySelector('.as-wrap').classList.add('as-app-detail-open');
+    detail.style.display = 'flex';
+    detail.classList.add('as-app-detail');
+    detailBody.innerHTML = `<div class="as-app-detail-head"><span class="as-app-icon">${app.icon || '📦'}</span><div><div class="as-detail-name">${app.name}</div><div class="as-detail-ver">v${app.version || '—'}</div></div></div><p class="as-detail-short">${app.description || ''}</p><a class="as-site-link" target="_blank" rel="noopener" href="https://mvmos.org/app/${encodeURIComponent(app.id)}">${reviewText.siteLink}</a><section class="as-review-section"><h3>${reviewText.title}</h3><div class="as-review-loading">${reviewText.loading}</div></section>`;
+    const reviewsEl = detailBody.querySelector('.as-review-section');
+    async function loadReviews() {
+      reviewsEl.innerHTML = `<h3>${reviewText.title}</h3><div class="as-review-loading">${reviewText.loading}</div>`;
+      const res = await fetch(`/api/plugins/${encodeURIComponent(app.id)}/reviews`);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) { reviewsEl.innerHTML += `<div class="as-review-error">${reviewText.unavailable}</div>`; return; }
+      const mine = (data.reviews || []).find(r => r.mine);
+      const stars = n => '★'.repeat(n) + '☆'.repeat(5 - n);
+      const selectedScore = mine?.score || 0;
+      reviewsEl.innerHTML = `<h3>${reviewText.title}</h3><div class="as-rating-summary">${data.count ? `<strong>${Number(data.average).toFixed(1)}</strong> <span>${stars(Math.round(data.average))}</span> <small>(${data.count})</small>` : reviewText.empty}</div><form class="as-review-form"><div class="as-review-label">${reviewText.yourRating}</div><div class="as-star-picker" role="radiogroup" aria-label="${reviewText.yourRating}">${[1,2,3,4,5].map(n => `<button class="as-star${n <= selectedScore ? ' is-selected' : ''}" type="button" data-score="${n}" aria-label="${t('appstore_reviews_star', {n})}">★</button>`).join('')}<input name="score" type="hidden" value="${selectedScore}"></div><textarea name="body" maxlength="1000" placeholder="${reviewText.placeholder}">${esc(mine?.body)}</textarea><div><button class="s-btn s-btn-sm" type="submit">${mine ? reviewText.save : reviewText.post}</button>${mine ? `<button class="s-btn s-btn-sm s-btn-danger" type="button" data-delete>${reviewText.delete}</button>` : ''}</div></form><div class="as-review-list">${(data.reviews || []).filter(r => !r.mine).map(r => `<article class="as-review"><b>${esc(r.author)}</b><span>${stars(r.score)}</span>${r.body ? `<p>${esc(r.body)}</p>` : ''}</article>`).join('') || `<div class="as-review-empty">${reviewText.noOthers}</div>`}</div>`;
+      const form = reviewsEl.querySelector('form');
+      const scoreInput = form.elements.score;
+      const starPicker = form.querySelector('.as-star-picker');
+      const paintStars = score => {
+        form.querySelectorAll('.as-star').forEach(star => star.classList.toggle('is-selected', Number(star.dataset.score) <= score));
+      };
+      const setScore = score => { scoreInput.value = score; paintStars(score); };
+      form.querySelectorAll('.as-star').forEach(star => star.addEventListener('click', () => setScore(Number(star.dataset.score))));
+      starPicker.addEventListener('pointerover', event => {
+        const star = event.target.closest('.as-star');
+        if (star) paintStars(Number(star.dataset.score));
+      });
+      starPicker.addEventListener('pointerleave', () => paintStars(Number(scoreInput.value)));
+      form.onsubmit = async e => { e.preventDefault(); const fd = new FormData(form); const score = Number(fd.get('score')); if (!Number.isInteger(score) || score < 1 || score > 5) { form.querySelector('.as-review-label').textContent = reviewText.choose; return; } const r = await fetch(`/api/plugins/${encodeURIComponent(app.id)}/reviews`, {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({score, body:fd.get('body')})}); if (r.ok) loadReviews(); };
+      reviewsEl.querySelector('[data-delete]')?.addEventListener('click', async () => { if (confirm(reviewText.confirmDelete)) { const r = await fetch(`/api/plugins/${encodeURIComponent(app.id)}/reviews`, {method:'DELETE'}); if (r.ok) loadReviews(); } });
+    }
+    loadReviews();
   }
 
   function _backendConfirmDialog(body, appName) {
@@ -950,6 +1000,7 @@ const AppStore = (() => {
 
   function closeDetail(body) {
     body.querySelector('#as-detail').style.display = 'none';
+    body.querySelector('.as-wrap').classList.remove('as-app-detail-open');
     body.querySelectorAll('.as-pkg-row.selected').forEach(r => r.classList.remove('selected'));
   }
 

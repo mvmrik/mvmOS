@@ -1060,7 +1060,12 @@ const Desktop = (() => {
     e.stopPropagation();
     startMenu.classList.toggle('open');
     if (startMenu.classList.contains('open')) {
-      setTimeout(() => startSearch.focus(), 50);
+      // Default is enabled so existing devices keep the fast type-to-search
+      // behaviour. A touchscreen device without a physical keyboard can turn
+      // it off locally to avoid opening its on-screen keyboard with the menu.
+      if (localStorage.getItem('mvmos_start_menu_autofocus') !== '0') {
+        setTimeout(() => startSearch.focus(), 50);
+      }
     } else {
       startSearch.value = '';
       startResults.style.display = 'none';
