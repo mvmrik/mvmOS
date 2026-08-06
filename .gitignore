@@ -17,4 +17,5 @@ TODO.md
 *.db-shm
 backend/app-backends/
 backend/apphub_data/
+backend/premium/
 error-reports/

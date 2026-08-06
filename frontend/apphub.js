@@ -540,9 +540,16 @@ const AppHub = (() => {
         c.querySelector('#ah-users-list').innerHTML = `<div style="padding:24px;color:var(--text-dim);font-size:.85rem;text-align:center">${t('ah_no_users_yet')}</div>`;
         return;
       }
-      const balances = await Promise.all(users.map(u =>
+      // Credits are premium. Inside mvmOS the control stays where it is even
+      // without a licence — this is the one place where the person looking at
+      // it can actually get one — but it shows no balance, because there is no
+      // balance to read, and clicking it opens the premium modal instead.
+      const _hasCredits = await fetch('/api/apphub/features')
+        .then(r => r.ok ? r.json() : {credits:false}).catch(() => ({credits:false}))
+        .then(f => !!f.credits);
+      const balances = _hasCredits ? await Promise.all(users.map(u =>
         fetch(`/api/apphub/credits/${u.id}`).then(r => r.ok ? r.json() : {balance:0}).catch(() => ({balance:0}))
-      ));
+      )) : users.map(() => ({balance: null}));
 
       c.querySelector('#ah-users-list').innerHTML = users.map((u, i) => `
         <div style="display:flex;align-items:center;gap:10px;padding:9px 16px;border-bottom:1px solid var(--border)">
@@ -553,8 +560,8 @@ const AppHub = (() => {
           </div>
           ${_pubUser && u.id !== _pubUser.id ? `<button class="ah-fav" data-id="${u.id}"
                   style="border:none;background:none;color:var(--accent);font-size:1rem;cursor:pointer;padding:4px 8px;border-radius:6px">${_isFav(u.id)?'★':'☆'}</button>` : ''}
-          <button class="ah-credits" data-id="${u.id}" data-name="${esc(u.display_name)}" data-balance="${balances[i].balance}"
-                  style="border:1px solid var(--border);background:var(--surface2);color:var(--fg,inherit);font-size:.78rem;cursor:pointer;padding:4px 10px;border-radius:6px;flex-shrink:0;white-space:nowrap">💳 ${balances[i].balance}</button>
+          <button class="ah-credits" data-id="${u.id}" data-name="${esc(u.display_name)}" data-balance="${balances[i].balance ?? ''}"
+                  style="border:1px solid var(--border);background:var(--surface2);color:var(--fg,inherit);font-size:.78rem;cursor:pointer;padding:4px 10px;border-radius:6px;flex-shrink:0;white-space:nowrap">💳${balances[i].balance == null ? '' : ' ' + balances[i].balance}</button>
           <label style="display:flex;align-items:center;gap:5px;cursor:pointer;flex-shrink:0" title="${t('ah_admin_title')}">
             <input type="checkbox" class="ah-admin" data-id="${u.id}" ${u.is_admin?'checked':''} style="width:15px;height:15px;cursor:pointer">
             <span style="font-size:.78rem;color:${u.is_admin?'var(--accent)':'var(--text-dim)'}">${t('ah_admin')}</span>
@@ -594,6 +601,7 @@ const AppHub = (() => {
 
       c.querySelectorAll('.ah-credits').forEach(btn => {
         btn.onclick = () => _openCreditsPanel(btn.dataset.id, btn.dataset.name, () => renderUsers(c));
+        if (!_hasCredits) window.mvmOS?.premiumGate(btn, t('ah_credits_premium'));
       });
 
       c.querySelectorAll('.ah-del').forEach(btn => {

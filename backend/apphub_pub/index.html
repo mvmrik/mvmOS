@@ -235,6 +235,10 @@ window.addEventListener('i18n-loaded', () => {
 function renderTab(t) {
   clearInterval(_badgePoll);
   const c = app.querySelector('#d-body');
+  // Credits exist only where the installation is licensed. Without it the tab
+  // is not hidden behind a lock — it is not a place you can get to at all, so
+  // even ?tab=credits typed by hand just lands on the app list.
+  if (t === 'credits' && !(_me && _me.credits)) t = 'apps';
   if (t === 'apps')       renderApps(c);
   if (t === 'favourites') renderFavourites(c);
   if (t === 'credits')    renderCredits(c);

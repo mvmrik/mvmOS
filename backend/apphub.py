@@ -16,12 +16,18 @@ Exports (used by other modules via sys.modules["backend.apphub"]):
   call_app_api(target_app_id, method, *args, **kwargs) -> Any  (raises AppApiError)
 
 Credits — a shared, account-wide balance apps can charge against for optional
-paid features. Apps never touch the balance column directly: spend_credits()
-does the check-and-deduct as a single atomic UPDATE (balance is only
-decremented when the WHERE clause proves it's sufficient), so two concurrent
-spends from the same user can't both succeed against a balance that only
-covers one of them. idempotency_key (unique per app_id) makes retries safe —
-replaying the same key returns the same result instead of charging twice.
+paid features, and a premium feature of mvmOS itself. The implementation lives
+in backend/premium/apphub/, which only a licensed installation downloads; the
+functions above are the scaffolding that delegates to it and raises
+CreditError("premium_required") when it is not there. Use credits_available()
+before offering the feature anywhere.
+
+Apps never touch the balance column directly: spend_credits() does the
+check-and-deduct as a single atomic UPDATE (balance is only decremented when
+the WHERE clause proves it's sufficient), so two concurrent spends from the
+same user can't both succeed against a balance that only covers one of them.
+idempotency_key (unique per app_id) makes retries safe — replaying the same key
+returns the same result instead of charging twice.
 
 App-to-app API — the only sanctioned way for one app's backend to reach into
 another's. An app opts in by adding backend/apps/<id>/api.py, a plain Python
@@ -127,25 +133,6 @@ def _init_db():
                 created_at   TEXT NOT NULL,
                 PRIMARY KEY (user_id, favourite_id)
             );
-            CREATE TABLE IF NOT EXISTS credits (
-                user_id TEXT PRIMARY KEY REFERENCES public_users(id) ON DELETE CASCADE,
-                balance INTEGER NOT NULL DEFAULT 0
-            );
-            CREATE TABLE IF NOT EXISTS credit_transactions (
-                id               INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id          TEXT NOT NULL REFERENCES public_users(id) ON DELETE CASCADE,
-                app_id           TEXT NOT NULL,
-                delta            INTEGER NOT NULL,
-                balance_after    INTEGER NOT NULL,
-                reason           TEXT NOT NULL DEFAULT '',
-                idempotency_key  TEXT,
-                created_at       TEXT NOT NULL
-            );
-            CREATE UNIQUE INDEX IF NOT EXISTS idx_credit_tx_idem
-                ON credit_transactions(app_id, idempotency_key)
-                WHERE idempotency_key IS NOT NULL;
-            CREATE INDEX IF NOT EXISTS idx_credit_tx_user
-                ON credit_transactions(user_id, created_at);
             CREATE TABLE IF NOT EXISTS app_usage (
                 user_id        TEXT NOT NULL REFERENCES public_users(id) ON DELETE CASCADE,
                 app_id         TEXT NOT NULL,
@@ -568,124 +555,75 @@ def migrate_from_gamehub(players: list, tokens: list) -> int:
     return count
 
 
-# ── Credits ─────────────────────────────────────────────────────
-# Shared, account-wide balance. Apps charge against it for optional paid
-# features; the platform never decides what costs what — each app's own
-# backend decides when to call spend_credits(). balance is only ever
-# mutated by the atomic UPDATEs below, never by a Python read-modify-write,
-# so concurrent spends can't both succeed against a balance that covers
-# only one of them.
+# ── Credits — a premium feature ─────────────────────────────────
+# Shared, account-wide balance apps charge against for optional paid features.
+# The implementation is not here: it lives in backend/premium/apphub/, which
+# only a licensed installation ever downloads. What is left below is the
+# scaffolding — the names other modules import, each of which asks for that
+# module and refuses when it is absent. An installation without a licence has
+# no credit code and no credit tables at all, so there is nothing to unlock.
 
 class CreditError(Exception):
     """Raised by spend_credits/grant_credits on insufficient balance or bad input."""
     pass
 
 
+def _credits():
+    """The premium credits module, or None on an unlicensed installation.
+
+    Asked for per call rather than held in a variable: a licence entered in
+    Settings makes the folder appear in this running process, and removing one
+    deletes it, so anything cached at import time would be permanently wrong
+    in one direction or the other.
+    """
+    prem = sys.modules.get("backend.premium")
+    return prem.load_core_premium("apphub") if prem else None
+
+
+def credits_available() -> bool:
+    """Whether this installation has credits at all.
+
+    Public surfaces use this to leave the feature out entirely — no pill, no
+    menu item, no tab — because the people there cannot buy a licence and
+    nothing about it would be actionable to them.
+    """
+    return _credits() is not None
+
+
+def _require_credits():
+    mod = _credits()
+    if mod is None:
+        raise CreditError("premium_required")
+    return mod
+
+
 def get_credit_balance(user_id: str) -> int:
-    with _db() as conn:
-        row = conn.execute("SELECT balance FROM credits WHERE user_id=?", (user_id,)).fetchone()
-    return row["balance"] if row else 0
+    """The balance, or 0 where the feature does not exist — a caller that only
+    wants to show a number should not have to handle premium at all."""
+    mod = _credits()
+    return mod.get_balance(user_id) if mod else 0
 
 
 def get_credit_transactions(user_id: str, limit: int = 50) -> list:
-    with _db() as conn:
-        rows = conn.execute(
-            "SELECT app_id, delta, balance_after, reason, created_at FROM credit_transactions "
-            "WHERE user_id=? ORDER BY id DESC LIMIT ?",
-            (user_id, limit)
-        ).fetchall()
-    return [dict(r) for r in rows]
-
-
-def _credit_delta(user_id: str, app_id: str, delta: int, reason: str,
-                   idempotency_key: Optional[str], require_funds: bool) -> int:
-    if not app_id:
-        raise CreditError("app_id required")
-    now = datetime.now(timezone.utc).isoformat()
-    with _db() as conn:
-        conn.execute("BEGIN IMMEDIATE")
-        try:
-            if idempotency_key:
-                existing = conn.execute(
-                    "SELECT balance_after FROM credit_transactions WHERE app_id=? AND idempotency_key=?",
-                    (app_id, idempotency_key)
-                ).fetchone()
-                if existing is not None:
-                    conn.execute("COMMIT")
-                    return existing["balance_after"]
-
-            conn.execute(
-                "INSERT OR IGNORE INTO credits(user_id, balance) VALUES(?, 0)", (user_id,)
-            )
-            if require_funds:
-                # Atomic check-and-deduct: the row is only touched if the
-                # balance already covers it, so a concurrent second spend
-                # racing against this one sees the post-deduction balance
-                # (SQLite serializes writers) and fails cleanly instead of
-                # both succeeding.
-                cur = conn.execute(
-                    "UPDATE credits SET balance = balance - ? WHERE user_id=? AND balance >= ?",
-                    (delta, user_id, delta)
-                )
-                if cur.rowcount == 0:
-                    conn.execute("ROLLBACK")
-                    raise CreditError("Insufficient credits")
-            else:
-                conn.execute(
-                    "UPDATE credits SET balance = balance + ? WHERE user_id=?",
-                    (delta, user_id)
-                )
-
-            new_balance = conn.execute(
-                "SELECT balance FROM credits WHERE user_id=?", (user_id,)
-            ).fetchone()["balance"]
-
-            signed = -delta if require_funds else delta
-            try:
-                conn.execute(
-                    "INSERT INTO credit_transactions"
-                    "(user_id, app_id, delta, balance_after, reason, idempotency_key, created_at)"
-                    " VALUES(?,?,?,?,?,?,?)",
-                    (user_id, app_id, signed, new_balance, reason or "", idempotency_key, now)
-                )
-            except sqlite3.IntegrityError:
-                # Lost the race on the idempotency key to a concurrent identical
-                # request — undo our own delta and return the winner's result.
-                conn.execute("ROLLBACK")
-                with _db() as conn2:
-                    row = conn2.execute(
-                        "SELECT balance_after FROM credit_transactions WHERE app_id=? AND idempotency_key=?",
-                        (app_id, idempotency_key)
-                    ).fetchone()
-                return row["balance_after"] if row else get_credit_balance(user_id)
-
-            conn.execute("COMMIT")
-            return new_balance
-        except CreditError:
-            raise
-        except Exception:
-            conn.execute("ROLLBACK")
-            raise
+    mod = _credits()
+    return mod.get_transactions(user_id, limit) if mod else []
 
 
 def spend_credits(user_id: str, app_id: str, amount: int, reason: str = "",
                    idempotency_key: Optional[str] = None) -> int:
     """Deduct `amount` credits from user_id on behalf of app_id. Returns the
-    resulting balance. Raises CreditError if amount is invalid or balance is
-    insufficient. Safe to retry with the same idempotency_key (per app_id) —
-    a repeat call returns the original result instead of charging again."""
-    if amount <= 0:
-        raise CreditError("amount must be positive")
-    return _credit_delta(user_id, app_id, amount, reason, idempotency_key, require_funds=True)
+    resulting balance. Raises CreditError if amount is invalid, the balance is
+    insufficient, or this installation has no licence. Safe to retry with the
+    same idempotency_key (per app_id) — a repeat call returns the original
+    result instead of charging again."""
+    return _require_credits().spend(user_id, app_id, amount, reason, idempotency_key)
 
 
 def grant_credits(user_id: str, app_id: str, amount: int, reason: str = "",
                    idempotency_key: Optional[str] = None) -> int:
     """Add `amount` credits to user_id, attributed to app_id (e.g. a reward,
     a refund, an admin top-up). Returns the resulting balance."""
-    if amount <= 0:
-        raise CreditError("amount must be positive")
-    return _credit_delta(user_id, app_id, amount, reason, idempotency_key, require_funds=False)
+    return _require_credits().grant(user_id, app_id, amount, reason, idempotency_key)
 
 
 # ── Routers ────────────────────────────────────────────────────
@@ -767,8 +705,15 @@ async def me_pub(x_pub_token: Optional[str] = Header(default=None)):
     u = get_pub_session(x_pub_token)
     if not u:
         raise HTTPException(401)
-    return JSONResponse({k: u[k] for k in
-        ("id", "username", "display_name", "avatar_color", "avatar_data", "avatar_svg", "theme", "font_size", "language")})
+    return JSONResponse({
+        **{k: u[k] for k in
+           ("id", "username", "display_name", "avatar_color", "avatar_data",
+            "avatar_svg", "theme", "font_size", "language")},
+        # Which optional features this installation actually has. Public pages
+        # draw nothing for a feature that is missing — no locks, no upsell,
+        # nothing to notice.
+        "credits": credits_available(),
+    })
 
 
 class MeUpdateBody(BaseModel):
@@ -1115,15 +1060,36 @@ async def get_stats_admin(session=Depends(get_current_session)):
     return JSONResponse({"total_users": total, "active_sessions": active})
 
 
+@_admin.get("/features")
+async def get_features_admin(session=Depends(get_current_session)):
+    """Which optional Apps Hub features this installation actually has.
+
+    The desktop asks here rather than reading the licence status: a valid
+    licence whose premium build has not been downloaded yet is not the same
+    thing as a working feature, and only the presence of the code decides.
+    """
+    return JSONResponse({"credits": credits_available()})
+
+
 # ── Credits: public (self) endpoints ───────────────────────────
 # In-process app backends should call spend_credits()/grant_credits()
 # directly (see module docstring). These HTTP routes exist for: (a) the
 # apphub public page's own "Credits" tab, and (b) any app whose paid
 # feature is implemented client-side or in a separate process that can't
 # import backend.apphub directly.
+#
+# Without a licence they answer 404, not 402: to someone on a public page the
+# feature does not exist, and a "payment required" would be an offer they have
+# no way to accept — they cannot reach this machine's settings at all.
+
+def _credits_or_404():
+    if not credits_available():
+        raise HTTPException(404)
+
 
 @_pub.get("/credits")
 async def get_credits_pub(x_pub_token: Optional[str] = Header(default=None)):
+    _credits_or_404()
     u = get_pub_session(x_pub_token)
     if not u:
         raise HTTPException(401)
@@ -1132,6 +1098,7 @@ async def get_credits_pub(x_pub_token: Optional[str] = Header(default=None)):
 
 @_pub.get("/credits/transactions")
 async def get_credit_transactions_pub(x_pub_token: Optional[str] = Header(default=None)):
+    _credits_or_404()
     u = get_pub_session(x_pub_token)
     if not u:
         raise HTTPException(401)
@@ -1147,6 +1114,7 @@ class SpendBody(BaseModel):
 
 @_pub.post("/credits/spend")
 async def spend_credits_pub(body: SpendBody, x_pub_token: Optional[str] = Header(default=None)):
+    _credits_or_404()
     u = get_pub_session(x_pub_token)
     if not u:
         raise HTTPException(401)
@@ -1158,9 +1126,18 @@ async def spend_credits_pub(body: SpendBody, x_pub_token: Optional[str] = Header
 
 
 # ── Credits: admin endpoints ────────────────────────────────────
+# The desktop is the one place where premium is worth naming: whoever is here
+# can actually activate a licence, so these answer 402 premium_required and the
+# Apps Hub window turns that into the usual premium modal.
+
+def _credits_or_402():
+    if not credits_available():
+        raise HTTPException(402, detail="premium_required")
+
 
 @_admin.get("/credits/{uid}")
 async def get_credits_admin(uid: str, session=Depends(get_current_session)):
+    _credits_or_402()
     return JSONResponse({
         "balance":      get_credit_balance(uid),
         "transactions": get_credit_transactions(uid),
@@ -1177,6 +1154,7 @@ async def grant_credits_admin(uid: str, body: GrantBody, session=Depends(get_cur
     """Manual top-up/correction by an mvmOS admin. app_id is fixed to
     'apphub' so these are visibly distinct from app-issued rewards in the
     transaction log."""
+    _credits_or_402()
     try:
         balance = grant_credits(uid, "apphub", body.amount, body.reason or "Admin grant")
     except CreditError as e:
@@ -1194,26 +1172,14 @@ async def deduct_credits_admin(uid: str, body: AdjustBody, session=Depends(get_c
     """Manual correction (e.g. reversing a grant typo). Not gated on balance
     sufficiency the way spend_credits is for apps — admin can also zero out
     an over-grant."""
+    _credits_or_402()
     if body.amount <= 0:
         raise HTTPException(400, detail="amount must be positive")
-    with _db() as conn:
-        conn.execute("INSERT OR IGNORE INTO credits(user_id, balance) VALUES(?, 0)", (uid,))
-        before = conn.execute("SELECT balance FROM credits WHERE user_id=?", (uid,)).fetchone()["balance"]
-        conn.execute("UPDATE credits SET balance = MAX(0, balance - ?) WHERE user_id=?", (body.amount, uid))
-        new_balance = conn.execute("SELECT balance FROM credits WHERE user_id=?", (uid,)).fetchone()["balance"]
-        # Log the delta that actually happened, not the requested amount —
-        # if amount > before, the clamp to 0 means fewer credits were removed
-        # than asked; the transaction history must reflect reality.
-        actual_delta = new_balance - before
-        conn.execute(
-            "INSERT INTO credit_transactions"
-            "(user_id, app_id, delta, balance_after, reason, idempotency_key, created_at)"
-            " VALUES(?,?,?,?,?,?,?)",
-            (uid, "apphub", actual_delta, new_balance, body.reason or "Admin deduct", None,
-             datetime.now(timezone.utc).isoformat())
-        )
-        conn.commit()
-    return JSONResponse({"ok": True, "balance": new_balance})
+    try:
+        result = _require_credits().admin_deduct(uid, body.amount, body.reason or "Admin deduct")
+    except CreditError as e:
+        raise HTTPException(400, detail=str(e))
+    return JSONResponse({"ok": True, "balance": result["balance"]})
 
 
 router.include_router(_admin)

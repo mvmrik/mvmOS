@@ -668,6 +668,7 @@ window._i18n = {
   'ah_delete':                     'Delete',
   'ah_delete_user_confirm':       'Delete user "{name}"? This will revoke all their sessions.',
   'ah_credits_title':              '💳 Credits — {name}',
+  'ah_credits_premium':            'Credits are a premium feature. With an active licence you can top up, deduct and follow every account’s balance and history.',
   'ah_credits_amount_ph':         'Amount',
   'ah_credits_add':                '+ Add',
   'ah_credits_remove':             '− Remove',

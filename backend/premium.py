@@ -172,6 +172,19 @@ async def heartbeat_loop() -> None:
             if state.get("license_key"):
                 await _refresh(state)
                 _save(state)
+                # A licensed installation that has no core premium build on disk
+                # is one that was just updated or restored; fetch it here so the
+                # feature comes back on its own instead of waiting for someone to
+                # re-enter the key.
+                if state.get("status") == "premium":
+                    for name in CORE_PREMIUM_MODULES:
+                        if not os.path.isdir(_core_premium_dir(name)):
+                            try:
+                                await download_core_premium(name)
+                            except (PermissionError, RuntimeError):
+                                pass
+            else:
+                clear_core_premium()
         except Exception:
             pass
         await asyncio.sleep(HEARTBEAT_SECONDS)
@@ -235,6 +248,130 @@ def load_premium_backend(app_id: str):
                 exec(compile(source, path, "exec"), mod.__dict__)
         return mod
     return None
+
+
+CORE_PREMIUM_MODULES = ("apphub",)
+
+_core_modules = {}
+
+
+def _core_premium_dir(name: str) -> str:
+    """Where a core premium build lives: backend/premium/<name>/, beside the
+    subsystem it extends, exactly as an app keeps its own in apps/<id>/premium/.
+    """
+    return os.path.join(os.path.dirname(__file__), "premium", name)
+
+
+def load_core_premium(name: str):
+    """The premium module for a core subsystem, or None when this installation
+    has no licence. Core code, so it is loaded unconfined like the rest of
+    backend/ — the sandbox is for app code, and this never is.
+
+    Cached on the file's mtime, because the folder appears and disappears while
+    the process runs: a licence typed into Settings downloads it seconds later,
+    and removing one deletes it. That is also why callers ask here per request
+    instead of mounting a router at startup — a router assembled at boot could
+    never see a folder that arrives afterwards.
+    """
+    path = os.path.join(_core_premium_dir(name), "backend.py")
+    try:
+        stamp = os.path.getmtime(path)
+    except OSError:
+        _core_modules.pop(name, None)
+        return None
+    cached = _core_modules.get(name)
+    if cached and cached[0] == stamp:
+        return cached[1]
+    import importlib.util
+    import sys as _sys
+
+    isolation = _sys.modules.get("backend.app_isolation")
+    spec = importlib.util.spec_from_file_location(f"backend_premium_{name}", path)
+    mod = importlib.util.module_from_spec(spec)
+    # The request that asks for this may come from a confined app going through
+    # the Platform API, and core code is never loaded under an app's root.
+    if isolation is None:
+        spec.loader.exec_module(mod)
+    else:
+        with isolation.release():
+            spec.loader.exec_module(mod)
+    _core_modules[name] = (stamp, mod)
+    return mod
+
+
+async def download_core_premium(name: str) -> bool:
+    """Fetch core/<name>/premium.zip from mvmos.org into backend/premium/<name>/.
+
+    Same deal as an app's build: the licence goes out in the headers and the
+    server answers with the file or refuses, so an unlicensed installation
+    never receives the code and has nothing to unlock.
+    """
+    import io
+    import zipfile
+
+    import httpx
+
+    if not _SAFE_NAME.match(name):
+        raise RuntimeError("Bad name")
+    url = f"{SITE}/api/premium/content/core/{name}/premium.zip"
+    async with httpx.AsyncClient(timeout=60) as client:
+        try:
+            r = await client.get(url, headers=license_headers())
+        except Exception:
+            raise RuntimeError("Cannot fetch core premium build")
+    if r.status_code == 404:
+        return False
+    if r.status_code in (401, 402, 403):
+        raise PermissionError("premium_required")
+    if r.status_code != 200:
+        raise RuntimeError("Cannot fetch core premium build")
+
+    # Only now, with the new build already in hand, is the old one removed —
+    # a download that fails must never leave the installation with neither.
+    clear_core_premium(name)
+    target = _core_premium_dir(name)
+    with zipfile.ZipFile(io.BytesIO(r.content)) as zf:
+        for entry in zf.namelist():
+            if entry.endswith("/") or entry.startswith("/") or ".." in entry:
+                continue
+            dest = os.path.join(target, entry)
+            os.makedirs(os.path.dirname(dest), exist_ok=True)
+            with open(dest, "wb") as fh:
+                fh.write(zf.read(entry))
+    _core_modules.pop(name, None)
+    return True
+
+
+def clear_core_premium(name: str = None) -> None:
+    """Wipe one core premium build, or every one of them. Called when the
+    licence goes away, and before every fresh download so a stale build can
+    never sit next to code it was not made for.
+    """
+    import shutil
+
+    for mod_name in ((name,) if name else CORE_PREMIUM_MODULES):
+        target = _core_premium_dir(mod_name)
+        if os.path.isdir(target):
+            shutil.rmtree(target)
+        _core_modules.pop(mod_name, None)
+
+
+async def sync_core_premium() -> None:
+    """Bring every core premium build in line with the licence: gone when there
+    is no key, freshly downloaded when there is one."""
+    state = _load()
+    if not state.get("license_key", "").strip():
+        clear_core_premium()
+        return
+    for name in CORE_PREMIUM_MODULES:
+        try:
+            await download_core_premium(name)
+        except PermissionError:
+            clear_core_premium(name)
+        except RuntimeError:
+            # Unreachable site: keep whatever is already on disk rather than
+            # breaking a working feature because of a network blip.
+            pass
 
 
 def is_premium() -> bool:
@@ -417,14 +554,17 @@ async def sync_all_premium() -> None:
             await download_premium(app_id)
         except (PermissionError, RuntimeError):
             pass
+    # Core has premium features of its own now, delivered exactly the same way.
+    await sync_core_premium()
 
 
 def clear_all_premium() -> None:
-    """Removal hook: wipe premium/ from every installed app so nothing
-    licensed stays behind once the key is gone.
+    """Removal hook: wipe premium/ from every installed app, and every core
+    premium build, so nothing licensed stays behind once the key is gone.
     """
     for app_id in _installed_app_ids():
         clear_premium_dir(app_id)
+    clear_core_premium()
 
 
 @router.get("/devices")

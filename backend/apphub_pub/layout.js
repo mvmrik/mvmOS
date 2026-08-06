@@ -460,17 +460,22 @@
 
       var creditsUnit = tt('ah_pub_credits_unit', 'credits');
       var creditsText = credits != null ? (credits + ' ' + creditsUnit) : creditsUnit;
+      // Credits are a premium feature of the installation. Where it has no
+      // licence they are left out altogether — no pill, no menu item, no lock
+      // and no mention of premium. Nobody reading a public page can activate
+      // anything on this machine, so a hint would only be noise.
+      var hasCredits = !!(user && user.credits);
 
       var box = document.createElement('div');
       box.className = 'mvm-user';
       box.innerHTML =
         '<button class="mvm-avatar-btn" type="button" aria-haspopup="true" aria-expanded="false">'
           + renderAvatar(user, 28)
-          + (credits ? '<span class="mvm-credits-pill">🪙 ' + esc(credits) + '</span>' : '')
+          + (hasCredits && credits ? '<span class="mvm-credits-pill">🪙 ' + esc(credits) + '</span>' : '')
         + '</button>'
         + '<div class="mvm-menu" hidden>'
           + '<div class="mvm-menu-hdr">' + renderAvatar(user, 32) + '<span class="mvm-menu-name">' + esc(user.display_name) + '</span></div>'
-          + '<a class="mvm-menu-item" href="/pub/apphub/?tab=credits" data-tab="credits">🪙 ' + esc(creditsText) + '</a>'
+          + (hasCredits ? '<a class="mvm-menu-item" href="/pub/apphub/?tab=credits" data-tab="credits">🪙 ' + esc(creditsText) + '</a>' : '')
           + '<a class="mvm-menu-item" href="/pub/apphub/?tab=profile" data-tab="profile">👤 ' + esc(tt('ah_pub_tab_profile', 'Profile')) + '</a>'
           + '<a class="mvm-menu-item" href="/pub/apphub/?tab=settings" data-tab="settings">⚙️ ' + esc(tt('ah_pub_tab_settings', 'Settings')) + '</a>'
           + '<button class="mvm-menu-item mvm-menu-logout" type="button">↪ ' + esc(tt('ah_logout', 'Logout')) + '</button>'
@@ -589,7 +594,11 @@
   async function refresh() {
     renderHeader();   // placeholder, or the previous header while this reloads
 
-    _lastResults = await Promise.all([fetchAppMeta(), fetchUser(), fetchCredits()]);
+    var base = await Promise.all([fetchAppMeta(), fetchUser()]);
+    // The balance is only worth asking for where the installation has the
+    // feature at all — /me says so, and without it the endpoint does not exist.
+    var credits = base[1] && base[1].credits ? await fetchCredits() : null;
+    _lastResults = [base[0], base[1], credits];
     renderHeader();
 
     var user = _lastResults[1];

@@ -238,13 +238,19 @@ async def call_app(app_id: str, body: CallBody, request: Request,
 @router.get("/credits")
 async def credits_balance(request: Request, x_pub_token: Optional[str] = Header(default=None)):
     """Credit balance for the calling Apps Hub account. Credits are keyed on
-    the hub account, so a desktop-only user has none until they log in."""
+    the hub account, so a desktop-only user has none until they log in.
+
+    404 on an installation without a premium licence: credits do not exist
+    there, and an app asking for them should fall back to its free behaviour
+    rather than show a locked feature to someone who cannot unlock it."""
     who = _caller(request, x_pub_token)
     if not who["pub_user_id"]:
         raise HTTPException(401, "Apps Hub account required")
     hub = _hub()
     if hub is None:
         raise HTTPException(503, "Apps Hub unavailable")
+    if not hub.credits_available():
+        raise HTTPException(404, "credits_unavailable")
     with app_isolation.release():
         balance = hub.get_credit_balance(who["pub_user_id"])
     return JSONResponse({"balance": balance})
@@ -266,6 +272,8 @@ async def credits_spend(body: SpendBody, request: Request,
     if not who["pub_user_id"]:
         raise HTTPException(401, "Apps Hub account required")
     hub = _hub()
+    if hub is not None and not hub.credits_available():
+        raise HTTPException(404, "credits_unavailable")
     try:
         with app_isolation.release():
             result = hub.spend_credits(who["pub_user_id"], body.app_id, body.amount,
