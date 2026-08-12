@@ -577,7 +577,7 @@ const AppStore = (() => {
           ${app.installed
             ? `<button class="s-btn s-btn-sm as-mvmos-open" data-id="${app.id}">▶ ${t('appstore_open')}</button>
                ${app.settings?.length ? `<button class="s-btn s-btn-sm as-mvmos-settings" data-id="${app.id}">⚙</button>` : ''}
-               <button class="s-btn s-btn-sm s-btn-danger as-mvmos-remove" data-id="${app.id}" data-name="${app.name}">${t('appstore_remove')}</button>`
+               ${app.is_system ? '' : `<button class="s-btn s-btn-sm s-btn-danger as-mvmos-remove" data-id="${app.id}" data-name="${app.name}">${t('appstore_remove')}</button>`}`
             : `<button class="s-btn s-btn-sm as-mvmos-install" data-app='${JSON.stringify(app)}'>${t('appstore_install')}</button>`}
         </div>
       `;
@@ -613,14 +613,14 @@ const AppStore = (() => {
           const result2 = await res2.json();
           console.log('[appstore] install result2:', result2);
           if (result2.ok) {
-            mvmOS._loadPlugin(appData.id);
+            await mvmOS._refreshPlugins(); mvmOS._loadPlugin(appData.id);
             body._as?.refreshCurrent?.();
           } else {
             btn.disabled = false; btn.textContent = btn.dataset.orig || t('appstore_install');
             alert('Failed: ' + (result2.error || 'unknown'));
           }
         } else if (result.ok) {
-          mvmOS._loadPlugin(appData.id);
+          await mvmOS._refreshPlugins(); mvmOS._loadPlugin(appData.id);
           body._as?.refreshCurrent?.();
         } else if (result.min_core_version) {
           btn.disabled = false; btn.textContent = btn.dataset.orig || t('appstore_install');

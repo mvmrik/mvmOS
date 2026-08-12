@@ -175,7 +175,7 @@ def _install_from_zip(zip_bytes: bytes, plugin_id: str, install_backend: bool) -
                 os.makedirs(os.path.dirname(dest), exist_ok=True)
                 open(dest, "wb").write(data)
 
-            elif rel in ("db.json", "extension.json") or parts[0] == "premium" or (
+            elif rel in ("db.json", "extension.json") or parts[0] in ("extension", "premium") or (
                     len(parts) == 1 and rel.endswith(".py")):
                 # Schema, the app's own server code (api.py, desktop.py, and
                 # plugin files like telegram.py / mp_game.py / scheduler.py)

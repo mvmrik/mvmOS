@@ -36,6 +36,14 @@ _COMMAND_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,49}$")
 _SERVICE_WORKER = "mvm-service-worker.js"
 _TEMPLATES = os.path.join(os.path.dirname(__file__), "extension_templates")
 
+def _script_path(app_dir: str, name: str) -> str:
+    """Resolve an extension script from a current or legacy installed app."""
+    path = os.path.join(app_dir, name)
+    if os.path.isfile(path):
+        return path
+    return os.path.join(app_dir, "public", name)
+
+
 
 def _app_scripts(app_dir: str, values, single: bool = False):
     """Validate a declared script list and confirm each file really exists."""
@@ -52,7 +60,7 @@ def _app_scripts(app_dir: str, values, single: bool = False):
         # The name pattern already bars "..", but a symlink inside extension/
         # could still point out of the app, so resolve and confirm containment
         # rather than trusting the string.
-        path = os.path.realpath(os.path.join(app_dir, name))
+        path = os.path.realpath(_script_path(app_dir, name))
         if os.path.commonpath([root, path]) != root or not os.path.isfile(path):
             return None
     return list(dict.fromkeys(values))
@@ -311,7 +319,7 @@ def _package(metadata: dict, browser: str, initial_server: str) -> bytes:
         *[js for entry in metadata["content_scripts"] for js in entry["js"]],
     ]:
         try:
-            with open(os.path.join(app_dir, name), encoding="utf-8") as file:
+            with open(_script_path(app_dir, name), encoding="utf-8") as file:
                 files[_flat_names([name])[0]] = file.read()
         except OSError as exc:
             raise HTTPException(500, detail="extension_script_missing") from exc

@@ -696,6 +696,13 @@ var mvmOS = (() => {
   let _projectNoApp = new Set();
   let _pluginsCache = [];
 
+  async function _refreshPlugins() {
+    const res = await fetch('/api/plugins');
+    if (!res.ok) throw new Error('plugins_unavailable');
+    _pluginsCache = await res.json();
+    return _pluginsCache;
+  }
+
   async function _loadAllPlugins() {
     try {
       const pres = await fetch('/api/projects');
@@ -706,9 +713,7 @@ var mvmOS = (() => {
       }
     } catch (_) {}
     try {
-      const res = await fetch('/api/plugins');
-      const plugins = await res.json();
-      _pluginsCache = plugins;
+      const plugins = await _refreshPlugins();
       for (const plugin of plugins) {
         // system apps (terminal, filemanager, ...) live inline in _SYSTEM_APP_DEFS()
         // and have no apps/<id>/main.js file — loading them here would always 404
@@ -1055,10 +1060,15 @@ var mvmOS = (() => {
       // would vanish the instant you looked, before you could act on it.
       btn.addEventListener('click', e => {
         e.stopPropagation();
-        panel.classList.toggle('open');
+        const open = !panel.classList.contains('open');
+        panel.classList.toggle('open', open);
+        btn.setAttribute('aria-expanded', String(open));
       });
       document.addEventListener('click', e => {
-        if (!e.target.closest('#notif-btn') && !e.target.closest('#notif-panel')) panel.classList.remove('open');
+        if (!e.target.closest('#notif-btn') && !e.target.closest('#notif-panel')) {
+          panel.classList.remove('open');
+          btn.setAttribute('aria-expanded', 'false');
+        }
       });
     }
     setTimeout(() => { _checkUpdates(); setInterval(_checkUpdates, 5 * 60 * 1000); }, 10000);
@@ -1537,6 +1547,7 @@ var mvmOS = (() => {
     _removeFromStartMenu,
     _removeWidget,
     _loadAllPlugins,
+    _refreshPlugins,
     _setEditMode,
     _applyTheme,
     _runNotifAction,
