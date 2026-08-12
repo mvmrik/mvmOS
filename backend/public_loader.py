@@ -162,6 +162,18 @@ def reload_app(app_id: str) -> bool:
     return _load_one(_app_ref, app_id)
 
 
+def unload_app(app_id: str) -> None:
+    """Remove an uninstalled app's routes and in-memory code immediately."""
+    if _app_ref is not None:
+        _app_ref.routes[:] = [
+            route for route in _app_ref.routes
+            if getattr(route, "_app_public", None) != app_id
+        ]
+    _public_routers.pop(app_id, None)
+    sys.modules.pop(f"app_public_{app_id}", None)
+    sys.modules.pop(f"app_desktop_{app_id}", None)
+
+
 def install(app_id: str, source_code: str) -> None:
     app_dir = os.path.join(BACKENDS_DIR, app_id)
     os.makedirs(app_dir, exist_ok=True)

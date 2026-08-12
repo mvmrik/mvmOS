@@ -434,6 +434,7 @@ async def list_plugins(session=Depends(get_current_session)):
     result = []
     for r in rows:
         item = dict(r)
+        item["has_backend"] = app_backends.has_backend(r["id"])
         mf_path = os.path.join(_app_dir(r["id"]), "manifest.json")
         try:
             with open(mf_path) as f:
@@ -705,6 +706,10 @@ async def uninstall_plugin(plugin_id: str, session=Depends(get_current_session))
     if any(a["id"] == plugin_id for a in SYSTEM_APPS):
         return JSONResponse({"error": "System apps cannot be uninstalled"}, status_code=400)
     app_dir = _app_dir(plugin_id)
+    # A removed app must stop serving routes immediately.  Otherwise its
+    # already imported api.py stays alive until the next backend restart.
+    from . import public_loader
+    public_loader.unload_app(plugin_id)
     if os.path.isdir(app_dir):
         shutil.rmtree(app_dir)
     app_backends.uninstall(plugin_id)

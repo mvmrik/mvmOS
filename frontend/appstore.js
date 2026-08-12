@@ -577,7 +577,7 @@ const AppStore = (() => {
           ${app.installed
             ? `<button class="s-btn s-btn-sm as-mvmos-open" data-id="${app.id}">▶ ${t('appstore_open')}</button>
                ${app.settings?.length ? `<button class="s-btn s-btn-sm as-mvmos-settings" data-id="${app.id}">⚙</button>` : ''}
-               ${app.is_system ? '' : `<button class="s-btn s-btn-sm s-btn-danger as-mvmos-remove" data-id="${app.id}" data-name="${app.name}">${t('appstore_remove')}</button>`}`
+               ${app.is_system ? '' : `<button class="s-btn s-btn-sm s-btn-danger as-mvmos-remove" data-id="${app.id}" data-name="${app.name}" data-has-backend="${app.has_backend ? '1' : '0'}">${t('appstore_remove')}</button>`}`
             : `<button class="s-btn s-btn-sm as-mvmos-install" data-app='${JSON.stringify(app)}'>${t('appstore_install')}</button>`}
         </div>
       `;
@@ -613,14 +613,20 @@ const AppStore = (() => {
           const result2 = await res2.json();
           console.log('[appstore] install result2:', result2);
           if (result2.ok) {
-            await mvmOS._refreshPlugins(); mvmOS._loadPlugin(appData.id);
+            const wasOpen = Array.from(document.querySelectorAll('.window')).some(win => win.dataset.winId === appData.id);
+            await mvmOS._refreshPlugins();
+            await mvmOS._loadPlugin(appData.id);
+            if (wasOpen) Desktop.reloadApp?.(appData.id);
             body._as?.refreshCurrent?.();
           } else {
             btn.disabled = false; btn.textContent = btn.dataset.orig || t('appstore_install');
             alert('Failed: ' + (result2.error || 'unknown'));
           }
         } else if (result.ok) {
-          await mvmOS._refreshPlugins(); mvmOS._loadPlugin(appData.id);
+          const wasOpen = Array.from(document.querySelectorAll('.window')).some(win => win.dataset.winId === appData.id);
+          await mvmOS._refreshPlugins();
+          await mvmOS._loadPlugin(appData.id);
+          if (wasOpen) Desktop.reloadApp?.(appData.id);
           body._as?.refreshCurrent?.();
         } else if (result.min_core_version) {
           btn.disabled = false; btn.textContent = btn.dataset.orig || t('appstore_install');
@@ -651,10 +657,9 @@ const AppStore = (() => {
       row.querySelector('.as-mvmos-remove')?.addEventListener('click', async e => {
         const btn = e.target;
         const appLabel = btn.dataset.name || btn.dataset.id;
-        const confirmed = await mvmOS.requireRoot(
-          t('appstore_remove'),
-          `"${appLabel}" ${t('appstore_backend_warn')}`
-        );
+        const confirmed = btn.dataset.hasBackend === '1'
+          ? await _backendConfirmDialog(body, appLabel)
+          : await mvmOS.confirm(`Remove "${appLabel}"?`, { danger: true });
         if (!confirmed) return;
         btn.disabled = true; btn.textContent = t('um_removing');
         await fetch(`/api/plugins/${btn.dataset.id}`, { method: 'DELETE' });

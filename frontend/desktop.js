@@ -1955,5 +1955,14 @@ const Desktop = (() => {
     _trayQuit(id);
   }
 
-  return { createWindow, closeWindow, focusWindow, openApp, initMobileSidebar: _initMobileSidebar, sendToTray, restoreFromTray, setWindowCloseToTray, removeApp };
+  // Recreate an app that was open while its files were replaced by an update.
+  function reloadApp(id) {
+    const wasOpen = !!windows[id] || !!_trayItems[id];
+    if (!wasOpen) return;
+    _trayQuit(id);
+    const launch = window.mvmOS?._apps?.[id]?.launch;
+    if (launch) launch();
+  }
+
+  return { createWindow, closeWindow, focusWindow, openApp, initMobileSidebar: _initMobileSidebar, sendToTray, restoreFromTray, setWindowCloseToTray, removeApp, reloadApp };
 })();

@@ -1043,7 +1043,12 @@ var mvmOS = (() => {
     if (!e.target.closest('.start-submenu') && !e.target.closest('#start-apps-btn')) _closeFlyout();
   });
 
+  let _initialized = false;
   function _init() {
+    // A second startup signal used to register the bell handler twice. One
+    // click then opened the panel and immediately closed it again.
+    if (_initialized) return;
+    _initialized = true;
     // register built-in apps so desktop icons can find their icons
     _SYSTEM_APP_DEFS().forEach(def => { _apps[def.id] = def; });
 
