@@ -155,14 +155,20 @@ def _load_one(app: FastAPI, app_id: str) -> bool:
         return False
 
 
+def reload_app(app_id: str) -> bool:
+    """Load or replace an installed app routes in the running server."""
+    if _app_ref is None:
+        return False
+    return _load_one(_app_ref, app_id)
+
+
 def install(app_id: str, source_code: str) -> None:
     app_dir = os.path.join(BACKENDS_DIR, app_id)
     os.makedirs(app_dir, exist_ok=True)
     path = os.path.join(app_dir, "public.py")
     with open(path, "w") as f:
         f.write(source_code)
-    if _app_ref is not None:
-        _load_one(_app_ref, app_id)
+    reload_app(app_id)
 
 
 def get_router(app_id: str):

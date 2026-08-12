@@ -232,6 +232,13 @@ def _install_from_zip(zip_bytes: bytes, plugin_id: str, install_backend: bool) -
         if install_backend and pub_code:
             from . import public_loader
             public_loader.install(plugin_id, pub_code)
+        if os.path.isfile(os.path.join(app_dir, "api.py")) or os.path.isfile(os.path.join(app_dir, "desktop.py")):
+            # api.py/desktop.py were just written straight into app_dir above
+            # (the modern format) rather than passed as pub_code — public_loader
+            # only picks those up at process startup unless told to reload now,
+            # which would otherwise leave the app's routes 404 until a restart.
+            from . import public_loader
+            public_loader.reload_app(plugin_id)
 
         return {"manifest": mf_data, "needs_backend_confirm": False}
 
