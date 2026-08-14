@@ -372,17 +372,12 @@ def _public_lang_bootstrap(browser_only: bool = False) -> str:
     Hub profile or a previous visitor's preference from this shared origin."""
     cache_key = "browser_only" if browser_only else "default"
     i18n_dir = os.path.join(os.path.dirname(__file__), "..", "frontend", "i18n")
-    # Cached on the directory's own mtime instead of listed per request: this
-    # runs for every public HTML response, while the listing only changes when a
-    # language file is added or removed — which still takes effect at once, with
-    # no reload needed.
-    try:
-        stamp = os.stat(i18n_dir).st_mtime
-    except OSError:
-        stamp = None
-    cached = _LANG_BOOTSTRAP_CACHE.get(cache_key)
-    if cached and cached.get("stamp") == stamp:
-        return cached["html"]
+    # Cached rather than listed per request, since this runs for every public
+    # HTML response. The key is the files' own mtimes, not the directory's: a
+    # language file edited in place leaves the directory untouched, so a cache
+    # keyed on the directory kept handing out the previous stamp and browsers
+    # went on serving the language table from before the edit — every new key
+    # rendering as its raw name until the process happened to restart.
     try:
         entries = sorted(
             (f[:-3], int(os.path.getmtime(os.path.join(i18n_dir, f))))
@@ -390,6 +385,10 @@ def _public_lang_bootstrap(browser_only: bool = False) -> str:
         )
     except OSError:
         entries = [("en", 0)]
+    stamp = tuple(entries)
+    cached = _LANG_BOOTSTRAP_CACHE.get(cache_key)
+    if cached and cached.get("stamp") == stamp:
+        return cached["html"]
     langs_js  = json.dumps([code for code, _ in entries])
     stamps_js = json.dumps({code: mt for code, mt in entries})
     # document.write is deliberate. The language is only knowable on the client
@@ -439,7 +438,8 @@ async def layout_inject_middleware(request: Request, call_next):
     added centrally here so every public app gets it for free, including future ones."""
     response = await call_next(request)
     m = _PUB_APP_RE.match(request.url.path)
-    if not m or not response.headers.get("content-type", "").startswith("text/html"):
+    if (not m or not response.headers.get("content-type", "").startswith("text/html")
+            or response.headers.get("X-Mvm-No-Public-Chrome") == "1"):
         return response
     app_id = m.group(1)
     # A received mvmShare link is a tiny decrypt-and-open page, not an Apps

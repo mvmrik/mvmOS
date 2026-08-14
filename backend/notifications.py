@@ -16,7 +16,7 @@ router = APIRouter(prefix="/api/notifications", tags=["notifications"])
 def create_notification(username: str, title: str, body: str = "", kind: str = "persistent",
                          source: str = "system", action_app: str = None, ref: str = None,
                          sender: str = None, title_key: str = None, body_key: str = None,
-                         vars: dict = None, link: str = None) -> dict:
+                         vars: dict = None, link: str = None, audience: str = "hub") -> dict:
     """Insert a notification row. Called both from the HTTP API (below) and
     directly by other backend modules (e.g. chat) that need to notify a user
     other than the current request's session.
@@ -34,15 +34,22 @@ def create_notification(username: str, title: str, body: str = "", kind: str = "
     going through the bell icon.
 
     `title_key`/`body_key`/`vars` are the translated form — see notify() below,
-    which is what apps should call."""
+    which is what apps should call.
+
+    `audience` says which of the two account systems `username` belongs to:
+    'hub' (the default — an Apps Hub profile, which is who an app notifies) or
+    'os' (an mvmOS desktop login). The two namespaces can collide, so this is
+    the only thing that keeps a host-only notice such as a system update out of
+    the public Apps Hub bell of someone who merely shares that name."""
     now = datetime.now(timezone.utc).isoformat()
+    audience = "os" if audience == "os" else "hub"
     with get_conn() as conn:
         cur = conn.execute(
             "INSERT INTO notifications (username, kind, source, title, body, action_app, ref, "
-            "sender, title_key, body_key, vars, link, is_read, created_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)",
+            "sender, title_key, body_key, vars, link, audience, is_read, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)",
             (username, kind, source, title, body, action_app, ref, sender, title_key, body_key,
-             json.dumps(vars) if vars else None, link, now),
+             json.dumps(vars) if vars else None, link, audience, now),
         )
         conn.commit()
         row = conn.execute("SELECT * FROM notifications WHERE id = ?", (cur.lastrowid,)).fetchone()
@@ -51,7 +58,8 @@ def create_notification(username: str, title: str, body: str = "", kind: str = "
 
 def notify(app_id: str, *, to: str, title: str = "", body: str = "", sender: str = None,
            title_key: str = None, body_key: str = None, vars: dict = None,
-           link: str = None, ref: str = None, kind: str = "persistent") -> dict:
+           link: str = None, ref: str = None, kind: str = "persistent",
+           audience: str = "hub") -> dict:
     """Send one person a notification from one app. This is the call an app
     makes; create_notification() above is the raw row insert underneath it.
 
@@ -74,7 +82,7 @@ def notify(app_id: str, *, to: str, title: str = "", body: str = "", sender: str
     return create_notification(
         username=to, title=title, body=body, kind=kind, source=app_id,
         action_app=app_id, ref=ref, sender=sender, title_key=title_key,
-        body_key=body_key, vars=vars, link=link,
+        body_key=body_key, vars=vars, link=link, audience=audience,
     )
 
 
@@ -91,20 +99,50 @@ def notify_hub_user(app_id: str, *, user_id: str, **kwargs):
     return notify(app_id, to=found[0]["username"], **kwargs)
 
 
-def _identities(session, x_pub_token: str = None) -> list:
-    """Return the identity for the surface that is asking.
+def _hub_username(x_pub_token: str = None) -> Optional[str]:
+    if not x_pub_token:
+        return None
+    hub = sys.modules.get("backend.apphub")
+    pub = hub.get_pub_session(x_pub_token) if hub else None
+    return pub["username"] if pub and pub.get("username") else None
 
-    mvmOS accounts and Apps Hub profiles are deliberately separate audiences.
-    When a request supplies an Apps Hub token, it is the public Hub bell and
-    must show *only* notifications addressed to that profile. Mixing the OS
-    identity in there leaked host-only notices such as system updates into the
-    Hub. Without a Hub token this remains the desktop mvmOS notification API.
+
+def _scope(session, x_pub_token: str = None, surface: str = None) -> tuple:
+    """Which rows the asking surface may see: (usernames, hub_only).
+
+    mvmOS accounts and Apps Hub profiles are separate account systems that
+    share this table and can share a name — a Linux login "martin" and an Apps
+    Hub profile "martin" are different people. The desktop is both identities
+    at once and sees everything addressed to either; a public page is only ever
+    the Hub profile, and `hub_only` additionally drops anything written for the
+    OS account, which is what keeps system notices out of the public bell.
+
+    The desktop says which surface it is (frontend/mvmos.js sends the header)
+    rather than being inferred from the session cookie: a public page opened in
+    the same browser carries that cookie too, and the owner's own browser is
+    exactly where the two identities overlap.
     """
-    if x_pub_token:
-        hub = sys.modules.get("backend.apphub")
-        pub = hub.get_pub_session(x_pub_token) if hub else None
-        return [pub["username"]] if pub and pub.get("username") else []
-    return [session["effective_user"]] if session else []
+    hub_name = _hub_username(x_pub_token)
+    if surface == "desktop" and session:
+        ids = [session["effective_user"]]
+        if hub_name and hub_name not in ids:
+            ids.append(hub_name)
+        return ids, False
+    if hub_name:
+        return [hub_name], True
+    if session:
+        return [session["effective_user"]], False
+    return [], True
+
+
+def _where(ids: list, hub_only: bool) -> tuple:
+    """SQL fragment + params selecting exactly the rows `ids` may see."""
+    sql = f"username IN ({','.join('?' * len(ids))})"
+    if hub_only:
+        # NULL only for a row written before the column existed and somehow
+        # missed the backfill; treat it as visible rather than losing it.
+        sql += " AND (audience IS NULL OR audience <> 'os')"
+    return sql, list(ids)
 
 
 class CreateBody(BaseModel):
@@ -123,15 +161,15 @@ async def notification_badges(x_pub_token: str = Header(default=None)):
     (no OS session): lets the public Apps Hub directory (a page someone can
     reach with only a public account, no mvmOS desktop session) show a plain
     badge dot on an app's card without revealing what the notification says."""
-    hub = sys.modules.get("backend.apphub")
-    pub = hub.get_pub_session(x_pub_token) if hub and x_pub_token else None
-    if not pub:
+    name = _hub_username(x_pub_token)
+    if not name:
         return JSONResponse({})
     with get_conn() as conn:
         rows = conn.execute(
             "SELECT DISTINCT action_app FROM notifications "
-            "WHERE username = ? AND is_read = 0 AND action_app IS NOT NULL",
-            (pub["username"],),
+            "WHERE username = ? AND is_read = 0 AND action_app IS NOT NULL "
+            "AND (audience IS NULL OR audience <> 'os')",
+            (name,),
         ).fetchall()
     return JSONResponse({r["action_app"]: True for r in rows})
 
@@ -145,15 +183,17 @@ notification_badges.no_session_auth = True
 # public header. Without this they could see the unread dot on an app card and
 # nothing else: /badges was the one route they could reach.
 @router.get("")
-async def list_notifications(session=Depends(get_current_session_optional), x_pub_token: str = Header(default=None)):
-    ids = _identities(session, x_pub_token)
+async def list_notifications(session=Depends(get_current_session_optional),
+                             x_pub_token: str = Header(default=None),
+                             x_mvm_surface: str = Header(default=None)):
+    ids, hub_only = _scope(session, x_pub_token, x_mvm_surface)
     if not ids:
         return JSONResponse([])
+    where, params = _where(ids, hub_only)
     with get_conn() as conn:
         rows = conn.execute(
-            f"SELECT * FROM notifications WHERE username IN ({','.join('?' * len(ids))}) "
-            "ORDER BY created_at DESC LIMIT 300",
-            ids,
+            f"SELECT * FROM notifications WHERE {where} ORDER BY created_at DESC LIMIT 300",
+            params,
         ).fetchall()
     return JSONResponse([dict(r) for r in rows])
 
@@ -174,7 +214,7 @@ async def post_notification(body: CreateBody, session=Depends(get_current_sessio
         with get_conn() as conn:
             existing = conn.execute(
                 "SELECT * FROM notifications WHERE username = ? AND source = ? AND ref = ? "
-                "ORDER BY created_at DESC LIMIT 1",
+                "AND audience = 'os' ORDER BY created_at DESC LIMIT 1",
                 (username, body.source, body.ref),
             ).fetchone()
             if existing:
@@ -189,20 +229,24 @@ async def post_notification(body: CreateBody, session=Depends(get_current_sessio
                 conn.commit()
                 row = conn.execute("SELECT * FROM notifications WHERE id = ?", (existing["id"],)).fetchone()
                 return JSONResponse(dict(row))
-    row = create_notification(username, body.title, body.body, body.kind, body.source, body.action_app, body.ref)
+    # Everything posted here comes from the desktop with an mvmOS session, so it
+    # is addressed to that OS account — never to the Apps Hub profile that
+    # happens to carry the same name.
+    row = create_notification(username, body.title, body.body, body.kind, body.source,
+                              body.action_app, body.ref, audience="os")
     return JSONResponse(row)
 
 
 @router.post("/read-all")
-async def mark_all_read(session=Depends(get_current_session_optional), x_pub_token: str = Header(default=None)):
-    ids = _identities(session, x_pub_token)
+async def mark_all_read(session=Depends(get_current_session_optional),
+                        x_pub_token: str = Header(default=None),
+                        x_mvm_surface: str = Header(default=None)):
+    ids, hub_only = _scope(session, x_pub_token, x_mvm_surface)
     if not ids:
         return JSONResponse({"ok": True})
+    where, params = _where(ids, hub_only)
     with get_conn() as conn:
-        conn.execute(
-            f"UPDATE notifications SET is_read = 1 WHERE username IN ({','.join('?' * len(ids))}) AND is_read = 0",
-            ids,
-        )
+        conn.execute(f"UPDATE notifications SET is_read = 1 WHERE {where} AND is_read = 0", params)
         conn.commit()
     return JSONResponse({"ok": True})
 
@@ -216,7 +260,9 @@ class ReadByRefBody(BaseModel):
 
 
 @router.post("/read-by-ref")
-async def mark_read_by_ref(body: ReadByRefBody, session=Depends(get_current_session_optional), x_pub_token: str = Header(default=None)):
+async def mark_read_by_ref(body: ReadByRefBody, session=Depends(get_current_session_optional),
+                           x_pub_token: str = Header(default=None),
+                           x_mvm_surface: str = Header(default=None)):
     """Lets an app clear its own unread notifications for the current user
     when they view the underlying content directly (e.g. opening a chat
     thread), without going through the bell icon. Matches by (source, ref) —
@@ -227,14 +273,14 @@ async def mark_read_by_ref(body: ReadByRefBody, session=Depends(get_current_sess
     same shared notifications row gets marked read regardless of which
     client (public page or desktop) triggers this, so unread status never
     diverges between them."""
-    ids = _identities(session, x_pub_token)
+    ids, hub_only = _scope(session, x_pub_token, x_mvm_surface)
     if not ids:
         return JSONResponse({"ok": True})
+    where, params = _where(ids, hub_only)
     with get_conn() as conn:
         conn.execute(
-            f"UPDATE notifications SET is_read = 1 WHERE username IN ({','.join('?' * len(ids))}) "
-            "AND source = ? AND ref = ? AND is_read = 0",
-            ids + [body.source, body.ref],
+            f"UPDATE notifications SET is_read = 1 WHERE {where} AND source = ? AND ref = ? AND is_read = 0",
+            params + [body.source, body.ref],
         )
         conn.commit()
     return JSONResponse({"ok": True})
@@ -244,14 +290,17 @@ mark_read_by_ref.no_session_auth = True
 
 
 @router.post("/{notif_id}/read")
-async def mark_read(notif_id: int, session=Depends(get_current_session_optional), x_pub_token: str = Header(default=None)):
-    ids = _identities(session, x_pub_token)
+async def mark_read(notif_id: int, session=Depends(get_current_session_optional),
+                    x_pub_token: str = Header(default=None),
+                    x_mvm_surface: str = Header(default=None)):
+    ids, hub_only = _scope(session, x_pub_token, x_mvm_surface)
     if not ids:
         return JSONResponse({"ok": True})
+    where, params = _where(ids, hub_only)
     with get_conn() as conn:
         conn.execute(
-            f"UPDATE notifications SET is_read = 1 WHERE id = ? AND username IN ({','.join('?' * len(ids))})",
-            [notif_id] + ids,
+            f"UPDATE notifications SET is_read = 1 WHERE id = ? AND {where}",
+            [notif_id] + params,
         )
         conn.commit()
     return JSONResponse({"ok": True})
@@ -261,12 +310,15 @@ mark_read.no_session_auth = True
 
 
 @router.delete("")
-async def delete_all(session=Depends(get_current_session_optional), x_pub_token: str = Header(default=None)):
-    ids = _identities(session, x_pub_token)
+async def delete_all(session=Depends(get_current_session_optional),
+                     x_pub_token: str = Header(default=None),
+                     x_mvm_surface: str = Header(default=None)):
+    ids, hub_only = _scope(session, x_pub_token, x_mvm_surface)
     if not ids:
         return JSONResponse({"ok": True})
+    where, params = _where(ids, hub_only)
     with get_conn() as conn:
-        conn.execute(f"DELETE FROM notifications WHERE username IN ({','.join('?' * len(ids))})", ids)
+        conn.execute(f"DELETE FROM notifications WHERE {where}", params)
         conn.commit()
     return JSONResponse({"ok": True})
 
@@ -275,14 +327,17 @@ delete_all.no_session_auth = True
 
 
 @router.delete("/{notif_id}")
-async def delete_notification(notif_id: int, session=Depends(get_current_session_optional), x_pub_token: str = Header(default=None)):
-    ids = _identities(session, x_pub_token)
+async def delete_notification(notif_id: int, session=Depends(get_current_session_optional),
+                              x_pub_token: str = Header(default=None),
+                              x_mvm_surface: str = Header(default=None)):
+    ids, hub_only = _scope(session, x_pub_token, x_mvm_surface)
     if not ids:
         return JSONResponse({"ok": True})
+    where, params = _where(ids, hub_only)
     with get_conn() as conn:
         conn.execute(
-            f"DELETE FROM notifications WHERE id = ? AND username IN ({','.join('?' * len(ids))})",
-            [notif_id] + ids,
+            f"DELETE FROM notifications WHERE id = ? AND {where}",
+            [notif_id] + params,
         )
         conn.commit()
     return JSONResponse({"ok": True})

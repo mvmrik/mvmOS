@@ -39,8 +39,9 @@ another app's api.py directly — so this stays the single enforceable trust
 boundary even after apps are sandboxed into separate processes down the line.
 """
 
-import contextlib, hashlib, os, secrets, sqlite3, sys, uuid
+import contextlib, hashlib, json, os, secrets, sqlite3, sys, uuid
 from datetime import datetime, timezone, timedelta
+from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, Header
 from fastapi.responses import JSONResponse, FileResponse, HTMLResponse
 from pydantic import BaseModel
@@ -139,6 +140,26 @@ def _init_db():
                 open_count     INTEGER NOT NULL DEFAULT 0,
                 last_opened_at TEXT,
                 PRIMARY KEY (user_id, app_id)
+            );
+            -- Which of the public apps this profile keeps on its own home
+            -- screen. The admin decides what the server offers at all; this is
+            -- each person choosing what they want to look at, and "uninstall"
+            -- here only hides the card — the app and its data are untouched.
+            CREATE TABLE IF NOT EXISTS user_apps (
+                user_id      TEXT NOT NULL REFERENCES public_users(id) ON DELETE CASCADE,
+                app_id       TEXT NOT NULL,
+                installed    INTEGER NOT NULL DEFAULT 0,
+                installed_at TEXT,
+                PRIMARY KEY (user_id, app_id)
+            );
+            -- Per-account view preferences (sort order, category filter). In
+            -- the database rather than localStorage so the same account opens
+            -- the same way on every device it logs in from.
+            CREATE TABLE IF NOT EXISTS user_prefs (
+                user_id TEXT NOT NULL REFERENCES public_users(id) ON DELETE CASCADE,
+                key     TEXT NOT NULL,
+                value   TEXT,
+                PRIMARY KEY (user_id, key)
             );
         """)
         cols = {r[1] for r in conn.execute("PRAGMA table_info(public_users)")}
@@ -555,6 +576,81 @@ def migrate_from_gamehub(players: list, tokens: list) -> int:
     return count
 
 
+# ── Per-profile app shelf & view preferences ────────────────────
+# Two different decisions, kept apart on purpose: the admin decides which apps
+# this server publishes at all (public_apps), and each profile then decides
+# which of those it wants on its own home screen (user_apps). Hiding an app
+# here is not an uninstall — nothing is deleted, no data is touched, the card
+# simply stops being shown and the Store tab offers it back.
+
+_VIEW_PREF_KEYS = {"apps_sort", "apps_category"}
+_SEEDED_KEY = "apps_seeded"
+
+
+def get_user_prefs(user_id: str) -> dict:
+    with _db() as conn:
+        rows = conn.execute(
+            "SELECT key, value FROM user_prefs WHERE user_id=? AND key IN ({})".format(
+                ",".join("?" * len(_VIEW_PREF_KEYS))),
+            [user_id] + sorted(_VIEW_PREF_KEYS),
+        ).fetchall()
+    return {r["key"]: r["value"] for r in rows}
+
+
+def set_user_prefs(user_id: str, values: dict) -> dict:
+    """Store the view preferences named in `values`. Unknown keys are ignored
+    rather than rejected — the client is the only writer and a newer one may
+    know keys this server does not."""
+    accepted = {k: str(v)[:64] for k, v in values.items() if k in _VIEW_PREF_KEYS and v is not None}
+    if accepted:
+        with _db() as conn:
+            conn.executemany(
+                "INSERT OR REPLACE INTO user_prefs(user_id,key,value) VALUES(?,?,?)",
+                [(user_id, k, v) for k, v in accepted.items()],
+            )
+            conn.commit()
+    return get_user_prefs(user_id)
+
+
+def _seed_user_apps(conn, user_id: str) -> None:
+    """First contact with the shelf: an account that has been using apps since
+    before it existed keeps them. New profiles start empty and pick what they
+    want from the Store tab. The marker means an account that deliberately
+    hides everything is never handed its old apps back on the next request."""
+    if conn.execute("SELECT 1 FROM user_prefs WHERE user_id=? AND key=?",
+                    (user_id, _SEEDED_KEY)).fetchone():
+        return
+    conn.execute(
+        "INSERT OR IGNORE INTO user_apps(user_id, app_id, installed, installed_at) "
+        "SELECT user_id, app_id, 1, ? FROM app_usage WHERE user_id=? AND open_count > 0",
+        (datetime.now(timezone.utc).isoformat(), user_id),
+    )
+    conn.execute("INSERT OR REPLACE INTO user_prefs(user_id,key,value) VALUES(?,?,'1')",
+                 (user_id, _SEEDED_KEY))
+    conn.commit()
+
+
+def get_user_apps(user_id: str) -> dict:
+    """{app_id: True} for the apps this profile keeps. Anything absent is
+    hidden — the default for every app nobody has asked for."""
+    with _db() as conn:
+        _seed_user_apps(conn, user_id)
+        rows = conn.execute("SELECT app_id, installed FROM user_apps WHERE user_id=?",
+                            (user_id,)).fetchall()
+    return {r["app_id"]: bool(r["installed"]) for r in rows}
+
+
+def set_user_app(user_id: str, app_id: str, installed: bool) -> None:
+    with _db() as conn:
+        _seed_user_apps(conn, user_id)
+        conn.execute(
+            "INSERT OR REPLACE INTO user_apps(user_id, app_id, installed, installed_at) VALUES(?,?,?,?)",
+            (user_id, app_id, 1 if installed else 0,
+             datetime.now(timezone.utc).isoformat() if installed else None),
+        )
+        conn.commit()
+
+
 # ── Credits — a premium feature ─────────────────────────────────
 # Shared, account-wide balance apps charge against for optional paid features.
 # The implementation is not here: it lives in backend/premium/apphub/, which
@@ -587,7 +683,48 @@ def credits_available() -> bool:
     menu item, no tab — because the people there cannot buy a licence and
     nothing about it would be actionable to them.
     """
-    return _credits() is not None
+    mod = _credits()
+    return bool(mod and getattr(mod, "is_available", lambda: False)())
+
+
+def credit_service_catalog() -> list:
+    """Discover optional paid actions declared by installed Store apps."""
+    root = Path(__file__).resolve().parents[1] / "apps"
+    items = []
+    for manifest_path in root.glob("*/manifest.json"):
+        try:
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        app_id, app_name = str(manifest.get("id") or ""), str(manifest.get("name") or "")
+        for feature in manifest.get("credit_features") or []:
+            if not isinstance(feature, dict):
+                continue
+            feature_id = str(feature.get("id") or "")
+            if not app_id or not app_name or not feature_id or not feature_id.replace("_", "").replace("-", "").isalnum():
+                continue
+            items.append({"app_id": app_id, "app_name": app_name,
+                "app_icon": str(manifest.get("icon") or "🧩"), "feature_id": feature_id,
+                "name": str(feature.get("name") or feature_id.replace("_", " ").title()),
+                "description": str(feature.get("description") or ""), "unit": str(feature.get("unit") or "use")})
+    return sorted(items, key=lambda item: (item["app_name"].lower(), item["name"].lower()))
+
+
+def get_credit_feature_price(app_id: str, feature_id: str) -> int:
+    """Effective price. Without a current Premium subscription every action is free."""
+    mod = _credits()
+    if not mod or not getattr(mod, "is_available", lambda: False)():
+        return 0
+    return mod.get_service_price(app_id, feature_id)
+
+
+def charge_credit_feature(user_id: str, app_id: str, feature_id: str, reason: str,
+                          idempotency_key: Optional[str] = None) -> dict:
+    """Resolve and charge an app-declared service entirely on the server."""
+    mod = _credits()
+    if not mod or not getattr(mod, "is_available", lambda: False)():
+        return {"price": 0, "balance": get_credit_balance(user_id)}
+    return mod.charge_service(user_id, app_id, feature_id, reason, idempotency_key)
 
 
 def _require_credits():
@@ -810,7 +947,7 @@ async def list_public_apps(x_pub_token: Optional[str] = Header(default=None)):
     apps_dir = os.path.join(os.path.dirname(__file__), "..", "apps")
 
     u = get_pub_session(x_pub_token)
-    usage = {}
+    usage, shelf = {}, None
     if u:
         with _db() as conn:
             rows = conn.execute(
@@ -818,6 +955,7 @@ async def list_public_apps(x_pub_token: Optional[str] = Header(default=None)):
                 (u["id"],),
             ).fetchall()
         usage = {r["app_id"]: {"open_count": r["open_count"], "last_opened_at": r["last_opened_at"]} for r in rows}
+        shelf = get_user_apps(u["id"])
 
     result = []
     for app_id in enabled:
@@ -842,8 +980,52 @@ async def list_public_apps(x_pub_token: Optional[str] = Header(default=None)):
             "public_url":     f"/pub/{app_id}/",
             "open_count":     au.get("open_count", 0),
             "last_opened_at": au.get("last_opened_at"),
+            # The full list is always returned — it is what the Store tab
+            # browses. `installed` is what the home screen filters on. Without
+            # a session there is nobody to have a shelf, so nothing is hidden.
+            "installed":      True if shelf is None else shelf.get(app_id, False),
         })
     return JSONResponse(result)
+
+
+class InstalledBody(BaseModel):
+    installed: bool
+
+
+@_pub.put("/apps/{app_id}/installed")
+async def set_app_installed_pub(app_id: str, body: InstalledBody,
+                                x_pub_token: Optional[str] = Header(default=None)):
+    """Show or hide one app on this profile's home screen. Hiding deletes
+    nothing: the app keeps running, keeps its data, and can be added back from
+    the Store tab at any time."""
+    u = get_pub_session(x_pub_token)
+    if not u:
+        raise HTTPException(401)
+    if app_id == "apphub" or app_id not in _detect_public_apps() or not is_app_public(app_id):
+        raise HTTPException(404)
+    set_user_app(u["id"], app_id, body.installed)
+    return JSONResponse({"ok": True, "installed": body.installed})
+
+
+@_pub.get("/prefs")
+async def get_prefs_pub(x_pub_token: Optional[str] = Header(default=None)):
+    u = get_pub_session(x_pub_token)
+    if not u:
+        raise HTTPException(401)
+    return JSONResponse(get_user_prefs(u["id"]))
+
+
+class PrefsBody(BaseModel):
+    apps_sort:     Optional[str] = None
+    apps_category: Optional[str] = None
+
+
+@_pub.put("/prefs")
+async def set_prefs_pub(body: PrefsBody, x_pub_token: Optional[str] = Header(default=None)):
+    u = get_pub_session(x_pub_token)
+    if not u:
+        raise HTTPException(401)
+    return JSONResponse(set_user_prefs(u["id"], body.model_dump(exclude_none=True)))
 
 
 @_pub.post("/apps/{app_id}/open")
@@ -1069,6 +1251,42 @@ async def get_features_admin(session=Depends(get_current_session)):
     thing as a working feature, and only the presence of the code decides.
     """
     return JSONResponse({"credits": credits_available()})
+
+
+@_admin.get("/credit-services")
+async def get_credit_services_admin(session=Depends(get_current_session)):
+    """Configured optional services, automatically discovered from manifests.
+
+    Saved prices are returned even after expiry so the owner can see what will
+    resume; effective prices remain zero until Premium is current.
+    """
+    mod = _credits()
+    saved = mod.get_service_prices() if mod and hasattr(mod, "get_service_prices") else {}
+    active = credits_available()
+    rows = []
+    for item in credit_service_catalog():
+        key = item["app_id"] + ":" + item["feature_id"]
+        rows.append({**item, "saved_price": saved.get(key, 0), "price": saved.get(key, 0) if active else 0})
+    return JSONResponse({"premium": active, "services": rows})
+
+
+class CreditServicePriceBody(BaseModel):
+    price: int = 0
+
+
+@_admin.put("/credit-services/{app_id}/{feature_id}")
+async def set_credit_service_price_admin(app_id: str, feature_id: str, body: CreditServicePriceBody,
+                                         session=Depends(get_current_session)):
+    _credits_or_402()
+    if body.price < 0 or body.price > 1_000_000:
+        raise HTTPException(400, detail="price must be between 0 and 1000000")
+    if not any(x["app_id"] == app_id and x["feature_id"] == feature_id for x in credit_service_catalog()):
+        raise HTTPException(404, detail="unknown credit service")
+    try:
+        _require_credits().set_service_price(app_id, feature_id, body.price)
+    except CreditError as e:
+        raise HTTPException(402, detail=str(e))
+    return JSONResponse({"ok": True, "price": body.price})
 
 
 # ── Credits: public (self) endpoints ───────────────────────────

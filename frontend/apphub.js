@@ -109,7 +109,7 @@ const AppHub = (() => {
     ];
 
     body.innerHTML = `
-      <div style="display:flex;border-bottom:1px solid var(--border);flex-shrink:0">
+      <div style="display:flex;border-bottom:1px solid var(--border);flex-shrink:0;overflow-x:auto;scrollbar-width:thin">
         ${tabs.map(t => `<button class="ah-tab" data-t="${t.id}"
           style="background:none;border:none;border-bottom:2px solid transparent;padding:10px 14px;font-size:.85rem;color:var(--text-dim);cursor:pointer;font-family:inherit;white-space:nowrap"
           >${t.label}</button>`).join('')}
@@ -383,6 +383,11 @@ const AppHub = (() => {
       const r = await fetch('/api/apphub/public-apps').catch(()=>null);
       if (!r?.ok) { c.innerHTML = `<div style="padding:20px;color:#f38ba8;font-size:.85rem">${t('ah_error_loading_apps')}</div>`; return; }
       const apps = await r.json();
+      const servicesResult = await fetch('/api/apphub/credit-services').catch(() => null);
+      const serviceData = servicesResult?.ok ? await servicesResult.json() : {premium:false, services:[]};
+      const servicesByApp = (serviceData.services || []).reduce((out, service) => {
+        (out[service.app_id] ||= []).push(service); return out;
+      }, {});
       if (!apps.length) { c.innerHTML = `<div style="padding:20px;color:var(--text-dim);font-size:.85rem;text-align:center">${t('ah_no_public_apps')}</div>`; return; }
       const categoryKey = 'apphub_apps_category';
       const categories = [...new Set(apps.map(a => a.category || 'Utilities'))].sort((a, b) => a.localeCompare(b));
@@ -411,12 +416,24 @@ const AppHub = (() => {
               <div style="font-size:.88rem;font-weight:500">${esc(a.name)}</div>
               <div style="font-size:.72rem;color:var(--text-dim)">/pub/${esc(a.id)}/</div>
             </div>
+            ${(servicesByApp[a.id] || []).length ? `<button class="ah-credit-toggle s-btn s-btn-sm" data-app="${esc(a.id)}" aria-expanded="false" style="cursor:pointer;white-space:nowrap">💳 ${t('ah_credit_services_button')}</button>` : ''}
             <label style="display:flex;align-items:center;gap:6px;cursor:pointer;flex-shrink:0">
               <input type="checkbox" data-id="${a.id}" ${a.enabled?'checked':''} style="width:16px;height:16px;cursor:pointer">
               <span style="font-size:.8rem;color:${a.enabled?'var(--accent)':'var(--text-dim)'}">${a.enabled?t('ah_public'):t('ah_private')}</span>
             </label>
             ${a.enabled ? `<a href="/pub/${a.id}/" target="_blank" style="font-size:.75rem;color:var(--accent);text-decoration:none">↗</a>` : ''}
-          </div>`).join('');
+          </div>
+          ${(servicesByApp[a.id] || []).length ? `<div class="ah-credit-panel" data-app="${esc(a.id)}" hidden style="border-bottom:1px solid var(--border);background:var(--surface1);padding:12px 16px 12px 48px">
+            <div style="font-size:.76rem;color:var(--text-dim);margin-bottom:8px">${t('ah_credit_services_hint_short')}</div>
+            <div style="display:flex;flex-direction:column;gap:8px">
+              ${(servicesByApp[a.id] || []).map(s => `<div style="display:flex;align-items:center;gap:10px;padding:10px 11px;border:1px solid var(--border);border-radius:8px;background:var(--surface2)">
+                <div style="flex:1;min-width:0"><div style="font-size:.82rem;font-weight:650">${esc(s.name)}</div>${s.description ? `<div style="font-size:.72rem;color:var(--text-dim);margin-top:2px">${esc(s.description)}</div>` : ''}</div>
+                <input class="ah-service-price" data-app="${esc(s.app_id)}" data-feature="${esc(s.feature_id)}" type="number" min="0" max="1000000" step="1" value="${s.saved_price}" ${serviceData.premium ? '' : 'disabled'} style="width:62px;background:var(--surface1);border:1px solid var(--border);border-radius:6px;padding:6px;color:inherit">
+                <span style="font-size:.72rem;color:var(--text-dim)">${t('ah_credits_unit')}</span>
+                <button class="ah-service-save s-btn s-btn-sm" data-app="${esc(s.app_id)}" data-feature="${esc(s.feature_id)}" style="cursor:pointer">${t('ah_save')}</button>
+              </div>`).join('')}
+            </div>
+          </div>` : ''}`).join('');
 
         list.querySelectorAll('input[type=checkbox]').forEach(cb => {
           cb.onchange = async () => {
@@ -431,6 +448,25 @@ const AppHub = (() => {
             });
             render(list);
           };
+        });
+        list.querySelectorAll('.ah-credit-toggle').forEach(btn => btn.onclick = () => {
+          const panel = list.querySelector(`.ah-credit-panel[data-app="${btn.dataset.app}"]`);
+          if (!panel) return;
+          panel.hidden = !panel.hidden;
+          btn.setAttribute('aria-expanded', String(!panel.hidden));
+          btn.textContent = `${panel.hidden ? '💳' : '▾'} ${t('ah_credit_services_button')}`;
+        });
+        list.querySelectorAll('.ah-service-save').forEach(btn => btn.onclick = async () => {
+          if (!serviceData.premium) { window.mvmOS?.premiumGate(btn, t('ah_credits_premium')); return; }
+          const input = list.querySelector(`.ah-service-price[data-app="${btn.dataset.app}"][data-feature="${btn.dataset.feature}"]`);
+          const price = Number.parseInt(input.value, 10);
+          if (!Number.isInteger(price) || price < 0) return;
+          btn.disabled = true;
+          const save = await fetch(`/api/apphub/credit-services/${encodeURIComponent(btn.dataset.app)}/${encodeURIComponent(btn.dataset.feature)}`, {
+            method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({price})
+          }).catch(() => null);
+          if (!save?.ok) window.mvmOS?.premiumGate(btn, t('ah_credits_premium'));
+          btn.disabled = false;
         });
       }
       c.querySelector('#ah-apps-category').onchange = e => {
@@ -612,6 +648,57 @@ const AppHub = (() => {
             renderUsers(c);
           }
         };
+      });
+    }
+
+    // ── Admin: credit-priced services ──────────────────────────────
+    async function renderCreditServices(c) {
+      c.innerHTML = '<div style="padding:20px;color:var(--text-dim);font-size:.85rem">…</div>';
+      const r = await fetch('/api/apphub/credit-services').catch(() => null);
+      if (!r?.ok) { c.innerHTML = `<div style="padding:22px;color:#f38ba8">${t('ah_credits_load_failed')}</div>`; return; }
+      const data = await r.json();
+      const services = data.services || [];
+      c.innerHTML = `
+        <div style="padding:18px;display:flex;flex-direction:column;gap:14px">
+          <div style="padding:14px 15px;border:1px solid var(--border);border-radius:10px;background:var(--surface2);line-height:1.45">
+            <div style="font-weight:700;margin-bottom:5px">${t('ah_credit_services_title')}</div>
+            <div style="font-size:.82rem;color:var(--text-dim)">${data.premium ? t('ah_credit_services_hint') : t('ah_credit_services_paused')}</div>
+          </div>
+          <div id="ah-credit-service-list" style="display:flex;flex-direction:column;gap:10px"></div>
+        </div>`;
+      const list = c.querySelector('#ah-credit-service-list');
+      if (!services.length) { list.innerHTML = `<div style="padding:20px;text-align:center;color:var(--text-dim);font-size:.84rem">${t('ah_credit_services_none')}</div>`; return; }
+      const apps = services.reduce((groups, service) => {
+        const group = groups[service.app_id] || (groups[service.app_id] = { ...service, services: [] });
+        group.services.push(service); return groups;
+      }, {});
+      list.innerHTML = Object.values(apps).map(app => `
+        <details open style="border:1px solid var(--border);border-radius:10px;background:var(--surface1);overflow:hidden">
+          <summary style="list-style:none;cursor:pointer;display:flex;align-items:center;gap:11px;padding:13px 14px;background:var(--surface2);user-select:none">
+            <span style="font-size:1.35rem">${esc(app.app_icon)}</span>
+            <span style="flex:1"><span style="display:block;font-weight:700;font-size:.9rem">${esc(app.app_name)}</span><span style="display:block;margin-top:2px;font-size:.75rem;color:var(--text-dim)">${app.services.length} ${t('ah_credit_services_options')}</span></span>
+            <span style="font-size:.85rem;color:var(--text-dim)">⌄</span>
+          </summary>
+          <div style="padding:0 14px">
+            ${app.services.map(s => `<div style="display:flex;gap:12px;align-items:center;padding:13px 0;border-bottom:1px solid var(--border)">
+              <div style="flex:1;min-width:0"><div style="font-weight:650;font-size:.87rem">${esc(s.name)}</div>${s.description ? `<div style="font-size:.76rem;color:var(--text-dim);margin-top:3px">${esc(s.description)}</div>` : ''}</div>
+              <label style="display:flex;align-items:center;gap:6px;white-space:nowrap;font-size:.78rem;color:var(--text-dim)">
+                <input class="ah-service-price" data-app="${esc(s.app_id)}" data-feature="${esc(s.feature_id)}" type="number" min="0" max="1000000" step="1" value="${s.saved_price}" ${data.premium ? '' : 'disabled'} style="width:70px;background:var(--surface1);border:1px solid var(--border);border-radius:6px;padding:6px;color:inherit"> ${t('ah_credits_unit')}
+              </label>
+              <button class="ah-service-save s-btn s-btn-sm" data-app="${esc(s.app_id)}" data-feature="${esc(s.feature_id)}" ${data.premium ? '' : 'disabled'} style="cursor:pointer">${t('ah_save')}</button>
+            </div>`).join('')}
+          </div>
+        </details>`).join('');
+      list.querySelectorAll('.ah-service-save').forEach(btn => btn.onclick = async () => {
+        const input = list.querySelector(`.ah-service-price[data-app="${btn.dataset.app}"][data-feature="${btn.dataset.feature}"]`);
+        const price = Number.parseInt(input.value, 10);
+        if (!Number.isInteger(price) || price < 0) return;
+        btn.disabled = true;
+        const save = await fetch(`/api/apphub/credit-services/${encodeURIComponent(btn.dataset.app)}/${encodeURIComponent(btn.dataset.feature)}`, {
+          method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({price})
+        }).catch(() => null);
+        if (!save?.ok) { window.mvmOS?.premiumGate(btn, t('ah_credits_premium')); }
+        btn.disabled = false;
       });
     }
 

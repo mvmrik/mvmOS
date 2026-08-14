@@ -411,21 +411,40 @@ const AppStore = (() => {
   async function loadStoreCategories(body, store) {
     const list = body.querySelector(`#as-store-list-${store.id}`);
     if (!list) return;
-    list.innerHTML = `<div class="as-loading">${t('loading')}</div>`;
+    // The search box lives outside the content area so it survives drilling
+    // into a category: it always searches the whole store, not the category
+    // that happens to be open.
+    list.innerHTML = `
+      <div class="as-toolbar">
+        <input class="as-filter" id="as-store-q-${store.id}" placeholder="${t('appstore_search_store_ph')}" autocomplete="off">
+      </div>
+      <div id="as-store-body-${store.id}"><div class="as-loading">${t('loading')}</div></div>`;
+    const inner = list.querySelector(`#as-store-body-${store.id}`);
+    const query = list.querySelector(`#as-store-q-${store.id}`);
+    let debounce = null;
+    query.addEventListener('input', () => {
+      clearTimeout(debounce);
+      const q = query.value.trim();
+      // Empty query is not an empty result — it means "show me the categories
+      // again", which is where the tab started.
+      debounce = setTimeout(() => q ? searchStoreApps(body, store, q, inner)
+                                    : loadStoreCategories(body, store), 250);
+    });
+
     const res = await fetch(`/api/plugins/categories?store_id=${store.id}`);
     const data = await res.json();
-    if (data.error) { list.innerHTML = `<div class="as-loading">Error: ${data.error}</div>`; return; }
+    if (data.error) { inner.innerHTML = `<div class="as-loading">Error: ${data.error}</div>`; return; }
 
     // v1 fallback — has _apps, render directly
     if (data.version === 1 && data._apps) {
-      renderMvmosApps(list, data._apps.map(a => ({ ...a, official: store.official ?? 0, store_id: store.id })), body);
+      renderMvmosApps(inner, data._apps.map(a => ({ ...a, official: store.official ?? 0, store_id: store.id })), body);
       return;
     }
 
     const cats = data.categories || [];
-    if (!cats.length) { list.innerHTML = `<div class="as-loading">${t('wstore_no_categories')}</div>`; return; }
+    if (!cats.length) { inner.innerHTML = `<div class="as-loading">${t('wstore_no_categories')}</div>`; return; }
 
-    list.innerHTML = '';
+    inner.innerHTML = '';
     const grid = document.createElement('div');
     grid.style.cssText = 'display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;padding:4px 0';
     cats.forEach(cat => {
@@ -438,10 +457,56 @@ const AppStore = (() => {
       `;
       card.addEventListener('mouseenter', () => card.style.background = 'var(--surface)');
       card.addEventListener('mouseleave', () => card.style.background = 'var(--surface2)');
-      card.addEventListener('click', () => loadCategoryApps(body, store, cat, list));
+      card.addEventListener('click', () => loadCategoryApps(body, store, cat, inner));
       grid.appendChild(card);
     });
-    list.appendChild(grid);
+    inner.appendChild(grid);
+  }
+
+  // ── Store search ──────────────────────────────────────────────────────────
+  // /manifest walks every category of the store server-side and returns one
+  // flat, install-annotated list, so a search can cover the whole store
+  // without the client fetching each category itself. The answer is kept per
+  // store for the lifetime of the window so typing doesn't re-fetch it on
+  // every keystroke.
+  async function searchStoreApps(body, store, query, target) {
+    body._as._storeIndex = body._as._storeIndex || {};
+    if (!body._as._storeIndex[store.id]) {
+      target.innerHTML = `<div class="as-loading">${t('loading')}</div>`;
+      const res = await fetch(`/api/plugins/manifest?store_id=${store.id}`);
+      const apps = await res.json();
+      if (!Array.isArray(apps)) {
+        target.innerHTML = `<div class="as-loading">${t('as_error')}: ${apps.error || t('as_invalid_response')}</div>`;
+        return;
+      }
+      body._as._storeIndex[store.id] = apps;
+    }
+
+    const q = query.toLowerCase();
+    const hits = body._as._storeIndex[store.id].filter(a =>
+      (a.name || '').toLowerCase().includes(q) ||
+      (a.id || '').toLowerCase().includes(q) ||
+      (a.description || '').toLowerCase().includes(q) ||
+      (a.category || '').toLowerCase().includes(q));
+
+    target.innerHTML = '';
+    const head = document.createElement('div');
+    head.className = 'as-loading';
+    head.textContent = hits.length ? t('appstore_search_results', { n: hits.length })
+                                   : t('appstore_search_none', { q: query });
+    target.appendChild(head);
+    if (!hits.length) return;
+
+    const appsEl = document.createElement('div');
+    appsEl.className = 'as-app-grid';
+    target.appendChild(appsEl);
+    renderMvmosApps(appsEl, hits.map(a => ({ ...a, official: store.official ?? 0, store_id: store.id })), body);
+    // A refresh follows an install/remove, so the cached list's `installed`
+    // flags are exactly what just changed — drop it and ask again.
+    body._as.refreshCurrent = () => {
+      delete body._as._storeIndex[store.id];
+      return searchStoreApps(body, store, query, target);
+    };
   }
 
   // ── Category apps ─────────────────────────────────────────────────────────

@@ -36,6 +36,15 @@
   .app-badge{position:absolute;top:-2px;right:-4px;width:10px;height:10px;border-radius:50%;background:var(--red);border:2px solid var(--surface1)}
   .app-name{font-size:.85rem;font-weight:600;text-align:center}
   .app-desc{font-size:.72rem;color:var(--fg2);text-align:center;line-height:1.4}
+  .st-row{display:flex;align-items:flex-start;gap:12px;background:var(--surface1);border:1px solid var(--border);border-radius:12px;padding:14px}
+  .st-row .app-icon{font-size:1.8rem}
+  .st-info{flex:1;min-width:0}
+  .st-info .app-name{text-align:left;margin-bottom:3px}
+  .st-info .app-desc{text-align:left}
+  .st-btn{border-radius:8px;padding:7px 14px;font-size:.8rem;font-weight:600;flex-shrink:0;border:1px solid var(--border);background:var(--surface2);color:var(--fg)}
+  .st-btn.add{background:var(--accent);color:#1e1e2e;border-color:transparent}
+  .st-btn:hover{opacity:.85}
+  .st-btn:disabled{opacity:.45;cursor:default}
   .avatar{border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;color:#1e1e2e;flex-shrink:0}
 </style>
 </head>
@@ -92,7 +101,7 @@ async function boot() {
   }
   if (!_me) showAuth();
   else if (_afterAuth()) return;
-  else showDashboard(_startTab);
+  else { await _loadPrefs(); showDashboard(_startTab); }
 }
 
 // ── Auth ────────────────────────────────────────────────────────
@@ -155,6 +164,7 @@ function renderLoginForm() {
       const d = await r.json(); _token = d.token; _me = d.user;
       localStorage.setItem('apphub_token', _token);
       if (_afterAuth()) return;
+      await _loadPrefs();
       showDashboard();
     } else {
       const d = await r.json().catch(()=>({}));
@@ -188,6 +198,7 @@ function renderRegForm() {
       const d = await r.json(); _token = d.token; _me = d.user;
       localStorage.setItem('apphub_token', _token);
       if (_afterAuth()) return;
+      await _loadPrefs();
       showDashboard();
     } else {
       const d = await r.json().catch(()=>({}));
@@ -207,6 +218,7 @@ function showDashboard(activeTab) {
   app.innerHTML = `
     <div class="tab-bar">
       <button class="tab${activeTab==='apps'?' active':''}" data-t="apps">${t('ah_pub_tab_apps')}</button>
+      <button class="tab${activeTab==='store'?' active':''}" data-t="store">${t('ah_pub_tab_store')}</button>
       <button class="tab${activeTab==='favourites'?' active':''}" data-t="favourites">${t('ah_pub_tab_favourites')}</button>
     </div>
     <div id="d-body" style="flex:1;overflow-y:auto"></div>`;
@@ -240,6 +252,7 @@ function renderTab(t) {
   // even ?tab=credits typed by hand just lands on the app list.
   if (t === 'credits' && !(_me && _me.credits)) t = 'apps';
   if (t === 'apps')       renderApps(c);
+  if (t === 'store')      renderStore(c);
   if (t === 'favourites') renderFavourites(c);
   if (t === 'credits')    renderCredits(c);
   if (t === 'profile')    renderProfile(c);
@@ -257,14 +270,46 @@ window.MvmApphub = {
     app.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
     const btn = app.querySelector(`.tab[data-t="${tab}"]`);
     if (btn) btn.classList.add('active');
+    _activeTab = tab;
     renderTab(tab);
   }
 };
 
 // ── Apps tab ────────────────────────────────────────────────────
 
-const SORT_KEY  = 'apphub_apps_sort';
-const CATEGORY_KEY = 'apphub_apps_category';
+// View preferences (sort order, selected category) belong to the Apps Hub
+// account, not to the browser: the same person on a phone and on a laptop was
+// getting two different orderings because these used to live in localStorage.
+// They are loaded once at boot and written back on every change.
+let _prefs = {};
+
+async function _loadPrefs() {
+  if (!_token) return;
+  try {
+    const r = await fetch(BASE + '/prefs', {headers:{'X-Pub-Token':_token}});
+    if (r.ok) _prefs = await r.json() || {};
+  } catch(_) {}
+  // One-time lift of whatever this browser had stored before the move, so an
+  // existing user keeps their ordering instead of silently falling back to A-Z.
+  const legacy = {apps_sort: localStorage.getItem('apphub_apps_sort'),
+                  apps_category: localStorage.getItem('apphub_apps_category')};
+  for (const [key, value] of Object.entries(legacy)) {
+    if (value && !_prefs[key]) _setPref(key, value);
+  }
+  localStorage.removeItem('apphub_apps_sort');
+  localStorage.removeItem('apphub_apps_category');
+}
+
+function _setPref(key, value) {
+  if (_prefs[key] === value) return;
+  _prefs[key] = value;
+  if (!_token) return;
+  fetch(BASE + '/prefs', {
+    method: 'PUT',
+    headers: {'Content-Type':'application/json', 'X-Pub-Token':_token},
+    body: JSON.stringify({[key]: value})
+  }).catch(() => {});
+}
 
 // Usage (open_count / last_opened_at) lives server-side per Apps Hub
 // account (backend/apphub.py: app_usage table) so recent/frequent sort
@@ -299,13 +344,13 @@ function _relativeTime(iso) {
   return years === 1 ? t('ah_pub_usage_year_ago') : t('ah_pub_usage_years_ago', {n: years});
 }
 
-function _getSortPref() { return localStorage.getItem(SORT_KEY) || 'alpha'; }
-function _setSortPref(v) { localStorage.setItem(SORT_KEY, v); }
+function _getSortPref() { return _prefs.apps_sort || 'alpha'; }
+function _setSortPref(v) { _setPref('apps_sort', v); }
 function _getCategoryPref(categories) {
-  const value = localStorage.getItem(CATEGORY_KEY) || 'all';
+  const value = _prefs.apps_category || 'all';
   return value === 'all' || categories.includes(value) ? value : 'all';
 }
-function _setCategoryPref(v) { localStorage.setItem(CATEGORY_KEY, v); }
+function _setCategoryPref(v) { _setPref('apps_category', v); }
 
 function _sortApps(apps, mode) {
   const sorted = apps.slice();
@@ -333,23 +378,40 @@ async function _loadBadges() {
 // full page reload to see a badge appear or disappear.
 let _badgePoll = null;
 
+// Both the Apps tab and the Store tab describe the same list — one shows what
+// the account keeps on its home screen, the other everything on offer — so it
+// is fetched once and re-used, and an install/uninstall just flips the flag in
+// place instead of costing a round trip on every tab switch.
+let _apps = null;
+
+async function _loadApps(force) {
+  if (_apps && !force) return _apps;
+  try {
+    // With the token, /apps answers with this account's open_count,
+    // last_opened_at and installed flag per app; without it the server has no
+    // identity to look usage up for and every card reads "never / 0".
+    const r = await fetch(BASE + '/apps', _token ? {headers: {'X-Pub-Token': _token}} : undefined);
+    _apps = r.ok ? await r.json() : [];
+  } catch(_) { _apps = []; }
+  return _apps;
+}
+
 async function renderApps(c) {
   c.innerHTML = `<div style="padding:32px;text-align:center;color:var(--fg2);font-size:.9rem">${t('ah_pub_loading_apps')}</div>`;
-  let apps = [];
-  try {
-    // With the token, /apps answers with this account's open_count and
-    // last_opened_at per app; without it the server has no identity to look
-    // usage up for and every card reads "never / 0".
-    const r = await fetch(BASE + '/apps', _token ? {headers: {'X-Pub-Token': _token}} : undefined);
-    if (r.ok) apps = await r.json();
-  } catch(_) {}
+  const all = await _loadApps();
+  // The home screen shows only what this account added from the Store. A
+  // visitor without a session has no shelf of their own, so they get the lot.
+  const apps = _token ? all.filter(a => a.installed) : all;
   let badges = await _loadBadges();
 
   if (!apps.length) {
     c.innerHTML = `<div style="padding:40px;text-align:center;color:var(--fg2)">
       <div style="font-size:2rem;margin-bottom:10px">📭</div>
-      <div>${t('ah_pub_no_apps_yet')}</div>
+      <div>${all.length && _token ? t('ah_pub_no_installed_apps') : t('ah_pub_no_apps_yet')}</div>
+      ${all.length && _token ? `<button class="btn" id="apps-to-store" style="margin-top:14px">${t('ah_pub_open_store')}</button>` : ''}
     </div>`;
+    const go = c.querySelector('#apps-to-store');
+    if (go) go.onclick = () => MvmApphub.goToTab('store');
     return;
   }
 
@@ -401,6 +463,127 @@ async function renderApps(c) {
       if (!shouldShow && dot) dot.remove();
     });
   }, 8000);
+}
+
+// ── Store tab ───────────────────────────────────────────────────
+// Not a real store: everything here is already installed on the server and
+// available to every profile. Adding and removing only decides whether an app
+// shows up on this account's home screen — no data is ever created or deleted
+// by it, which is why "remove" never asks for a confirmation.
+
+// Where the Store tab is standing: null = the category grid, a category name,
+// or 'installed' — the flat list of everything this profile has added, which is
+// the one place to take an app off the home screen without remembering which
+// category it came from.
+let _storeView = null;
+
+async function _setInstalled(appId, installed) {
+  const r = await fetch(`${BASE}/apps/${encodeURIComponent(appId)}/installed`, {
+    method: 'PUT',
+    headers: {'Content-Type':'application/json', 'X-Pub-Token':_token},
+    body: JSON.stringify({installed})
+  });
+  if (!r.ok) throw new Error('save failed');
+  const entry = (_apps || []).find(a => a.id === appId);
+  if (entry) entry.installed = installed;
+}
+
+async function renderStore(c) {
+  c.innerHTML = `<div style="padding:32px;text-align:center;color:var(--fg2);font-size:.9rem">${t('ah_pub_loading_apps')}</div>`;
+  const apps = await _loadApps();
+
+  if (!apps.length) {
+    c.innerHTML = `<div style="padding:40px;text-align:center;color:var(--fg2)">
+      <div style="font-size:2rem;margin-bottom:10px">📭</div>
+      <div>${t('ah_pub_no_apps_yet')}</div>
+    </div>`;
+    return;
+  }
+
+  const categoryOf = a => a.category || 'Utilities';
+  const categories = [...new Set(apps.map(categoryOf))].sort((a, b) => a.localeCompare(b));
+  if (_storeView && _storeView !== 'installed' && !categories.includes(_storeView)) _storeView = null;
+
+  const drawCategories = () => {
+    const added = apps.filter(a => a.installed).length;
+    c.innerHTML = `
+      <div style="padding:16px 16px 0;color:var(--fg2);font-size:.82rem;line-height:1.5">${t('ah_pub_store_hint')}</div>
+      <div style="padding:12px 16px 0">
+        <button class="st-btn" id="store-installed"${added ? '' : ' disabled'}>${esc(t('ah_pub_store_installed_btn', {n: added}))}</button>
+      </div>
+      <div class="app-grid" id="store-grid"></div>`;
+    c.querySelector('#store-installed').onclick = () => { _storeView = 'installed'; drawApps(); };
+    c.querySelector('#store-grid').innerHTML = categories.map(category => {
+      const inCategory = apps.filter(a => categoryOf(a) === category);
+      const added = inCategory.filter(a => a.installed).length;
+      return `
+        <div class="app-card" data-cat="${esc(category)}">
+          <div class="app-icon">📂</div>
+          <div class="app-name">${esc(category)}</div>
+          <div class="app-desc">${esc(t('ah_pub_store_cat_summary', {total: inCategory.length, added}))}</div>
+        </div>`;
+    }).join('');
+    c.querySelectorAll('[data-cat]').forEach(el => {
+      el.onclick = () => { _storeView = el.dataset.cat; drawApps(); };
+    });
+  };
+
+  const drawApps = () => {
+    const installedView = _storeView === 'installed';
+    // The added list keeps showing an app after it is taken off, so the button
+    // that just said "remove" can put it straight back — a redraw would make
+    // the row vanish under the cursor and an accidental click unfixable.
+    const rows = (installedView ? apps.filter(a => a.installed)
+                                : apps.filter(a => categoryOf(a) === _storeView))
+                 .sort((a, b) => a.name.localeCompare(b.name));
+    c.innerHTML = `
+      <div style="padding:12px 16px 0">
+        <button class="st-btn" id="store-back">${t('ah_pub_store_back')}</button>
+      </div>
+      <div style="padding:12px 16px;font-weight:600">${esc(installedView ? t('ah_pub_store_installed_title') : _storeView)}</div>
+      <div class="err" id="store-err" style="padding:0 16px"></div>
+      <div style="display:flex;flex-direction:column;gap:10px;padding:0 16px 16px" id="store-list"></div>`;
+    c.querySelector('#store-back').onclick = () => { _storeView = null; drawCategories(); };
+
+    const list = c.querySelector('#store-list');
+    list.innerHTML = rows.map(a => `
+      <div class="st-row">
+        <div class="app-icon">${esc(a.icon)}</div>
+        <div class="st-info">
+          <div class="app-name">${esc(a.name)}</div>
+          <div class="app-desc">${esc(installedView ? categoryOf(a) : (a.description || ''))}</div>
+        </div>
+        <button class="st-btn${a.installed ? '' : ' add'}" data-app="${esc(a.id)}">
+          ${a.installed ? t('ah_pub_store_remove') : t('ah_pub_store_add')}
+        </button>
+      </div>`).join('');
+
+    list.querySelectorAll('[data-app]').forEach(btn => {
+      btn.onclick = async () => {
+        const entry = apps.find(a => a.id === btn.dataset.app);
+        const wanted = !entry.installed;
+        btn.disabled = true;
+        try {
+          await _setInstalled(entry.id, wanted);
+          // Adding an app has to make it appear, and the Apps tab keeps a
+          // category filter of its own: an app added from another category
+          // would land behind that filter and look like nothing happened.
+          const category = categoryOf(entry);
+          if (wanted && (_prefs.apps_category || 'all') !== 'all'
+              && _prefs.apps_category !== category) {
+            _setPref('apps_category', 'all');
+          }
+          btn.textContent = wanted ? t('ah_pub_store_remove') : t('ah_pub_store_add');
+          btn.classList.toggle('add', !wanted);
+        } catch (_) {
+          c.querySelector('#store-err').textContent = t('ah_pub_store_failed');
+        }
+        btn.disabled = false;
+      };
+    });
+  };
+
+  if (_storeView) drawApps(); else drawCategories();
 }
 
 // ── Favourites tab ──────────────────────────────────────────────

@@ -199,7 +199,7 @@ const Settings = (() => {
     const expiry = formatDate(premium.expires_at, s.date_format, s.timezone);
     const esc = v => String(v || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
     const hint = esc(premium.license_key_hint);
-    const site = esc(premium.site || 'https://mvmos.org/premium');
+    const site = esc(premium.site || 'https://mvmos.org/pricing');
     body.style.overflow = 'hidden';
     body.style.padding = '0';
     body.innerHTML = `

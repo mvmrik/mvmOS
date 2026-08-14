@@ -808,9 +808,14 @@ var mvmOS = (() => {
   // alongside the mvmOS OS session — two separate account systems. Send both
   // to the backend so notifications addressed to either identity are found;
   // see backend/notifications.py's _identities().
+  // X-Mvm-Surface says this is the desktop, which is both identities at once
+  // and sees everything addressed to either. It cannot be inferred server-side
+  // from the session cookie: a public page opened in this same browser sends
+  // that cookie too, and would then be handed the OS account's system notices.
   function _pubHeaders(extra) {
     const token = localStorage.getItem('apphub_token');
-    return Object.assign(token ? { 'X-Pub-Token': token } : {}, extra || {});
+    return Object.assign({ 'X-Mvm-Surface': 'desktop' },
+                         token ? { 'X-Pub-Token': token } : {}, extra || {});
   }
 
   async function _loadNotifs() {

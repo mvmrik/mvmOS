@@ -412,8 +412,29 @@
       'border-top:1px solid var(--border,#45475a);background:var(--surface1,#181825);' +
       'font-family:system-ui,sans-serif;font-size:.72rem;color:var(--fg2,#a6adc8);flex-shrink:0;order:999}' +
       '.mvm-ftr a{color:inherit;text-decoration:none}' +
-      '.mvm-ftr a:hover{color:var(--accent,#89b4fa)}';
+      '.mvm-ftr a:hover{color:var(--accent,#89b4fa)}' +
+      // Small private pages traditionally put icon, title and explanation as
+      // direct body children.  The chrome makes body a column, so without this
+      // wrapper its first icon div gets mistaken for the app root and expands
+      // to fill the page, leaving the text at the bottom.
+      '.mvm-public-private{flex:1 1 auto;min-height:0;overflow:auto;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;text-align:center;padding:24px;box-sizing:border-box}';
     document.head.appendChild(s);
+  }
+
+  function wrapPrivatePage() {
+    var visual = [];
+    var kids = Array.prototype.slice.call(document.body.children);
+    for (var i = 0; i < kids.length; i++) {
+      var el = kids[i];
+      if (el.tagName === 'DIV' && (el.classList.contains('icon') || el.classList.contains('msg') || el.classList.contains('sub'))) visual.push(el);
+    }
+    // Only the deliberately tiny private-page shape is wrapped. Full public
+    // applications keep their own DOM structure and root exactly as before.
+    if (!visual.length || !visual.some(function (el) { return el.classList.contains('msg'); })) return;
+    var wrap = document.createElement('div');
+    wrap.className = 'mvm-public-private';
+    document.body.insertBefore(wrap, visual[0]);
+    visual.forEach(function (el) { wrap.appendChild(el); });
   }
 
   function findRoot() {
@@ -426,6 +447,7 @@
 
   function reflow() {
     document.body.style.cssText += ';display:flex;flex-direction:column;align-items:stretch;justify-content:flex-start;height:100dvh;width:100%;margin:0;overflow:hidden;box-sizing:border-box';
+    wrapPrivatePage();
     var root = findRoot();
     if (root) root.style.cssText += ';flex:1 1 auto;min-height:0;overflow:auto';
   }

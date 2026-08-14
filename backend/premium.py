@@ -392,7 +392,7 @@ def _public(state: dict) -> dict:
         "license_key_set": bool(key),
         "license_key_hint": ("••••" + key[-4:]) if key else "",
         "device_id": state.get("device_id", ""),
-        "site": SITE + "/premium",
+        "site": SITE + "/pricing",
     }
 
 

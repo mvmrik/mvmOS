@@ -194,7 +194,14 @@ def init_db():
                 vars TEXT,
                 -- Where clicking it should go. action_app opens an app on the
                 -- desktop; this is a plain URL, which is what a public page has.
-                link TEXT
+                link TEXT,
+                -- Which surface the recipient is on: 'os' for an mvmOS desktop
+                -- account, 'hub' for an Apps Hub profile. The two are separate
+                -- audiences that happen to share this table and can even share
+                -- a name (a Linux login and an Apps Hub profile both called
+                -- "martin" are different people), so the username alone cannot
+                -- keep a system notice off a public page.
+                audience TEXT NOT NULL DEFAULT 'hub'
             );
             CREATE INDEX IF NOT EXISTS idx_notifications_username ON notifications(username, created_at DESC);
         """)
@@ -215,11 +222,20 @@ def init_db():
             conn.execute("ALTER TABLE notifications ADD COLUMN ref TEXT")
         except Exception:
             pass
-        for column in ("sender TEXT", "title_key TEXT", "body_key TEXT", "vars TEXT", "link TEXT"):
+        for column in ("sender TEXT", "title_key TEXT", "body_key TEXT", "vars TEXT", "link TEXT",
+                       "audience TEXT"):
             try:
                 conn.execute(f"ALTER TABLE notifications ADD COLUMN {column}")
             except Exception:
                 pass
+        # Rows written before audience existed: everything the desktop itself
+        # created (system notices, a plugin's own mvmOS.notify()) belongs to the
+        # OS account; everything else was addressed to an Apps Hub profile by an
+        # app. Runs once — new rows always carry an audience of their own.
+        conn.execute(
+            "UPDATE notifications SET audience = CASE WHEN source IN ('system','app') "
+            "THEN 'os' ELSE 'hub' END WHERE audience IS NULL"
+        )
         conn.execute("CREATE INDEX IF NOT EXISTS idx_notifications_ref ON notifications(username, source, ref)")
         for app in SYSTEM_APPS:
             conn.execute(
