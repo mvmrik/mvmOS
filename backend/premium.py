@@ -183,8 +183,16 @@ async def heartbeat_loop() -> None:
                                 await download_core_premium(name)
                             except (PermissionError, RuntimeError):
                                 pass
+                else:
+                    # A key that no longer checks out as premium (expired,
+                    # revoked, regenerated elsewhere...) must not leave last
+                    # licence's code sitting around still working off a stale
+                    # local cache — same cleanup as removing the key outright.
+                    # _refresh() leaves status untouched when mvmos.org was
+                    # simply unreachable, so this never fires on a network blip.
+                    clear_all_premium()
             else:
-                clear_core_premium()
+                clear_all_premium()
         except Exception:
             pass
         await asyncio.sleep(HEARTBEAT_SECONDS)

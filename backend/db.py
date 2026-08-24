@@ -25,6 +25,7 @@ SYSTEM_APPS = [
     {"id": "apphub",          "name": "Apps Hub",         "icon": "🧩", "category": "Communication"},
     {"id": "settings",        "name": "Settings",         "icon": "⚙️", "category": "System & Administration"},
     {"id": "notifications",  "name": "Notifications",    "icon": "🔔", "category": "Communication"},
+    {"id": "cron-manager",    "name": "Cron Manager",     "icon": "⏰", "category": "System & Administration"},
 ]
 
 

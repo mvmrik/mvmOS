@@ -24,6 +24,7 @@ var mvmOS = (() => {
       { id: 'apphub',           name: t('app_apphub'),    icon: '🧩', category: 'Communication', system: true, launch: () => AppHub.openWindow() },
       { id: 'settings',         name: t('app_settings'),  icon: '⚙️', category: 'System & Administration', system: true, launch: () => Settings.openWindow() },
       { id: 'notifications',   name: t('app_notifications'), icon: '🔔', category: 'Communication', system: true, launch: () => Notifications.openWindow() },
+      { id: 'cron-manager',     name: t('app_cron_manager'), icon: '⏰', category: 'System & Administration', system: true, launch: () => CronManager.openWindow() },
     ];
   }
 

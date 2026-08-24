@@ -198,6 +198,18 @@ const Settings = (() => {
     premium = premium || { status: 'free', expires_at: null, license_key_set: false, license_key_hint: '', site: '' };
     const isPremium = premium.status === 'premium';
     const expiry = formatDate(premium.expires_at, s.date_format, s.timezone);
+    const expiresAtDate = premium.expires_at ? new Date(/(?:Z|[+-]\d\d:\d\d)$/.test(premium.expires_at) ? premium.expires_at : premium.expires_at.replace(' ', 'T') + 'Z') : null;
+    const daysLeft = (isPremium && expiresAtDate && !Number.isNaN(expiresAtDate.getTime()))
+      ? Math.max(0, Math.ceil((expiresAtDate.getTime() - Date.now()) / 86400000)) : null;
+    const keyStatusLine = !premium.license_key_set ? '' : isPremium
+      ? `<div style="font-size:.8rem;color:var(--accent);margin-top:10px">\u2713 ${t('subscription_active_until', {date: expiry})}${daysLeft != null ? ' \u00b7 ' + t('subscription_days_left', {count: daysLeft}) : ''}</div>`
+      : `<div style="font-size:.8rem;color:#e05555;margin-top:10px">\u2715 ${
+          premium.reason === 'expired' && expiry ? t('subscription_expired_on', {date: expiry}) :
+          premium.reason === 'seats_full' ? t('subscription_seats_full') :
+          premium.reason === 'unreachable' ? t('subscription_unreachable') :
+          premium.reason === 'duplicate' ? t('subscription_duplicate') :
+          t('subscription_invalid')
+        }</div>`;
     const esc = v => String(v || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
     const hint = esc(premium.license_key_hint);
     const site = esc(premium.site || 'https://mvmos.org/pricing');
@@ -250,6 +262,7 @@ const Settings = (() => {
                   <button class="s-btn" id="prem-recheck">${t('subscription_recheck')}</button>
                   <button class="s-btn" id="prem-remove">${t('subscription_remove')}</button>
                 </div>
+                ${keyStatusLine}
               ` : `
                 <div style="font-size:.82rem;color:var(--text-dim);line-height:1.45;margin-bottom:12px">${t('subscription_key_desc')}</div>
                 <label style="display:flex;flex-direction:column;gap:6px">

@@ -7,8 +7,29 @@ from .db import get_conn
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
 
-import datetime
-_server_tz = str(datetime.datetime.now().astimezone().tzinfo)
+import os
+
+
+def _detect_server_tz() -> str:
+    """IANA zone name for this server, e.g. "Europe/Sofia".
+
+    str(datetime.now().astimezone().tzinfo) looks like the right thing but on
+    Linux it gives the abbreviation (e.g. "EEST"), not an IANA name — and
+    Intl.DateTimeFormat in the browser rejects an abbreviation outright. The
+    zoneinfo symlink is what actually holds the name.
+    """
+    try:
+        path = os.path.realpath("/etc/localtime")
+        marker = "zoneinfo/"
+        idx = path.find(marker)
+        if idx != -1:
+            return path[idx + len(marker):]
+    except OSError:
+        pass
+    return "UTC"
+
+
+_server_tz = _detect_server_tz()
 
 DEFAULTS = {
     "timezone": _server_tz,

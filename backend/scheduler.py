@@ -1,7 +1,14 @@
 """
 mvmOS App Scheduler
 
-One Linux cron runs every minute: * * * * * curl -s http://localhost:2052/api/scheduler/tick
+One Linux cron runs every minute against this installation's own port,
+e.g. * * * * * curl -s http://127.0.0.1:2052/api/scheduler/tick — never
+through nginx or any domain name, since this is a purely local, self-to-self
+call. A machine can host several mvmOS installs on different ports sharing
+the same root crontab, so the exact command is always derived from this
+process's own --port argument (see _own_port), never guessed from a browser
+URL or hardcoded — that way each install only ever recognizes, installs, or
+removes its own line and never touches another install's.
 
 On each tick, this module:
 1. Reads all installed apps from data.db
@@ -21,12 +28,40 @@ import sys
 import sqlite3
 from datetime import datetime
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel
 
+from .auth import get_current_session, verify_linux_password
+from .cron import _read_crontab, _write_crontab
 from .db import get_conn, APPS_DIR
 
 router = APIRouter()
+
+
+def _own_port() -> str:
+    """This process's own listening port, read from its own --port argv.
+
+    uvicorn's CLI runs in this same interpreter, so sys.argv still holds the
+    exact flags it was launched with — the only place this process can learn
+    its own port from, since nothing else (env, config file) tracks it.
+    """
+    argv = sys.argv
+    for i, a in enumerate(argv):
+        if a == "--port" and i + 1 < len(argv):
+            return argv[i + 1]
+        if a.startswith("--port="):
+            return a.split("=", 1)[1]
+    return "80"
+
+
+def _tick_marker() -> str:
+    """Substring unique to this install's tick line, e.g. ':2052/api/scheduler/tick'."""
+    return f":{_own_port()}/api/scheduler/tick"
+
+
+def _tick_command() -> str:
+    return f"curl -s http://127.0.0.1:{_own_port()}/api/scheduler/tick > /dev/null 2>&1"
 
 BACKENDS_DIR = os.path.join(os.path.dirname(__file__), "apps")
 _THIS_DIR = os.path.dirname(__file__)
@@ -153,12 +188,13 @@ async def scheduler_tick():
 
 @router.get("/api/scheduler/status")
 async def scheduler_status():
-    """Returns which installed apps have a scheduler defined, and whether the system cron is installed."""
-    import subprocess as _sp
-    r = _sp.run(["crontab", "-l", "-u", "root"], capture_output=True, text=True)
-    root_crontab = r.stdout if r.returncode == 0 else ""
+    """Returns which installed apps have a scheduler defined, and whether
+    THIS install's own cron line (matched by its own port, not just any
+    line mentioning /api/scheduler/tick) is installed."""
+    root_crontab = _read_crontab("root")
+    marker = _tick_marker()
     cron_installed = any(
-        "/api/scheduler/tick" in line
+        marker in line
         for line in root_crontab.splitlines()
         if not line.strip().startswith("#")
     )
@@ -204,3 +240,39 @@ async def scheduler_status():
         })
 
     return JSONResponse({"apps": apps, "system_apps": system_apps, "cron_installed": cron_installed})
+
+
+class ToggleSchedulerRequest(BaseModel):
+    sudo_password: str = ""
+
+
+@router.post("/api/scheduler/toggle")
+async def toggle_scheduler(body: ToggleSchedulerRequest, session=Depends(get_current_session)):
+    """Installs or removes THIS install's own tick line in root's crontab.
+
+    The command is always built from this process's own port (_tick_command),
+    never from a client-supplied URL — a host can run several mvmOS installs
+    on different ports sharing the same root crontab, so matching and writing
+    must stay scoped to this install's own line only.
+    """
+    me = session["effective_user"]
+    # Same exemption as _resolve_target in cron.py: this endpoint always acts
+    # on root's crontab, so a session already running as root needs no extra
+    # password — it would just be re-proving an identity it already has.
+    if me != "root":
+        if not body.sudo_password or not verify_linux_password(me, body.sudo_password):
+            raise HTTPException(status_code=403, detail="Incorrect password")
+
+    marker = _tick_marker()
+    text = _read_crontab("root")
+    lines = text.splitlines()
+    existing = next((l for l in lines if marker in l and not l.strip().startswith("#")), None)
+
+    if existing:
+        lines = [l for l in lines if l != existing]
+        _write_crontab("root", "\n".join(lines) + "\n" if lines else "")
+        return JSONResponse({"ok": True, "enabled": False})
+    else:
+        lines.append(f"* * * * * {_tick_command()}")
+        _write_crontab("root", "\n".join(lines) + "\n")
+        return JSONResponse({"ok": True, "enabled": True})
