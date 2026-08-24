@@ -1,28 +1,119 @@
 (function () {
   var config = globalThis.MVM_EXTENSION_CONFIG;
   var api = globalThis.browser || globalThis.chrome;
-  var lang = navigator.language.toLowerCase().startsWith('bg') ? 'bg' : 'en';
-  var text = lang === 'bg' ? {
-    title: 'Настройки на {app}', subtitle: 'Избери от коя mvmOS инсталация да се зарежда публичната страница.',
-    server: 'mvmOS адрес', hint: 'Адресът е попълнен автоматично, но можеш да го промениш.',
-    width: 'Ширина на разширението', widthHint: 'Между 300 и 800 пиксела. Промяната важи при следващото отваряне.',
-    save: 'Запази', saved: 'Запазено',
-    shortcut: 'Клавишни комбинации', shortcutNone: 'не е зададена',
-    shortcutHint: 'Комбинациите се задават от самия браузър, а не от разширението. Страницата за тях е:',
-    shortcutFirefox: 'После: ⚙ → Управление на клавишните комбинации.',
-    shortcutEdit: 'Промени в браузъра',
-    shortcutManual: 'Браузърът не позволява страницата да бъде отворена оттук. Адресът е копиран — постави го в нов таб.'
-  } : {
-    title: '{app} settings', subtitle: 'Choose which mvmOS installation loads the public page.',
-    server: 'mvmOS URL', hint: 'The URL is filled automatically, but you can change it.',
-    width: 'Extension width', widthHint: 'Between 300 and 800 pixels. Applied the next time the popup opens.',
-    save: 'Save', saved: 'Saved',
-    shortcut: 'Keyboard shortcuts', shortcutNone: 'not set',
-    shortcutHint: 'Shortcuts are assigned by the browser itself, not by the extension. Its page for them is:',
-    shortcutFirefox: 'Then: ⚙ → Manage Extension Shortcuts.',
-    shortcutEdit: 'Change in the browser',
-    shortcutManual: 'The browser does not allow that page to be opened from here. The address is on your clipboard — paste it into a new tab.'
+  var TEXTS = {
+    en: {
+      title: '{app} settings', subtitle: 'Choose which mvmOS installation loads the public page.',
+      server: 'mvmOS URL', hint: 'The URL is filled automatically, but you can change it.',
+      width: 'Extension width', widthHint: 'Between 300 and 800 pixels. Applied the next time the popup opens.',
+      save: 'Save', saved: 'Saved',
+      shortcut: 'Keyboard shortcuts', shortcutNone: 'not set',
+      shortcutHint: 'Shortcuts are assigned by the browser itself, not by the extension. Its page for them is:',
+      shortcutFirefox: 'Then: ⚙ → Manage Extension Shortcuts.',
+      shortcutEdit: 'Change in the browser',
+      shortcutManual: 'The browser does not allow that page to be opened from here. The address is on your clipboard — paste it into a new tab.'
+    },
+    bg: {
+      title: 'Настройки на {app}', subtitle: 'Избери от коя mvmOS инсталация да се зарежда публичната страница.',
+      server: 'mvmOS адрес', hint: 'Адресът е попълнен автоматично, но можеш да го промениш.',
+      width: 'Ширина на разширението', widthHint: 'Между 300 и 800 пиксела. Промяната важи при следващото отваряне.',
+      save: 'Запази', saved: 'Запазено',
+      shortcut: 'Клавишни комбинации', shortcutNone: 'не е зададена',
+      shortcutHint: 'Комбинациите се задават от самия браузър, а не от разширението. Страницата за тях е:',
+      shortcutFirefox: 'После: ⚙ → Управление на клавишните комбинации.',
+      shortcutEdit: 'Промени в браузъра',
+      shortcutManual: 'Браузърът не позволява страницата да бъде отворена оттук. Адресът е копиран — постави го в нов таб.'
+    },
+    fr: {
+      title: 'Paramètres de {app}', subtitle: 'Choisissez quelle installation mvmOS charge la page publique.',
+      server: 'URL mvmOS', hint: "L'URL est renseignée automatiquement, mais vous pouvez la modifier.",
+      width: "Largeur de l'extension", widthHint: 'Entre 300 et 800 pixels. Appliqué à la prochaine ouverture du popup.',
+      save: 'Enregistrer', saved: 'Enregistré',
+      shortcut: 'Raccourcis clavier', shortcutNone: 'non défini',
+      shortcutHint: "Les raccourcis sont attribués par le navigateur lui-même, pas par l'extension. Sa page pour cela est :",
+      shortcutFirefox: 'Puis : ⚙ → Gérer les raccourcis des extensions.',
+      shortcutEdit: 'Modifier dans le navigateur',
+      shortcutManual: "Le navigateur ne permet pas d'ouvrir cette page depuis ici. L'adresse a été copiée — collez-la dans un nouvel onglet."
+    },
+    es: {
+      title: 'Ajustes de {app}', subtitle: 'Elige qué instalación de mvmOS carga la página pública.',
+      server: 'URL de mvmOS', hint: 'La URL se completa automáticamente, pero puedes cambiarla.',
+      width: 'Ancho de la extensión', widthHint: 'Entre 300 y 800 píxeles. Se aplica la próxima vez que se abra la ventana emergente.',
+      save: 'Guardar', saved: 'Guardado',
+      shortcut: 'Atajos de teclado', shortcutNone: 'no establecido',
+      shortcutHint: 'Los atajos los asigna el propio navegador, no la extensión. Su página para esto es:',
+      shortcutFirefox: 'Luego: ⚙ → Administrar atajos de extensiones.',
+      shortcutEdit: 'Cambiar en el navegador',
+      shortcutManual: 'El navegador no permite abrir esa página desde aquí. La dirección está en tu portapapeles — pégala en una pestaña nueva.'
+    },
+    de: {
+      title: '{app}-Einstellungen', subtitle: 'Wählen Sie, welche mvmOS-Installation die öffentliche Seite lädt.',
+      server: 'mvmOS-URL', hint: 'Die URL wird automatisch ausgefüllt, kann aber geändert werden.',
+      width: 'Erweiterungsbreite', widthHint: 'Zwischen 300 und 800 Pixel. Wird beim nächsten Öffnen des Popups angewendet.',
+      save: 'Speichern', saved: 'Gespeichert',
+      shortcut: 'Tastenkombinationen', shortcutNone: 'nicht festgelegt',
+      shortcutHint: 'Tastenkombinationen werden vom Browser selbst zugewiesen, nicht von der Erweiterung. Die zugehörige Seite:',
+      shortcutFirefox: 'Dann: ⚙ → Erweiterungs-Tastenkombinationen verwalten.',
+      shortcutEdit: 'Im Browser ändern',
+      shortcutManual: 'Der Browser erlaubt es nicht, diese Seite von hier aus zu öffnen. Die Adresse wurde in die Zwischenablage kopiert — fügen Sie sie in einen neuen Tab ein.'
+    },
+    ru: {
+      title: 'Настройки {app}', subtitle: 'Выберите, какая установка mvmOS загружает публичную страницу.',
+      server: 'URL mvmOS', hint: 'URL заполняется автоматически, но вы можете изменить его.',
+      width: 'Ширина расширения', widthHint: 'От 300 до 800 пикселей. Применяется при следующем открытии всплывающего окна.',
+      save: 'Сохранить', saved: 'Сохранено',
+      shortcut: 'Комбинации клавиш', shortcutNone: 'не задана',
+      shortcutHint: 'Комбинации клавиш назначаются самим браузером, а не расширением. Страница для них:',
+      shortcutFirefox: 'Затем: ⚙ → Управление комбинациями клавиш расширений.',
+      shortcutEdit: 'Изменить в браузере',
+      shortcutManual: 'Браузер не позволяет открыть эту страницу отсюда. Адрес скопирован в буфер обмена — вставьте его в новую вкладку.'
+    },
+    'zh-CN': {
+      title: '{app} 设置', subtitle: '选择由哪个 mvmOS 安装加载公共页面。',
+      server: 'mvmOS 地址', hint: '地址会自动填写，但你可以修改它。',
+      width: '扩展宽度', widthHint: '介于 300 到 800 像素之间。将在下次打开弹出窗口时生效。',
+      save: '保存', saved: '已保存',
+      shortcut: '键盘快捷键', shortcutNone: '未设置',
+      shortcutHint: '快捷键由浏览器本身分配，而非扩展程序。其设置页面是：',
+      shortcutFirefox: '然后：⚙ → 管理扩展程序快捷键。',
+      shortcutEdit: '在浏览器中修改',
+      shortcutManual: '浏览器不允许从这里打开该页面。地址已复制到剪贴板 — 请粘贴到新标签页中。'
+    },
+    'pt-BR': {
+      title: 'Configurações de {app}', subtitle: 'Escolha qual instalação do mvmOS carrega a página pública.',
+      server: 'URL do mvmOS', hint: 'A URL é preenchida automaticamente, mas você pode alterá-la.',
+      width: 'Largura da extensão', widthHint: 'Entre 300 e 800 pixels. Aplicado na próxima vez que o popup for aberto.',
+      save: 'Salvar', saved: 'Salvo',
+      shortcut: 'Atalhos de teclado', shortcutNone: 'não definido',
+      shortcutHint: 'Os atalhos são atribuídos pelo próprio navegador, não pela extensão. A página para isso é:',
+      shortcutFirefox: 'Depois: ⚙ → Gerenciar atalhos de extensões.',
+      shortcutEdit: 'Alterar no navegador',
+      shortcutManual: 'O navegador não permite abrir essa página a partir daqui. O endereço foi copiado para a área de transferência — cole-o em uma nova aba.'
+    },
+    ja: {
+      title: '{app} の設定', subtitle: '公開ページを読み込む mvmOS インストールを選択してください。',
+      server: 'mvmOS の URL', hint: 'URL は自動的に入力されますが、変更できます。',
+      width: '拡張機能の幅', widthHint: '300～800 ピクセルの範囲。次回ポップアップを開いたときに適用されます。',
+      save: '保存', saved: '保存しました',
+      shortcut: 'キーボードショートカット', shortcutNone: '未設定',
+      shortcutHint: 'ショートカットは拡張機能ではなくブラウザ自体によって割り当てられます。設定ページ：',
+      shortcutFirefox: '次に：⚙ → 拡張機能のショートカットを管理。',
+      shortcutEdit: 'ブラウザで変更',
+      shortcutManual: 'ブラウザではこのページをここから開けません。アドレスはクリップボードにコピーされました — 新しいタブに貼り付けてください。'
+    }
   };
+  function detectLang() {
+    var codes = Object.keys(TEXTS);
+    var nl = (navigator.language || 'en').toLowerCase();
+    for (var i = 0; i < codes.length; i++) if (nl === codes[i].toLowerCase()) return codes[i];
+    var base = nl.split('-')[0];
+    if (base === 'zh') return 'zh-CN';
+    if (base === 'pt') return 'pt-BR';
+    for (var j = 0; j < codes.length; j++) if (codes[j].toLowerCase().split('-')[0] === base) return codes[j];
+    return 'en';
+  }
+  var lang = detectLang();
+  var text = TEXTS[lang] || TEXTS.en;
   var fields = {}, wraps = {};
   function label(value) {
     return value && typeof value === 'object' ? (value[lang] || value.en || '') : String(value || '');

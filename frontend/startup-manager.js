@@ -1,23 +1,5 @@
 const StartupManager = (() => {
-  const i18n = {
-    en: {
-      title:    'Startup Manager',
-      desc:     'Choose which app backends start automatically when the system starts.',
-      enabled:  'Enabled',
-      disabled: 'Disabled',
-      no_apps:  'No app backends found.',
-      error_loading: 'Error loading',
-    },
-    bg: {
-      title:    'Мениджър за стартиране',
-      desc:     'Изберете кои приложения да стартират автоматично при стартиране на системата.',
-      enabled:  'Включено',
-      disabled: 'Изключено',
-      no_apps:  'Няма намерени app backends.',
-      error_loading: 'Грешка при зареждане',
-    },
-  };
-  function _t(k) { const l = window.mvmOS?.lang || 'en'; return (i18n[l] || i18n.en)[k] || k; }
+  function _t(k) { return window.t ? window.t('su_' + k) : k; }
 
   function openWindow() {
     Desktop.createWindow({

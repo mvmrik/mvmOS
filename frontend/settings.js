@@ -36,7 +36,8 @@ const Settings = (() => {
     { value: "it", label: "Italiano" },
     { value: "ru", label: "Русский" },
     { value: "tr", label: "Türkçe" },
-    { value: "zh", label: "中文" },
+    { value: "zh-CN", label: "简体中文" },
+    { value: "pt-BR", label: "Português (Brasil)" },
     { value: "ja", label: "日本語" },
     { value: "ar", label: "العربية" },
   ];

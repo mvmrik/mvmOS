@@ -38,7 +38,17 @@ _PAGE = """<!DOCTYPE html>
 </html>
 """
 
-_DEFAULTS = {"en": "This page could not be found.", "bg": "Тази страница не е намерена."}
+_DEFAULTS = {
+    "en": "This page could not be found.",
+    "bg": "Тази страница не е намерена.",
+    "fr": "Cette page est introuvable.",
+    "es": "No se pudo encontrar esta página.",
+    "de": "Diese Seite wurde nicht gefunden.",
+    "ru": "Эта страница не найдена.",
+    "zh-CN": "找不到此页面。",
+    "pt-BR": "Esta página não foi encontrada.",
+    "ja": "このページは見つかりませんでした。",
+}
 
 
 def _current_lang() -> str:
@@ -46,8 +56,10 @@ def _current_lang() -> str:
         from .db import get_conn
         with get_conn() as conn:
             row = conn.execute("SELECT value FROM settings WHERE key = 'main'").fetchone()
-        if row and json.loads(row["value"]).get("language") == "bg":
-            return "bg"
+        if row:
+            lang = json.loads(row["value"]).get("language")
+            if lang in _DEFAULTS:
+                return lang
     except Exception:
         pass
     return "en"
@@ -55,7 +67,7 @@ def _current_lang() -> str:
 
 def render_404_html(message_en: str = None, message_bg: str = None) -> str:
     lang = _current_lang()
-    message = (message_bg if lang == "bg" else message_en) or _DEFAULTS[lang]
+    message = (message_bg if lang == "bg" else message_en) or _DEFAULTS.get(lang, _DEFAULTS["en"])
     return _PAGE.format(lang=lang, message=message)
 
 

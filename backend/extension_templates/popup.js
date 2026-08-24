@@ -14,7 +14,29 @@
   var activeTab = null;
   var runtimeSettings = null;
   var serverOrigin = '';
-  var bg = navigator.language.toLowerCase().startsWith('bg');
+  var TEXTS = {
+    en: { settings: 'Settings', loadError: 'The page could not be loaded.' },
+    bg: { settings: 'Настройки', loadError: 'Публичната страница не може да бъде заредена.' },
+    fr: { settings: 'Paramètres', loadError: "La page n'a pas pu être chargée." },
+    es: { settings: 'Ajustes', loadError: 'No se pudo cargar la página.' },
+    de: { settings: 'Einstellungen', loadError: 'Die Seite konnte nicht geladen werden.' },
+    ru: { settings: 'Настройки', loadError: 'Не удалось загрузить страницу.' },
+    'zh-CN': { settings: '设置', loadError: '页面加载失败。' },
+    'pt-BR': { settings: 'Configurações', loadError: 'Não foi possível carregar a página.' },
+    ja: { settings: '設定', loadError: 'ページを読み込めませんでした。' }
+  };
+  function detectLang() {
+    var codes = Object.keys(TEXTS);
+    var nl = (navigator.language || 'en').toLowerCase();
+    for (var i = 0; i < codes.length; i++) if (nl === codes[i].toLowerCase()) return codes[i];
+    var base = nl.split('-')[0];
+    if (base === 'zh') return 'zh-CN';
+    if (base === 'pt') return 'pt-BR';
+    for (var j = 0; j < codes.length; j++) if (codes[j].toLowerCase().split('-')[0] === base) return codes[j];
+    return 'en';
+  }
+  var lang = detectLang();
+  var text = TEXTS[lang] || TEXTS.en;
   var frameHandlers = {};
   var readyHandlers = [];
   var frameQuery = null;
@@ -38,7 +60,7 @@
   applyWidth(config.surface.width);
   document.getElementById('icon').textContent = config.appIcon;
   document.getElementById('name').textContent = config.appName;
-  document.getElementById('settings').title = bg ? 'Настройки' : 'Settings';
+  document.getElementById('settings').title = text.settings;
   document.getElementById('settings').onclick = function () { api.runtime.openOptionsPage(); };
 
   function defaults() {
@@ -78,7 +100,7 @@
   globalThis.mvmExt = {
     api: api,
     config: config,
-    lang: bg ? 'bg' : 'en',
+    lang: lang,
     // How this popup was opened. Which query flags mean what is the app's
     // business — the shell only forwards them.
     query: new URLSearchParams(location.search),
@@ -230,6 +252,6 @@
   }).catch(function () {
     frame.style.display = 'none';
     errorEl.style.display = 'block';
-    errorEl.textContent = bg ? 'Публичната страница не може да бъде заредена.' : 'The page could not be loaded.';
+    errorEl.textContent = text.loadError;
   });
 })();

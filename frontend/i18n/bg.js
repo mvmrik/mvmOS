@@ -310,6 +310,14 @@ window._i18n = {
   'app_msc':                      'mvmOS Studio Code',
   'app_notifications':            'Известия',
 
+  // Startup Manager
+  'su_title':                     'Мениджър за стартиране',
+  'su_desc':                      'Изберете кои приложения да стартират автоматично при стартиране на системата.',
+  'su_enabled':                   'Включено',
+  'su_disabled':                  'Изключено',
+  'su_no_apps':                   'Няма намерени app backends.',
+  'su_error_loading':             'Грешка при зареждане',
+
   // Sites / Projects
   'sites_projects':               'Проекти',
   'sites_new_project':            'Нов проект',
@@ -425,8 +433,6 @@ window._i18n = {
   'as_mvmos_apps':                'mvmOS Приложения',
   'as_my_apps':                   'Мои приложения',
   'as_stores':                    'Магазини',
-  'as_widget_stores':             'Магазини',
-  'as_theme_stores':              'Магазини',
   'as_mvmos_widgets':             'mvmOS Уиджети',
   'as_my_widgets':                'Мои уиджети',
   'as_widget_stores':             'Магазини',

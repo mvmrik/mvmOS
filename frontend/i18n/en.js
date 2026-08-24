@@ -310,6 +310,14 @@ window._i18n = {
   'app_msc':                      'mvmOS Studio Code',
   'app_notifications':            'Notifications',
 
+  // Startup Manager
+  'su_title':                     'Startup Manager',
+  'su_desc':                      'Choose which app backends start automatically when the system starts.',
+  'su_enabled':                   'Enabled',
+  'su_disabled':                  'Disabled',
+  'su_no_apps':                   'No app backends found.',
+  'su_error_loading':             'Error loading',
+
   // Sites / Projects
   'sites_projects':               'Projects',
   'sites_new_project':            'New Project',
