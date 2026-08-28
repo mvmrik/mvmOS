@@ -728,6 +728,8 @@ window._i18n = {
   'ah_app_apis_hint':             '包含 <code>api.py</code> 的应用可以被其他应用进程内调用。切换开关以允许其他应用访问此应用的 API。',
   'ah_enabled':                    '已启用',
   'ah_disabled':                   '已禁用',
+  'ah_app_api_actions_button':     '操作',
+  'ah_app_api_actions_hint_short': '自动从该应用的 api.py 中检测 — 在其中添加带 docstring 的函数，它会自动出现在这里。',
   'ah_error_loading_users':       '加载用户出错',
   'ah_total_users':               '用户总数',
   'ah_active_sessions':           '活跃会话',

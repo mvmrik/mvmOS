@@ -31,7 +31,7 @@ The chosen apps, the sort order and the selected category belong to the profile 
 
 ## App-to-app communication
 
-Apps Hub is also the switchboard for server-side app-to-app calls. An app may expose a small `app_api.py` surface, but Apps Hub keeps that API disabled until the administrator enables it for the target app. Calling apps use the central Apps Hub API rather than importing another app directly, so the permission gate remains enforceable.
+Apps Hub is also the switchboard for server-side app-to-app calls. An app may expose a small `app_api.py` surface, but Apps Hub keeps that API disabled until the administrator enables it for the target app. Calling apps use the central Apps Hub API rather than importing another app directly, so the permission gate remains enforceable. For any app that exposes one, Apps Hub also lists the individual actions it makes available — name, parameters, and a short description read straight from the function's own docstring — so an administrator can see exactly what an integration would be able to call before enabling it.
 
 Enable an app API only when there is a concrete integration to support. It is a server-side trust decision: public-page access and app-to-app API access are separate controls.
 

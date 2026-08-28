@@ -728,6 +728,8 @@ window._i18n = {
   'ah_app_apis_hint':             '<code>api.py</code>を持つアプリは、プロセス内で他のアプリから呼び出せます。切り替えると他のアプリがこのアプリのAPIにアクセスできるようになります。',
   'ah_enabled':                    '有効',
   'ah_disabled':                   '無効',
+  'ah_app_api_actions_button':     'アクション',
+  'ah_app_api_actions_hint_short': 'このアプリの api.py から自動検出されます — docstring 付きの関数を追加すると自動的にここに表示されます。',
   'ah_error_loading_users':       'ユーザーの読み込みエラー',
   'ah_total_users':               'ユーザー総数',
   'ah_active_sessions':           'アクティブなセッション',

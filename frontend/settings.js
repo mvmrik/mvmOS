@@ -33,13 +33,10 @@ const Settings = (() => {
     { value: "de", label: "Deutsch" },
     { value: "fr", label: "Français" },
     { value: "es", label: "Español" },
-    { value: "it", label: "Italiano" },
     { value: "ru", label: "Русский" },
-    { value: "tr", label: "Türkçe" },
     { value: "zh-CN", label: "简体中文" },
     { value: "pt-BR", label: "Português (Brasil)" },
     { value: "ja", label: "日本語" },
-    { value: "ar", label: "العربية" },
   ];
 
   // Fixed list — symbol-only display, never real FX conversion. Kept in

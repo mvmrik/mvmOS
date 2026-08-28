@@ -728,6 +728,8 @@ window._i18n = {
   'ah_app_apis_hint':             'Apps mit <code>api.py</code> können von anderen Apps prozessintern aufgerufen werden. Umschalten, um anderen Apps Zugriff auf die API dieser App zu erlauben.',
   'ah_enabled':                    'Aktiviert',
   'ah_disabled':                   'Deaktiviert',
+  'ah_app_api_actions_button':     'Aktionen',
+  'ah_app_api_actions_hint_short': 'Automatisch erkannt aus der api.py dieser App — füge dort eine Funktion mit Docstring hinzu und sie erscheint hier von selbst.',
   'ah_error_loading_users':       'Fehler beim Laden der Benutzer',
   'ah_total_users':               'Benutzer insgesamt',
   'ah_active_sessions':           'Aktive Sitzungen',

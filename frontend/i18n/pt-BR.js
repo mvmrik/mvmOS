@@ -728,6 +728,8 @@ window._i18n = {
   'ah_app_apis_hint':             'Aplicativos com <code>api.py</code> podem ser chamados por outros aplicativos internamente. Ative para permitir que outros aplicativos acessem a API deste aplicativo.',
   'ah_enabled':                    'Ativada',
   'ah_disabled':                   'Desativada',
+  'ah_app_api_actions_button':     'Ações',
+  'ah_app_api_actions_hint_short': 'Detectado automaticamente a partir do api.py deste app — adicione lá uma função com docstring e ela aparece aqui sozinha.',
   'ah_error_loading_users':       'Erro ao carregar usuários',
   'ah_total_users':               'Total de usuários',
   'ah_active_sessions':           'Sessões ativas',

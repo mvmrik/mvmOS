@@ -491,6 +491,9 @@ const AppHub = (() => {
         </div>
         <div id="ah-app-apis-list"></div>`;
 
+      const _fmtParams = params => (params || [])
+        .map(p => `${p.name}${p.optional ? '?' : ''}${p.type ? ': ' + p.type : ''}`).join(', ');
+
       function render(list) {
         list.innerHTML = apps.map(a => `
           <div style="display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid var(--border)">
@@ -499,11 +502,21 @@ const AppHub = (() => {
               <div style="font-size:.88rem;font-weight:500">${esc(a.name)}</div>
               <div style="font-size:.72rem;color:var(--text-dim)">${esc(a.id)}/api.py</div>
             </div>
+            ${(a.actions || []).length ? `<button class="ah-api-actions-toggle s-btn s-btn-sm" data-app="${esc(a.id)}" aria-expanded="false" style="cursor:pointer;white-space:nowrap">🧩 ${t('ah_app_api_actions_button')} (${a.actions.length})</button>` : ''}
             <label style="display:flex;align-items:center;gap:6px;cursor:pointer;flex-shrink:0">
               <input type="checkbox" data-id="${a.id}" ${a.enabled?'checked':''} style="width:16px;height:16px;cursor:pointer">
               <span style="font-size:.8rem;color:${a.enabled?'var(--accent)':'var(--text-dim)'}">${a.enabled?t('ah_enabled'):t('ah_disabled')}</span>
             </label>
-          </div>`).join('');
+          </div>
+          ${(a.actions || []).length ? `<div class="ah-api-actions-panel" data-app="${esc(a.id)}" hidden style="border-bottom:1px solid var(--border);background:var(--surface1);padding:12px 16px 12px 48px">
+            <div style="font-size:.76rem;color:var(--text-dim);margin-bottom:8px">${t('ah_app_api_actions_hint_short')}</div>
+            <div style="display:flex;flex-direction:column;gap:8px">
+              ${a.actions.map(act => `<div style="padding:10px 11px;border:1px solid var(--border);border-radius:8px;background:var(--surface2)">
+                <div style="font-size:.82rem;font-weight:650;font-family:monospace">${esc(act.name)}(${esc(_fmtParams(act.params))})</div>
+                ${act.summary ? `<div style="font-size:.75rem;color:var(--text-dim);margin-top:3px">${esc(act.summary)}</div>` : ''}
+              </div>`).join('')}
+            </div>
+          </div>` : ''}`).join('');
 
         list.querySelectorAll('input[type=checkbox]').forEach(cb => {
           cb.onchange = async () => {
@@ -518,6 +531,12 @@ const AppHub = (() => {
             });
             render(list);
           };
+        });
+        list.querySelectorAll('.ah-api-actions-toggle').forEach(btn => btn.onclick = () => {
+          const panel = list.querySelector(`.ah-api-actions-panel[data-app="${btn.dataset.app}"]`);
+          if (!panel) return;
+          panel.hidden = !panel.hidden;
+          btn.setAttribute('aria-expanded', String(!panel.hidden));
         });
       }
       render(c.querySelector('#ah-app-apis-list'));

@@ -728,6 +728,8 @@ window._i18n = {
   'ah_app_apis_hint':             'Apps with <code>api.py</code> can be called by other apps in-process. Toggle to allow other apps to reach this app\'s API.',
   'ah_enabled':                    'Enabled',
   'ah_disabled':                   'Disabled',
+  'ah_app_api_actions_button':     'Actions',
+  'ah_app_api_actions_hint_short': 'Auto-detected from this app\'s api.py — add a function with a docstring there and it appears here on its own.',
   'ah_error_loading_users':       'Error loading users',
   'ah_total_users':               'Total users',
   'ah_active_sessions':           'Active sessions',

@@ -69,7 +69,20 @@ const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;');
 
 let _me = null;
 const _params = new URLSearchParams(location.search);
-let _token = _params.get('token') || localStorage.getItem('apphub_token');
+// localStorage is per-origin, so an installation reachable over both http and
+// https hides the token from whichever scheme the user did not log in on. The
+// cookie the server sets alongside the token is not tied to the scheme, so it
+// is what a fresh origin falls back to before deciding nobody is logged in.
+function _cookieToken() {
+  const m = document.cookie.match(/(?:^|;\s*)apphub_token=([^;]*)/);
+  try { return m ? decodeURIComponent(m[1]) : null; } catch(_) { return null; }
+}
+function _dropToken() {
+  _token = null;
+  localStorage.removeItem('apphub_token');
+  document.cookie = 'apphub_token=; Max-Age=0; Path=/';
+}
+let _token = _params.get('token') || localStorage.getItem('apphub_token') || _cookieToken();
 const _startTab = _params.get('tab') || 'apps';
 // Optional return URL: another app sends the user here to log in, then we send them back.
 // Only same-origin relative paths are honoured, to avoid open-redirects.
@@ -94,10 +107,21 @@ async function boot() {
   app.innerHTML = `<div style="flex:1;display:flex;align-items:center;justify-content:center;color:var(--fg2);font-size:.9rem">${t('ah_pub_loading')}</div>`;
   if (_token) {
     try {
-      const r = await fetch(BASE + '/me', {headers:{'X-Pub-Token':_token}});
+      let r = await fetch(BASE + '/me', {headers:{'X-Pub-Token':_token}});
+      // A token out of localStorage can be stale: logging out on the other
+      // scheme revokes it server-side but cannot reach this origin's storage.
+      // The cookie is the only thing that crosses, so it gets the second try
+      // instead of the stale entry deciding that nobody is logged in.
+      if (!r.ok) {
+        const ck = _cookieToken();
+        if (ck && ck !== _token) {
+          const r2 = await fetch(BASE + '/me', {headers:{'X-Pub-Token':ck}});
+          if (r2.ok) { _token = ck; localStorage.setItem('apphub_token', ck); r = r2; }
+        }
+      }
       if (r.ok) _me = await r.json();
-      else { _token = null; localStorage.removeItem('apphub_token'); }
-    } catch(_) { _token = null; localStorage.removeItem('apphub_token'); }
+      else _dropToken();
+    } catch(_) { _dropToken(); }
   }
   if (!_me) showAuth();
   else if (_afterAuth()) return;

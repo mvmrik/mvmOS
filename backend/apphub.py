@@ -377,6 +377,37 @@ def _load_app_api(app_id: str):
     return _api_modules[app_id]
 
 
+def _introspect_app_api_actions(app_id: str) -> list:
+    """Auto-discover the functions an app's app_api.py exposes to
+    call_app_api() — name, parameters and a one-line summary, read straight
+    off the function's signature and docstring. This is the single source
+    for both the App APIs accordion (a human reads it) and mvmAI's future
+    tool discovery (a model reads it): a function just needs a docstring,
+    nothing gets declared a second time anywhere."""
+    import inspect
+    mod = _load_app_api(app_id)
+    if mod is None:
+        return []
+    actions = []
+    for name, fn in inspect.getmembers(mod, inspect.isfunction):
+        if name.startswith("_") or fn.__module__ != mod.__name__:
+            continue
+        doc = inspect.getdoc(fn) or ""
+        summary = doc.split("\n\n", 1)[0].replace("\n", " ").strip()
+        params = []
+        for pname, p in inspect.signature(fn).parameters.items():
+            if p.kind in (p.VAR_POSITIONAL, p.VAR_KEYWORD):
+                continue
+            entry = {"name": pname}
+            if p.annotation is not p.empty:
+                entry["type"] = getattr(p.annotation, "__name__", str(p.annotation))
+            if p.default is not p.empty:
+                entry["optional"] = True
+            params.append(entry)
+        actions.append({"name": name, "summary": summary, "params": params})
+    return sorted(actions, key=lambda a: a["name"])
+
+
 class AppApiError(Exception):
     """Raised by call_app_api() when the target app has no api.py, its API is
     disabled by the admin, or it doesn't expose the requested method. Callers
@@ -497,6 +528,21 @@ def issue_pub_token(user_id: str) -> str:
         )
         conn.commit()
     return token
+
+
+# The token is also mirrored into a cookie. localStorage is per-origin, so an
+# installation reachable over both http and https looks logged out the moment a
+# link crosses from one scheme to the other; a cookie is not tied to the scheme
+# and carries the session across. Deliberately not httponly: the page copies it
+# back into localStorage, which is where every app already reads the token from,
+# and localStorage is JS-readable anyway, so nothing is exposed that was not.
+PUB_COOKIE = "apphub_token"
+
+
+def _with_pub_cookie(resp: JSONResponse, token: str) -> JSONResponse:
+    resp.set_cookie(PUB_COOKIE, token, httponly=False, samesite="lax",
+                    max_age=TOKEN_DAYS * 24 * 3600, path="/")
+    return resp
 
 
 def revoke_token(token: str) -> None:
@@ -794,12 +840,12 @@ async def register(body: RegisterBody):
     except sqlite3.IntegrityError:
         raise HTTPException(400, detail="Username already exists")
     token = issue_pub_token(uid)
-    return JSONResponse({"token": token, "user": {
+    return _with_pub_cookie(JSONResponse({"token": token, "user": {
         "id": uid, "username": body.username.strip().lower(),
         "display_name": body.display_name.strip(), "avatar_color": body.avatar_color,
         "avatar_data": None, "avatar_svg": None,
         "theme": "auto", "font_size": "md", "language": "auto",
-    }})
+    }}), token)
 
 
 class LoginBody(BaseModel):
@@ -815,12 +861,12 @@ async def login(body: LoginBody):
     if not row or not row["password_hash"] or not _verify_pw(row["password_hash"], body.password):
         raise HTTPException(401, detail="Invalid username or password")
     token = issue_pub_token(row["id"])
-    return JSONResponse({"token": token, "user": {
+    return _with_pub_cookie(JSONResponse({"token": token, "user": {
         "id": row["id"], "username": row["username"],
         "display_name": row["display_name"], "avatar_color": row["avatar_color"],
         "avatar_data": row["avatar_data"], "avatar_svg": row["avatar_svg"],
         "theme": row["theme"], "font_size": row["font_size"], "language": row["language"],
-    }})
+    }}), token)
 
 
 @_pub.get("/registration")
@@ -834,7 +880,11 @@ async def registration_info_pub():
 async def logout_pub(x_pub_token: Optional[str] = Header(default=None)):
     if x_pub_token:
         revoke_token(x_pub_token)
-    return JSONResponse({"ok": True})
+    # The mirror goes with the token, or the next page load would read a cookie
+    # for a session that no longer exists and look half logged in.
+    resp = JSONResponse({"ok": True})
+    resp.delete_cookie(PUB_COOKIE, path="/")
+    return resp
 
 
 @_pub.get("/me")
@@ -1120,6 +1170,7 @@ async def list_app_apis_admin(session=Depends(get_current_session)):
             "name":    m.get("name") or meta.get("name", app_id),
             "icon":    m.get("icon") or meta.get("icon", "📦"),
             "enabled": bool(rows.get(app_id, 0)),
+            "actions": _introspect_app_api_actions(app_id),
         })
     return JSONResponse(result)
 
