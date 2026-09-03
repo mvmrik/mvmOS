@@ -35,6 +35,8 @@ _RELEASE_URL = SITE + "/api/premium/release"
 
 _DEVICES_URL = SITE + "/api/premium/devices"
 _DEVICE_RELEASE_URL = SITE + "/api/premium/devices/release"
+_BTC_INVOICE_URL = SITE + "/api/premium/btc/invoice"
+_BTC_QUOTE_URL = SITE + "/api/premium/btc/quote"
 
 # How often this installation checks in while a key is stored. Each check-in
 # spends the current token and receives the next one, so a copy of this
@@ -54,7 +56,14 @@ _DEFAULT = {
     "expires_at": None,
     "checked_at": None,
     "reason": "",
+    "pending_invoice": None,
+    "invoice_history": [],
 }
+
+# How many past payments to remember locally. This is the installation's own
+# record for its own owner — mvmos.org is never asked to correlate invoices
+# back to a device, so this is the only place such a history exists at all.
+_INVOICE_HISTORY_LIMIT = 50
 
 
 def _load() -> dict:
@@ -161,6 +170,8 @@ async def _refresh(state: dict) -> dict:
         state.update({"status": "premium", "expires_at": result.get("valid_until")})
     else:
         state.update({"status": "free", "expires_at": result.get("valid_until")})
+    if result.get("seats"):
+        state["seats"] = result["seats"]
     return result
 
 
@@ -169,6 +180,12 @@ async def heartbeat_loop() -> None:
     while True:
         try:
             state = _load()
+            if state.get("pending_invoice"):
+                inv_id = state["pending_invoice"]["invoice_id"]
+                data = await _poll_invoice(inv_id)
+                if data:
+                    await _apply_invoice_result(state, inv_id, data)
+                    state = _load()
             if state.get("license_key"):
                 await _refresh(state)
                 _save(state)
@@ -401,6 +418,9 @@ def _public(state: dict) -> dict:
         "license_key_hint": ("••••" + key[-4:]) if key else "",
         "device_id": state.get("device_id", ""),
         "site": SITE + "/pricing",
+        "pending_invoice": state.get("pending_invoice"),
+        "invoice_history": state.get("invoice_history", []),
+        "seats": state.get("seats", 1),
     }
 
 
@@ -552,18 +572,197 @@ def _installed_app_ids() -> list:
     return [r["id"] for r in rows]
 
 
+def _real_app_ids() -> list:
+    """Installed apps that are actual store apps with an apps/<id>/ folder
+    on disk — unlike the core apps (Apps Hub, App Store, Notifications...)
+    that are seeded into the same `plugins` table purely for Start Menu
+    recent/most-used tracking (see db.py's SYSTEM_APPS) but never have a
+    folder of their own and so can never have premium content to check.
+    Same test download_premium() already makes internally before ever
+    reaching out to mvmos.org — done here first so a system app is never
+    even attempted, let alone reported as missing something it could never
+    have had.
+    """
+    from .db import APPS_DIR
+
+    return [app_id for app_id in _installed_app_ids() if os.path.isdir(os.path.join(APPS_DIR, app_id))]
+
+
+def _installed_app_names() -> dict:
+    with get_conn() as conn:
+        rows = conn.execute("SELECT id, name FROM plugins").fetchall()
+    return {r["id"]: r["name"] for r in rows}
+
+
+# --- content delivery status -------------------------------------------------
+#
+# The Settings "Premium content" panel exists because sync_all_premium() is a
+# fire-and-forget background task: if the process restarts, crashes, or hits
+# a network blip while it's mid-run, the badge above can say "premium" while
+# some app's premium/ never actually arrived, with nothing telling anyone.
+# This records the outcome of every attempt (delivered / not applicable to
+# this app / failed) so the count on the button is accurate without anyone
+# needing to click anything, and "Check for missing content" gives a way to
+# retry without waiting for the next heartbeat or re-entering the key.
+_CONTENT_STATUS_KEY = "premium_content_status"
+
+
+def _load_content_status() -> dict:
+    with get_conn() as conn:
+        row = conn.execute("SELECT value FROM settings WHERE key=?", (_CONTENT_STATUS_KEY,)).fetchone()
+    if not row:
+        return {}
+    try:
+        return json.loads(row["value"])
+    except (TypeError, ValueError):
+        return {}
+
+
+def _save_content_status(status: dict) -> None:
+    with get_conn() as conn:
+        conn.execute(
+            "INSERT INTO settings (key, value) VALUES (?, ?) "
+            "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+            (_CONTENT_STATUS_KEY, json.dumps(status)),
+        )
+
+
+async def _check_app_content(app_id: str) -> dict:
+    """Fetch (or confirm) one app's premium content and persist the result.
+    `available` is False only for a real "nothing published for this app"
+    (404) — that is not a failure and does not count against the badge.
+    """
+    entry = {"checked_at": datetime.now(timezone.utc).isoformat()}
+    try:
+        found = await download_premium(app_id)
+        entry["available"] = found
+        entry["delivered"] = bool(found) and os.path.isdir(_premium_app_dir(app_id))
+        entry["error"] = None
+    except PermissionError:
+        entry["available"] = True
+        entry["delivered"] = False
+        entry["error"] = "premium_required"
+    except RuntimeError as e:
+        entry["available"] = True
+        entry["delivered"] = False
+        entry["error"] = str(e)
+    status = _load_content_status()
+    status[app_id] = entry
+    _save_content_status(status)
+    return entry
+
+
+# Display name per core premium module — short, curated list (see
+# CORE_PREMIUM_MODULES above), unlike store apps there is no `plugins` row
+# to read a name from.
+_CORE_PREMIUM_NAMES = {"apphub": "Apps Hub"}
+# Key prefix for a core module's entry in the same status dict as store
+# apps — apphub the core module and a hypothetical "apphub"-named store app
+# are different things and must not collide.
+_CORE_STATUS_PREFIX = "core:"
+
+
+async def _check_core_content(name: str) -> dict:
+    """Same bookkeeping as _check_app_content, for a core premium module
+    (backend/premium/<name>/) instead of a store app's apps/<id>/premium/."""
+    entry = {"checked_at": datetime.now(timezone.utc).isoformat()}
+    try:
+        found = await download_core_premium(name)
+        entry["available"] = found
+        entry["delivered"] = bool(found) and os.path.isdir(_core_premium_dir(name))
+        entry["error"] = None
+    except PermissionError:
+        entry["available"] = True
+        entry["delivered"] = False
+        entry["error"] = "premium_required"
+    except RuntimeError as e:
+        entry["available"] = True
+        entry["delivered"] = False
+        entry["error"] = str(e)
+    status = _load_content_status()
+    status[_CORE_STATUS_PREFIX + name] = entry
+    _save_content_status(status)
+    return entry
+
+
+def _content_status_payload() -> dict:
+    state = _load()
+    status = _load_content_status()
+    names = _installed_app_names()
+    apps = []
+    for app_id in _real_app_ids():
+        entry = status.get(app_id)
+        if entry is None:
+            # Never checked (app installed before this feature existed, or
+            # before the first sync ran) — fall back to a live filesystem
+            # look rather than showing an indefinite unknown state.
+            delivered = os.path.isdir(_premium_app_dir(app_id))
+            entry = {"available": delivered, "delivered": delivered, "checked_at": None, "error": None}
+        else:
+            # Trust the recorded "available" (does this app even have
+            # premium content at all) but re-confirm "delivered" against the
+            # filesystem right now — something else could have removed it
+            # since the last check.
+            entry = dict(entry)
+            entry["delivered"] = bool(entry.get("available")) and os.path.isdir(_premium_app_dir(app_id))
+        if entry.get("available"):
+            apps.append({"app_id": app_id, "name": names.get(app_id, app_id), **entry})
+    for name in CORE_PREMIUM_MODULES:
+        entry = status.get(_CORE_STATUS_PREFIX + name)
+        if entry is None:
+            delivered = os.path.isdir(_core_premium_dir(name))
+            entry = {"available": delivered, "delivered": delivered, "checked_at": None, "error": None}
+        else:
+            entry = dict(entry)
+            entry["delivered"] = bool(entry.get("available")) and os.path.isdir(_core_premium_dir(name))
+        if entry.get("available"):
+            apps.append({"app_id": _CORE_STATUS_PREFIX + name, "name": _CORE_PREMIUM_NAMES.get(name, name), **entry})
+    delivered_count = sum(1 for a in apps if a["delivered"])
+    return {"apps": apps, "delivered": delivered_count, "total": len(apps),
+            "premium": state.get("status") == "premium"}
+
+
+@router.get("/content")
+async def get_content_status(_session=Depends(get_current_session)):
+    return JSONResponse(_content_status_payload())
+
+
+@router.post("/content/recheck")
+async def recheck_content(_session=Depends(get_current_session)):
+    state = _load()
+    if state.get("status") != "premium":
+        return JSONResponse({"error": "not_premium"}, status_code=402)
+    for app_id in _real_app_ids():
+        try:
+            await _check_app_content(app_id)
+        except Exception:
+            pass
+    for name in CORE_PREMIUM_MODULES:
+        try:
+            await _check_core_content(name)
+        except Exception:
+            pass
+    return JSONResponse(_content_status_payload())
+
+
 async def sync_all_premium() -> None:
     """Activation hook: fetch premium content for every already-installed app
-    in one pass, so buying a subscription does not require reinstalling
-    anything to get the premium build.
+    (and every core premium module) in one pass, so buying a subscription
+    does not require reinstalling anything to get the premium build. Each
+    attempt's outcome is recorded (see _check_app_content/_check_core_content)
+    so the Settings "Premium content" badge is accurate even though this
+    whole function runs as a background task the caller never waits for.
     """
-    for app_id in _installed_app_ids():
+    for app_id in _real_app_ids():
         try:
-            await download_premium(app_id)
-        except (PermissionError, RuntimeError):
+            await _check_app_content(app_id)
+        except Exception:
             pass
-    # Core has premium features of its own now, delivered exactly the same way.
-    await sync_core_premium()
+    for name in CORE_PREMIUM_MODULES:
+        try:
+            await _check_core_content(name)
+        except Exception:
+            pass
 
 
 def clear_all_premium() -> None:
@@ -573,6 +772,7 @@ def clear_all_premium() -> None:
     for app_id in _installed_app_ids():
         clear_premium_dir(app_id)
     clear_core_premium()
+    _save_content_status({})
 
 
 @router.get("/devices")
@@ -636,3 +836,209 @@ async def remove_license(_session=Depends(get_current_session)):
     _save(state)
     clear_all_premium()
     return JSONResponse(_public(state))
+
+
+class BtcInvoiceBody(BaseModel):
+    plan: str
+    seats: int = 1
+    renew: bool = False
+
+
+@router.post("/btc/quote")
+async def btc_get_quote(body: BtcInvoiceBody, _session=Depends(get_current_session)):
+    """Read-only preview of price + expiry effect for a plan/seat choice, so
+    the frontend can show it before the buyer commits to anything. Mints
+    nothing on mvmos.org's side — meant to be called on every change to the
+    plan/seats selection.
+    """
+    import httpx
+
+    state = _load()
+    code = None
+    if body.renew:
+        code = state.get("license_key", "").strip()
+        if not code:
+            raise HTTPException(400, detail="No license key stored to renew")
+    payload = {"plan": body.plan, "seats": body.seats}
+    if code:
+        payload["code"] = code
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            r = await client.post(_BTC_QUOTE_URL, json=payload)
+    except Exception:
+        raise HTTPException(502, detail="unreachable")
+    if r.status_code != 200:
+        raise HTTPException(r.status_code, detail=r.text)
+    return JSONResponse(r.json())
+
+
+@router.post("/btc/invoice")
+async def btc_create_invoice(body: BtcInvoiceBody, _session=Depends(get_current_session)):
+    """Ask mvmos.org to mint a fresh receiving address for this plan. When
+    renewing, the stored license key rides along so the payment extends it
+    instead of minting a brand new one. Seat count always rides along too —
+    unchanged seats just add the new period on top of what's left; a changed
+    seat count re-values the remaining time at the new tier (see mvmos.org's
+    _price_quote), so it has to reach the server on every call, renewal or
+    not.
+    """
+    import httpx
+
+    state = _load()
+    code = None
+    if body.renew:
+        code = state.get("license_key", "").strip()
+        if not code:
+            raise HTTPException(400, detail="No license key stored to renew")
+    payload = {"plan": body.plan, "seats": body.seats}
+    if code:
+        payload["code"] = code
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            r = await client.post(_BTC_INVOICE_URL, json=payload)
+    except Exception:
+        raise HTTPException(502, detail="unreachable")
+    if r.status_code != 200:
+        raise HTTPException(r.status_code, detail=r.text)
+    result = r.json()
+    result["status"] = "pending"
+    result["created_local_at"] = datetime.now(timezone.utc).isoformat()
+    state["pending_invoice"] = result
+    history = state.setdefault("invoice_history", [])
+    history.insert(0, dict(result))
+    del history[_INVOICE_HISTORY_LIMIT:]
+    _save(state)
+    return JSONResponse(result)
+
+
+async def _poll_invoice(invoice_id: str) -> dict | None:
+    """Ask mvmos.org whether this invoice is paid yet. On its own it changes
+    nothing — the caller decides what to do with the result. A 404 (invoice
+    gone from mvmos.org) is reported as such rather than folded into the
+    same "network problem" bucket as an actual connection failure.
+    """
+    import httpx
+
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            r = await client.get(f"{_BTC_INVOICE_URL}/{invoice_id}")
+    except Exception:
+        return None
+    if r.status_code == 404:
+        return {"status": "not_found"}
+    if r.status_code != 200:
+        return None
+    return r.json()
+
+
+def _update_history_entry(state: dict, invoice_id: str, **fields) -> None:
+    for entry in state.get("invoice_history", []):
+        if entry.get("invoice_id") == invoice_id:
+            entry.update(fields)
+            return
+
+
+async def _apply_invoice_result(state: dict, invoice_id: str, data: dict) -> None:
+    """Update this invoice's stored status (so the user's own history stays
+    current), and on a fresh "paid" result, save the code locally and refresh
+    right away rather than waiting for the next heartbeat.
+    """
+    if data.get("status") == "paid" and data.get("license_code"):
+        already_recorded = state.get("license_key") == data["license_code"] and not state.get("pending_invoice")
+        _update_history_entry(state, invoice_id, status="paid",
+                              paid_at=datetime.now(timezone.utc).isoformat())
+        state["license_key"] = data["license_code"]
+        state["pending_invoice"] = None
+        result = await _refresh(state)
+        _save(state)
+        if result.get("valid") and not already_recorded:
+            asyncio.create_task(sync_all_premium())
+    elif data.get("status") in ("pending", "seen"):
+        # received_sats rides along so a buyer who left mid-payment and comes
+        # back later (settings reopened, invoice reopened from history) sees
+        # what's already arrived without needing this tab to still be polling.
+        pending = state.get("pending_invoice")
+        if pending and pending.get("invoice_id") == invoice_id:
+            pending["status"] = data.get("status")
+            pending["received_sats"] = data.get("received_sats", 0)
+        _update_history_entry(state, invoice_id, status=data.get("status"),
+                              received_sats=data.get("received_sats", 0))
+        _save(state)
+    elif data.get("status") == "cancelled":
+        # Mirrors the same cleanup as "not_found" — reached when the
+        # heartbeat loop (not just the explicit cancel click) is the one that
+        # sees the cancellation, e.g. after the settings panel was closed.
+        pending = state.get("pending_invoice")
+        if pending and pending.get("invoice_id") == invoice_id:
+            state["pending_invoice"] = None
+        _update_history_entry(state, invoice_id, status="cancelled")
+        _save(state)
+    elif data.get("status") == "not_found":
+        # mvmos.org no longer has this invoice (an admin cleanup, for
+        # instance) — stop showing it as "waiting" forever.
+        pending = state.get("pending_invoice")
+        if pending and pending.get("invoice_id") == invoice_id:
+            state["pending_invoice"] = None
+        _update_history_entry(state, invoice_id, status="not_found")
+        _save(state)
+
+
+@router.get("/btc/invoice/{invoice_id}")
+async def btc_check_invoice(invoice_id: str, _session=Depends(get_current_session)):
+    """Poll mvmos.org for this invoice. The moment it comes back paid, save
+    the license code locally and refresh right away — activation should not
+    wait for the next heartbeat. (The heartbeat loop polls the same way in
+    the background, so this also gets caught even with Settings closed.)
+    """
+    data = await _poll_invoice(invoice_id)
+    if data is None:
+        raise HTTPException(502, detail="unreachable")
+    state = _load()
+    await _apply_invoice_result(state, invoice_id, data)
+    if data.get("status") == "paid":
+        data["premium"] = _public(state)
+    return JSONResponse(data)
+
+
+@router.post("/btc/invoice/{invoice_id}/cancel")
+async def btc_cancel_invoice(invoice_id: str, _session=Depends(get_current_session)):
+    """Cancel a pending invoice: recorded as cancelled on mvmos.org so it
+    doesn't just sit there looking like an unpaid one forever, and dropped
+    from local state so the QR/address box disappears here. A payment that
+    slipped in right before the cancel click is still applied normally —
+    cancelling never discards money that actually arrived.
+    """
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            r = await client.post(f"{_BTC_INVOICE_URL}/{invoice_id}/cancel")
+    except Exception:
+        raise HTTPException(502, detail="unreachable")
+    if r.status_code not in (200, 400):
+        raise HTTPException(r.status_code, detail=r.text)
+    data = r.json()
+
+    state = _load()
+    if data.get("status") == "paid":
+        full = await _poll_invoice(invoice_id)
+        if full:
+            await _apply_invoice_result(state, invoice_id, full)
+    else:
+        pending = state.get("pending_invoice")
+        if pending and pending.get("invoice_id") == invoice_id:
+            state["pending_invoice"] = None
+        _update_history_entry(state, invoice_id, status="cancelled")
+        _save(state)
+    return JSONResponse({"status": data.get("status", "cancelled")})
+
+
+@router.get("/license/reveal")
+async def reveal_license(_session=Depends(get_current_session)):
+    """The full code, for copying into another installation sharing the same
+    key. Gated client-side by mvmOS.confirmPassword before this is ever
+    called — the code is otherwise never sent to the frontend at all.
+    """
+    state = _load()
+    key = state.get("license_key", "").strip()
+    if not key:
+        raise HTTPException(404, detail="No license key stored")
+    return JSONResponse({"license_key": key})

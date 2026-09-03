@@ -199,7 +199,7 @@ const Settings = (() => {
     const daysLeft = (isPremium && expiresAtDate && !Number.isNaN(expiresAtDate.getTime()))
       ? Math.max(0, Math.ceil((expiresAtDate.getTime() - Date.now()) / 86400000)) : null;
     const keyStatusLine = !premium.license_key_set ? '' : isPremium
-      ? `<div style="font-size:.8rem;color:var(--accent);margin-top:10px">\u2713 ${t('subscription_active_until', {date: expiry})}${daysLeft != null ? ' \u00b7 ' + t('subscription_days_left', {count: daysLeft}) : ''}</div>`
+      ? `<div style="font-size:.8rem;color:var(--accent);margin-top:10px">\u2713 ${t('subscription_active_until', {date: expiry})}${daysLeft != null ? ' \u00b7 ' + t('subscription_days_left', {count: daysLeft}) : ''}${premium.seats ? ' \u00b7 ' + t('subscription_seats_count', {count: premium.seats}) : ''}</div>`
       : `<div style="font-size:.8rem;color:#e05555;margin-top:10px">\u2715 ${
           premium.reason === 'expired' && expiry ? t('subscription_expired_on', {date: expiry}) :
           premium.reason === 'seats_full' ? t('subscription_seats_full') :
@@ -248,7 +248,47 @@ const Settings = (() => {
               </div>
               ${premium.reason === 'duplicate' ? `<div style="font-size:.82rem;color:#e0a355;line-height:1.5;margin-top:12px">${t('subscription_duplicate')}</div>` : ''}
               <div style="font-size:.8rem;color:var(--text-dim);line-height:1.5;margin-top:12px">${t('subscription_keeps_working')}</div>
-              ${isPremium ? '' : `<a class="s-btn" href="${site}" target="_blank" rel="noopener" style="display:inline-block;margin-top:12px;text-decoration:none">${t('subscription_buy')}</a>`}
+
+              <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border)">
+                <div id="btc-purchase-controls">
+                  <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+                    <select id="btc-plan" class="s-select">
+                      <option value="monthly">${t('btc_pay_plan_monthly')}</option>
+                      <option value="yearly">${t('btc_pay_plan_yearly')}</option>
+                    </select>
+                    <select id="btc-seats" class="s-select">
+                      <option value="1" ${premium.seats === 1 ? 'selected' : ''}>${t('btc_pay_seats_1')}</option>
+                      <option value="3" ${premium.seats === 3 ? 'selected' : ''}>${t('btc_pay_seats_3')}</option>
+                      <option value="5" ${premium.seats === 5 ? 'selected' : ''}>${t('btc_pay_seats_5')}</option>
+                    </select>
+                  </div>
+
+                  <div id="btc-quote" style="margin-top:12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px 14px;font-size:.85rem;line-height:1.6;color:var(--text)"></div>
+
+                  <button class="s-btn s-btn-primary" id="btc-start" disabled style="margin-top:12px">${isPremium ? '₿ ' + t('btc_pay_renew') : '₿ ' + t('btc_pay_buy')}</button>
+                </div>
+
+                <div id="btc-invoice" style="display:none;margin-top:14px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:14px;text-align:center">
+                  <div id="btc-send-label" style="font-size:.82rem;color:var(--text-dim);margin-bottom:10px"></div>
+                  <img id="btc-qr" width="200" height="200" style="border-radius:6px;background:#fff" alt="QR">
+                  <div style="display:flex;align-items:center;gap:8px;margin-top:12px;text-align:left">
+                    <div id="btc-address" style="font-family:var(--mono,monospace);font-size:.85rem;word-break:break-all;flex:1"></div>
+                    <button class="s-btn-sm" id="btc-copy">${t('btc_pay_copy')}</button>
+                  </div>
+                  <div id="btc-status" style="margin-top:10px;font-size:.85rem;font-weight:600;color:var(--text-dim);text-align:left"></div>
+                  <div id="btc-received" style="margin-top:4px;font-size:.78rem;color:#e0a355;text-align:left"></div>
+                  <div id="btc-waiting-elapsed" style="margin-top:4px;font-size:.78rem;color:var(--text-dim);text-align:left"></div>
+                  <div style="margin-top:10px;text-align:left;display:flex;gap:8px">
+                    <button class="s-btn-sm" id="btc-cancel">${t('btc_pay_cancel')}</button>
+                    <button class="s-btn-sm" id="btc-close" style="display:none">${t('btc_pay_close')}</button>
+                  </div>
+                </div>
+
+                <div style="margin-top:18px">
+                  <button class="s-btn-sm" id="btc-history-toggle">${t('btc_pay_history_show')}</button>
+                  <div id="btc-history" style="display:none;margin-top:10px"></div>
+                </div>
+              </div>
             </div>
 
             <div class="settings-section">
@@ -257,9 +297,23 @@ const Settings = (() => {
                 <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
                   <div style="flex:1;min-width:140px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:8px 10px;font-family:var(--mono,monospace);font-size:.85rem">${hint}</div>
                   <button class="s-btn" id="prem-recheck">${t('subscription_recheck')}</button>
+                  <button class="s-btn" id="prem-reveal">${t('subscription_reveal')}</button>
                   <button class="s-btn" id="prem-remove">${t('subscription_remove')}</button>
                 </div>
+                <div id="prem-reveal-box" style="display:none;margin-top:10px">
+                  <div style="font-size:.78rem;color:var(--text-dim);margin-bottom:4px">${t('subscription_reveal_desc')}</div>
+                  <div style="display:flex;gap:8px;align-items:center">
+                    <div id="prem-full-code" style="font-family:var(--mono,monospace);font-size:.9rem;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:8px 10px;flex:1;word-break:break-all"></div>
+                    <button class="s-btn-sm" id="prem-reveal-copy">${t('btc_pay_copy')}</button>
+                  </div>
+                </div>
                 ${keyStatusLine}
+                ${isPremium ? `
+                <div style="margin-top:12px">
+                  <button class="s-btn" id="prem-content-btn">${t('subscription_content_title')} <span id="prem-content-count" style="opacity:.8;font-weight:400"></span></button>
+                  <div id="prem-content-panel" style="display:none;margin-top:10px"></div>
+                </div>
+                ` : ''}
               ` : `
                 <div style="font-size:.82rem;color:var(--text-dim);line-height:1.45;margin-bottom:12px">${t('subscription_key_desc')}</div>
                 <label style="display:flex;flex-direction:column;gap:6px">
@@ -273,7 +327,7 @@ const Settings = (() => {
 
             ${premium.license_key_set ? `
             <div class="settings-section">
-              <div class="settings-section-title">${t('subscription_devices_title')}</div>
+              <div class="settings-section-title">${t('subscription_devices_title')} <span id="prem-devices-count" style="color:var(--text-dim);font-weight:400;text-transform:none;letter-spacing:0"></span></div>
               <div style="font-size:.82rem;color:var(--text-dim);line-height:1.45;margin-bottom:12px">${t('subscription_devices_desc')}</div>
               <div id="prem-devices"><div style="font-size:.82rem;color:var(--text-dim)">${t('subscription_checking')}</div></div>
             </div>
@@ -583,7 +637,10 @@ const Settings = (() => {
         if (tab.dataset.tab === 'system') renderSystem(body);
         if (tab.dataset.tab === 'backup') renderBackup(body);
         if (tab.dataset.tab === 'sshaccess') renderSshAccess(body);
-        if (tab.dataset.tab === 'subscription') renderPremiumDevices();
+        if (tab.dataset.tab === 'subscription') {
+          renderPremiumDevices();
+          if (!premium.pending_invoice) refreshQuote();
+        }
       });
     });
 
@@ -620,6 +677,7 @@ const Settings = (() => {
 
     async function renderPremiumDevices() {
       const wrap = body.querySelector('#prem-devices');
+      const countEl = body.querySelector('#prem-devices-count');
       if (!wrap) return;
       const res = await fetch('/api/premium/devices').catch(() => null);
       if (!res?.ok) {
@@ -628,6 +686,7 @@ const Settings = (() => {
       }
       const data = await res.json();
       const devices = data.devices || [];
+      if (countEl && data.seats) countEl.textContent = `(${devices.length}/${data.seats})`;
       if (!devices.length) {
         wrap.innerHTML = `<div style="font-size:.82rem;color:var(--text-dim)">${t('subscription_devices_none')}</div>`;
         return;
@@ -659,6 +718,63 @@ const Settings = (() => {
     }
     if (activeTab === 'subscription') renderPremiumDevices();
 
+    // Premium content delivery status — separate from the licence badge
+    // above, and from #prem-recheck (which only re-validates the licence).
+    // The count on the button itself always reflects the server's last
+    // recorded outcome per app, so it is accurate without opening the
+    // panel; opening it (or pressing its own recheck button) fetches/
+    // re-fetches anything missing right now instead of waiting for the
+    // next heartbeat.
+    async function renderPremiumContent(opts) {
+      opts = opts || {};
+      const btn = body.querySelector('#prem-content-btn');
+      const countEl = body.querySelector('#prem-content-count');
+      const panel = body.querySelector('#prem-content-panel');
+      if (!btn || !panel) return;
+      if (opts.open || opts.recheck) {
+        panel.style.display = 'block';
+        panel.innerHTML = `<div style="font-size:.82rem;color:var(--text-dim)">${t('subscription_checking')}</div>`;
+      }
+      const res = opts.recheck
+        ? await fetch('/api/premium/content/recheck', {method: 'POST'}).catch(() => null)
+        : await fetch('/api/premium/content').catch(() => null);
+      const data = res?.ok ? await res.json() : null;
+      if (!data) {
+        if (opts.open || opts.recheck) panel.innerHTML = `<div style="font-size:.82rem;color:var(--text-dim)">${t('subscription_unreachable')}</div>`;
+        return;
+      }
+      if (countEl) countEl.textContent = `(${data.delivered}/${data.total})`;
+      if (!(opts.open || opts.recheck)) return;
+      if (!data.apps.length) {
+        panel.innerHTML = `<div style="font-size:.82rem;color:var(--text-dim)">${t('subscription_content_none')}</div>`;
+        return;
+      }
+      panel.innerHTML = `
+        <div style="font-size:.82rem;color:var(--text-dim);line-height:1.45;margin-bottom:10px">${t('subscription_content_desc')}</div>
+        ${data.apps.map(a => `
+          <div style="display:flex;align-items:center;gap:10px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:9px 12px;margin-bottom:8px">
+            <span style="color:${a.delivered ? 'var(--accent)' : '#e05555'}">${a.delivered ? '✓' : '✕'}</span>
+            <div style="flex:1;min-width:120px">
+              <div style="font-size:.88rem">${esc(a.name)}</div>
+              <div style="font-size:.75rem;color:var(--text-dim);margin-top:2px">${a.delivered ? t('subscription_content_ok') : t('subscription_content_missing')}${a.checked_at ? ' · ' + t('subscription_content_last_checked', {date: formatDate(a.checked_at, s.date_format, s.timezone)}) : ''}</div>
+            </div>
+          </div>`).join('')}
+        <button class="s-btn-sm" id="prem-content-recheck-btn" style="margin-top:4px">${t('subscription_content_recheck')}</button>
+      `;
+      panel.querySelector('#prem-content-recheck-btn')?.addEventListener('click', async e => {
+        e.target.disabled = true;
+        await renderPremiumContent({recheck: true});
+      });
+    }
+    if (activeTab === 'subscription' && isPremium) renderPremiumContent({});
+    body.querySelector('#prem-content-btn')?.addEventListener('click', () => {
+      const panel = body.querySelector('#prem-content-panel');
+      // Opening it always does the real check (asks mvmos.org, re-fetches
+      // anything missing) — no separate "now actually check" step to miss.
+      if (panel.style.display === 'none') renderPremiumContent({open: true, recheck: true});
+      else panel.style.display = 'none';
+    });
+
     body.querySelector('#prem-save')?.addEventListener('click', async e => {
       const input = body.querySelector('#prem-key');
       const key = input.value.trim();
@@ -674,6 +790,13 @@ const Settings = (() => {
       if (data.status === 'premium') {
         showPremState(data);
         premMsg(t('subscription_downloading'));
+        // Don't just wait on the background sync task the license save
+        // just kicked off — actively (and visibly) fetch/confirm every
+        // app's content right now, open to show the result. This is what
+        // makes the count trustworthy even if that background task never
+        // finishes (a restart, a crash, anything) — the button itself just
+        // did the real check.
+        await renderPremiumContent({open: true, recheck: true});
         return;
       }
       showPremState(data);
@@ -696,6 +819,320 @@ const Settings = (() => {
       const data = res?.ok ? await res.json() : null;
       if (!data) { premMsg(t('subscription_remove_failed'), true); e.target.disabled = false; return; }
       showPremState(data);
+    });
+
+    // ── Buy / renew with Bitcoin ────────────────────────────────────────
+
+    // Live price/expiry preview — recalculated on every plan/devices change,
+    // never mints anything (that only happens on the #btc-start click below).
+    // The pay button stays disabled until a quote has loaded successfully,
+    // so nobody can pay before seeing what it costs and what it does to
+    // their expiry date.
+    let _quoteToken = 0;
+    async function refreshQuote() {
+      const quoteEl = body.querySelector('#btc-quote');
+      const startBtn = body.querySelector('#btc-start');
+      if (!quoteEl || !startBtn) return;
+      const myToken = ++_quoteToken;
+      startBtn.disabled = true;
+      quoteEl.textContent = t('btc_pay_quote_loading');
+      const plan = body.querySelector('#btc-plan').value;
+      const seats = parseInt(body.querySelector('#btc-seats')?.value || '1', 10);
+      const res = await fetch('/api/premium/btc/quote', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({plan, seats, renew: isPremium}),
+      }).catch(() => null);
+      if (myToken !== _quoteToken) return; // a newer selection is already loading
+      const data = res?.ok ? await res.json() : null;
+      if (!data) { quoteEl.textContent = t('btc_pay_unreachable'); return; }
+      const priceLine = t('btc_pay_quote_price', {
+        usd: data.usd_price.toFixed(2), sats: data.amount_sats.toLocaleString(),
+      });
+      const detailLines = [];
+      if (data.reseat && data.remaining_days_old > 0) {
+        detailLines.push(t('btc_pay_quote_reseat', {
+          remaining: data.remaining_days_old,
+          old_seats: premium.seats || 1,
+          converted: data.converted_days_old,
+          new_seats: seats,
+          delta: (data.delta_days >= 0 ? '+' : '') + data.delta_days,
+        }));
+      }
+      detailLines.push(t('btc_pay_quote_until', {
+        date: formatDate(data.new_valid_until, s.date_format, s.timezone),
+      }));
+      quoteEl.innerHTML = `
+        <div style="font-size:1.05rem;font-weight:700">${priceLine}</div>
+        ${detailLines.map(l => `<div style="color:var(--text-dim);margin-top:2px">${l}</div>`).join('')}
+      `;
+      startBtn.disabled = false;
+    }
+    body.querySelector('#btc-plan')?.addEventListener('change', refreshQuote);
+    body.querySelector('#btc-seats')?.addEventListener('change', refreshQuote);
+    // Skipped when a payment is already outstanding — the purchase controls
+    // this would populate are about to be hidden by showBtcInvoice() below.
+    if (activeTab === 'subscription' && !premium.pending_invoice) refreshQuote();
+
+    // Keeps the in-memory history list's status in step with what the poll
+    // just learned, so it doesn't sit showing "pending" until the Settings
+    // window is closed and reopened (the same class of staleness as the
+    // brand-new-invoice case above, just for a status change instead).
+    function updateHistoryStatus(invoiceId, status) {
+      const entry = (premium.invoice_history || []).find(inv => inv.invoice_id === invoiceId);
+      if (entry) entry.status = status;
+      renderBtcHistory();
+    }
+
+    // Hidden the whole time a payment is outstanding, so plan/devices can't
+    // be picked (and paid for a second time) while one is already in
+    // flight — the only way back to it is that payment resolving.
+    function setPurchaseControlsVisible(visible) {
+      const el = body.querySelector('#btc-purchase-controls');
+      if (el) el.style.display = visible ? '' : 'none';
+    }
+
+    function formatMMSS(ms) {
+      const total = Math.max(0, Math.floor(ms / 1000));
+      const m = Math.floor(total / 60), s = total % 60;
+      return m + ':' + String(s).padStart(2, '0');
+    }
+
+    function stopWaitingClock() {
+      if (window._btcWaitTimer) { clearInterval(window._btcWaitTimer); window._btcWaitTimer = null; }
+    }
+
+    function startWaitingClock(sinceIso) {
+      stopWaitingClock();
+      const elapsedEl = body.querySelector('#btc-waiting-elapsed');
+      if (!elapsedEl) return;
+      const since = new Date(sinceIso).getTime();
+      const tick = () => { elapsedEl.textContent = t('btc_pay_waiting', {time: formatMMSS(Date.now() - since)}); };
+      tick();
+      window._btcWaitTimer = setInterval(tick, 1000);
+    }
+
+    // `lockControls` distinguishes "this is the one real payment currently
+    // outstanding" (fresh from #btc-start, or resumed because it's
+    // premium.pending_invoice) from "just peeking at an old row from
+    // history" — only the former should hide the purchase controls. Peeking
+    // at a stray unpaid invoice from an hour ago shouldn't block starting a
+    // new purchase, and its only exit shouldn't be the destructive Cancel
+    // button (that's what actually sent a real cancel request to mvmos.org
+    // when someone clicked it just meaning "close this").
+    // Shows what's actually arrived at the address so far against what's
+    // needed, whenever it's short — the only way to tell "you sent less
+    // than asked, send the rest to this same address" from "nothing sent
+    // yet". Also remembers the figure on the box itself so the cancel
+    // button can warn before discarding access to an address that already
+    // has real sats sitting on it.
+    function updateReceivedLine(box, amountSats, receivedSats) {
+      const el = body.querySelector('#btc-received');
+      box.dataset.receivedSats = receivedSats || 0;
+      if (el) {
+        if (receivedSats > 0 && receivedSats < amountSats) {
+          el.textContent = t('btc_pay_underpaid', {
+            received: receivedSats.toLocaleString(),
+            remaining: (amountSats - receivedSats).toLocaleString(),
+          });
+        } else {
+          el.textContent = '';
+        }
+      }
+      // Cancelling is only meaningful before anything has actually moved —
+      // once even a partial, unconfirmed amount has landed at the address,
+      // "cancel" can't undo that, and disabling it here is what stops it
+      // from being mistaken for a safe way to just close the box (see the
+      // history-row Close button for that instead).
+      const cancelBtn = body.querySelector('#btc-cancel');
+      if (cancelBtn) {
+        cancelBtn.disabled = receivedSats > 0;
+        cancelBtn.title = receivedSats > 0 ? t('btc_pay_cancel_disabled_hint') : '';
+      }
+    }
+
+    function showBtcInvoice(data, initialStatus, opts) {
+      const lockControls = !(opts && opts.lockControls === false);
+      if (lockControls) setPurchaseControlsVisible(false);
+      const box = body.querySelector('#btc-invoice');
+      box.style.display = 'block';
+      box.dataset.invoiceId = data.invoice_id;
+      body.querySelector('#btc-cancel').style.display = '';
+      body.querySelector('#btc-close').style.display = lockControls ? 'none' : '';
+      body.querySelector('#btc-send-label').textContent = t('btc_pay_send', {amount: data.amount_sats});
+      body.querySelector('#btc-address').textContent = data.address;
+      body.querySelector('#btc-address').dataset.invoiceId = data.invoice_id;
+      const btcAmount = (data.amount_sats / 100000000).toFixed(8);
+      const uri = `bitcoin:${data.address}?amount=${btcAmount}`;
+      body.querySelector('#btc-qr').src = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(uri)}`;
+      const statusEl = body.querySelector('#btc-status');
+      statusEl.textContent = initialStatus === 'seen' ? t('btc_pay_seen') : t('btc_pay_pending');
+      updateReceivedLine(box, data.amount_sats, data.received_sats || 0);
+      if (data.created_local_at) startWaitingClock(data.created_local_at);
+
+      if (window._btcPollTimer) clearInterval(window._btcPollTimer);
+      window._btcPollTimer = setInterval(async () => {
+        const r = await fetch('/api/premium/btc/invoice/' + data.invoice_id).catch(() => null);
+        const st = r?.ok ? await r.json() : null;
+        if (!st) { statusEl.textContent = t('btc_pay_unreachable'); return; }
+        if (st.amount_sats) updateReceivedLine(box, st.amount_sats, st.received_sats || 0);
+        if (st.status === 'seen') {
+          statusEl.textContent = t('btc_pay_seen');
+          updateHistoryStatus(data.invoice_id, 'seen');
+        } else if (st.status === 'paid') {
+          statusEl.textContent = t('btc_pay_paid');
+          clearInterval(window._btcPollTimer);
+          stopWaitingClock();
+          if (st.premium) showPremState(st.premium);
+        } else if (st.status === 'cancelled') {
+          // Cancelled from elsewhere (another tab/session) while this one
+          // was still polling — drop the box here too, and let purchasing
+          // happen again.
+          clearInterval(window._btcPollTimer);
+          stopWaitingClock();
+          box.style.display = 'none';
+          if (lockControls) setPurchaseControlsVisible(true);
+          updateHistoryStatus(data.invoice_id, 'cancelled');
+        } else {
+          statusEl.textContent = t('btc_pay_pending');
+        }
+      }, 5000);
+    }
+
+    body.querySelector('#btc-cancel')?.addEventListener('click', async e => {
+      const btn = e.target;
+      const invoiceId = body.querySelector('#btc-address')?.dataset.invoiceId;
+      if (!invoiceId) return;
+      btn.disabled = true;
+      const res = await fetch(`/api/premium/btc/invoice/${invoiceId}/cancel`, {method: 'POST'}).catch(() => null);
+      if (!res?.ok) { btn.disabled = false; premMsg(t('btc_pay_unreachable'), true); return; }
+      if (window._btcPollTimer) clearInterval(window._btcPollTimer);
+      stopWaitingClock();
+      body.querySelector('#btc-invoice').style.display = 'none';
+      setPurchaseControlsVisible(true);
+      updateHistoryStatus(invoiceId, 'cancelled');
+    });
+
+    // Dismiss a peeked-at (not currently outstanding) invoice without
+    // cancelling it — only shown when showBtcInvoice was called with
+    // lockControls:false, i.e. from clicking an old row in the history list.
+    body.querySelector('#btc-close')?.addEventListener('click', () => {
+      if (window._btcPollTimer) clearInterval(window._btcPollTimer);
+      stopWaitingClock();
+      body.querySelector('#btc-invoice').style.display = 'none';
+    });
+
+    body.querySelector('#btc-start')?.addEventListener('click', async e => {
+      const btn = e.target;
+      btn.disabled = true;
+      const plan = body.querySelector('#btc-plan').value;
+      const seats = parseInt(body.querySelector('#btc-seats')?.value || '1', 10);
+      const res = await fetch('/api/premium/btc/invoice', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({plan, seats, renew: isPremium}),
+      }).catch(() => null);
+      const data = res?.ok ? await res.json() : null;
+      btn.disabled = false;
+      if (!data) { premMsg(t('btc_pay_unreachable'), true); return; }
+      // The backend already recorded this as pending_invoice and in its own
+      // invoice_history the moment it minted the invoice — mirror both here
+      // too, so the list (and the isCurrent check a click on this exact row
+      // does) reflect it right away instead of only after the Settings
+      // window is closed and reopened.
+      const historyEntry = {...data, status: 'pending', created_local_at: new Date().toISOString()};
+      premium.pending_invoice = historyEntry;
+      premium.invoice_history = premium.invoice_history || [];
+      premium.invoice_history.unshift(historyEntry);
+      showBtcInvoice(historyEntry, 'pending');
+      renderBtcHistory();
+    });
+
+    // Resume a payment that was already waiting when this panel opened —
+    // it lives in premium.pending_invoice on the backend, not just in this
+    // tab, so a reload finds it exactly where it was left. This also keeps
+    // the purchase controls hidden (via showBtcInvoice) on reopen, so a
+    // second purchase can't be started while one is still outstanding.
+    if (premium.pending_invoice) {
+      showBtcInvoice(premium.pending_invoice, premium.pending_invoice.status);
+    }
+
+    function renderBtcHistory() {
+      const wrap = body.querySelector('#btc-history');
+      if (!wrap) return;
+      const list = premium.invoice_history || [];
+      if (!list.length) {
+        wrap.innerHTML = `<div style="font-size:.82rem;color:var(--text-dim)">${t('btc_pay_history_none')}</div>`;
+        return;
+      }
+      const statusLabel = st => st === 'paid' ? t('btc_pay_status_paid')
+        : st === 'seen' ? t('btc_pay_status_seen')
+        : st === 'cancelled' ? t('btc_pay_status_cancelled')
+        : t('btc_pay_status_pending');
+      const statusColor = st => st === 'paid' ? 'var(--accent)'
+        : st === 'seen' ? '#e0a355'
+        : st === 'cancelled' ? '#e05555'
+        : 'var(--text-dim)';
+      wrap.innerHTML = list.map((inv, idx) => {
+        const when = formatDate(inv.paid_at || inv.created_local_at, s.date_format, s.timezone);
+        const planLabel = inv.plan === 'yearly' ? t('btc_pay_plan_yearly') : t('btc_pay_plan_monthly');
+        // Pending/seen rows are the only ones still worth acting on — an
+        // underpaid or forgotten invoice has no other way back to its
+        // address/amount once the box that showed them has been closed.
+        const clickable = inv.status === 'pending' || inv.status === 'seen';
+        return `<div class="${clickable ? 'btc-history-row' : ''}" data-idx="${idx}"
+            style="display:flex;align-items:center;gap:10px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:8px 12px;margin-bottom:6px;font-size:.82rem;${clickable ? 'cursor:pointer' : ''}">
+          <div style="flex:1">${planLabel} — ${inv.amount_sats} sats${clickable ? ' · ' + t('btc_pay_history_show_address') : ''}</div>
+          <div style="color:var(--text-dim)">${when}</div>
+          <div style="color:${statusColor(inv.status)};font-weight:600;min-width:60px;text-align:right">${statusLabel(inv.status)}</div>
+        </div>`;
+      }).join('');
+      wrap.querySelectorAll('.btc-history-row').forEach(row => {
+        row.addEventListener('click', () => {
+          const inv = list[parseInt(row.dataset.idx, 10)];
+          if (!inv) return;
+          // Only the invoice the backend is actually still tracking as
+          // outstanding gets to lock the purchase controls — any other
+          // pending-looking row here is just a stray nobody ever paid or
+          // came back to, and peeking at it shouldn't block starting a
+          // fresh purchase.
+          const isCurrent = premium.pending_invoice && premium.pending_invoice.invoice_id === inv.invoice_id;
+          showBtcInvoice(inv, inv.status, {lockControls: !!isCurrent});
+        });
+      });
+    }
+    renderBtcHistory();
+
+    body.querySelector('#btc-history-toggle')?.addEventListener('click', e => {
+      const histEl = body.querySelector('#btc-history');
+      const show = histEl.style.display === 'none';
+      histEl.style.display = show ? 'block' : 'none';
+      e.target.textContent = show ? t('btc_pay_history_hide') : t('btc_pay_history_show');
+    });
+
+    body.querySelector('#btc-copy')?.addEventListener('click', () => {
+      const btn = body.querySelector('#btc-copy');
+      navigator.clipboard?.writeText(body.querySelector('#btc-address').textContent);
+      const orig = btn.textContent;
+      btn.textContent = t('btc_pay_copied');
+      setTimeout(() => { btn.textContent = orig; }, 1500);
+    });
+
+    // ── Reveal the stored code (for pasting into another installation) ────
+    body.querySelector('#prem-reveal')?.addEventListener('click', async () => {
+      const password = await mvmOS.confirmPassword(t('subscription_reveal'), t('subscription_reveal_desc'));
+      if (!password) return;
+      const res = await fetch('/api/premium/license/reveal').catch(() => null);
+      const data = res?.ok ? await res.json() : null;
+      if (!data) return;
+      body.querySelector('#prem-full-code').textContent = data.license_key;
+      body.querySelector('#prem-reveal-box').style.display = 'block';
+    });
+
+    body.querySelector('#prem-reveal-copy')?.addEventListener('click', () => {
+      const btn = body.querySelector('#prem-reveal-copy');
+      navigator.clipboard?.writeText(body.querySelector('#prem-full-code').textContent);
+      const orig = btn.textContent;
+      btn.textContent = t('btc_pay_copied');
+      setTimeout(() => { btn.textContent = orig; }, 1500);
     });
 
     if (activeTab === 'sshaccess') renderSshAccess(body);

@@ -7,7 +7,7 @@ order: 280
 ---
 ## Current status
 
-Premium is a future option. mvmOS does not currently accept payments, use Patreon, or provide active Premium entitlements. Core and normal Store functionality are not dependent on Premium.
+Premium is being built out incrementally. Core and normal Store functionality are not dependent on Premium, and using mvmOS does not require a Premium subscription.
 
 ## Planned model
 
@@ -19,4 +19,4 @@ Premium Core modules are distributed separately from the ordinary Core code. An 
 
 ## No change for existing users
 
-Free functionality remains available without a Premium key. If Premium becomes available, the website terms and privacy information will be updated before a payment or membership flow is opened.
+Free functionality remains available without a Premium key. The website terms and privacy information are kept current with however Premium actually works at any given time.
