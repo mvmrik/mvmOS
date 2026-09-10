@@ -62,6 +62,17 @@ _CORE_APP_META = {"apphub": {"name": "Apps Hub", "icon": "🧩"}}
 # /pub/<app>/ page via layout.js (see backend/apphub_pub/layout.js THEMES/FONT_SCALE).
 VALID_THEMES     = {"dark", "light", "auto"}
 VALID_FONT_SIZES = {"sm", "md", "lg", "xl", "xxl", "xxxl"}
+# Empty string means "no override" for all three below — the visitor's own
+# browser decides date/time layout, and the installation's configured
+# currency applies, until a signed-in account picks its own.
+VALID_DATE_FORMATS = {"", "DD/MM/YYYY", "MM/DD/YYYY", "YYYY-MM-DD"}
+VALID_TIME_FORMATS = {"", "12", "24"}
+# Kept in sync manually with frontend/settings.js's own CURRENCIES list —
+# the same list every other currency-aware surface in this codebase already
+# duplicates its own copy of, since there is no single shared source yet.
+VALID_CURRENCIES = {"", "EUR", "USD", "GBP", "CHF", "JPY", "CNY", "TRY", "UAH",
+                     "PLN", "RON", "CZK", "HUF", "CAD", "AUD", "SEK", "NOK",
+                     "DKK", "RUB", "INR", "BTC"}
 
 
 def valid_languages() -> set:
@@ -171,6 +182,12 @@ def _init_db():
             conn.execute("ALTER TABLE public_users ADD COLUMN font_size TEXT NOT NULL DEFAULT 'md'")
         if "language" not in cols:
             conn.execute("ALTER TABLE public_users ADD COLUMN language TEXT NOT NULL DEFAULT 'auto'")
+        if "date_format" not in cols:
+            conn.execute("ALTER TABLE public_users ADD COLUMN date_format TEXT NOT NULL DEFAULT ''")
+        if "time_format" not in cols:
+            conn.execute("ALTER TABLE public_users ADD COLUMN time_format TEXT NOT NULL DEFAULT ''")
+        if "currency" not in cols:
+            conn.execute("ALTER TABLE public_users ADD COLUMN currency TEXT NOT NULL DEFAULT ''")
         conn.commit()
 
 
@@ -895,7 +912,8 @@ async def me_pub(x_pub_token: Optional[str] = Header(default=None)):
     return JSONResponse({
         **{k: u[k] for k in
            ("id", "username", "display_name", "avatar_color", "avatar_data",
-            "avatar_svg", "theme", "font_size", "language")},
+            "avatar_svg", "theme", "font_size", "language",
+            "date_format", "time_format", "currency")},
         # Which optional features this installation actually has. Public pages
         # draw nothing for a feature that is missing — no locks, no upsell,
         # nothing to notice.
@@ -912,6 +930,9 @@ class MeUpdateBody(BaseModel):
     theme:        Optional[str] = None
     font_size:    Optional[str] = None
     language:     Optional[str] = None
+    date_format:  Optional[str] = None
+    time_format:  Optional[str] = None
+    currency:     Optional[str] = None
 
 
 @_pub.put("/me")
@@ -947,6 +968,18 @@ async def update_me_pub(body: MeUpdateBody, x_pub_token: Optional[str] = Header(
         if body.language not in valid_languages():
             raise HTTPException(400, detail="Invalid language")
         fields.append("language=?"); vals.append(body.language)
+    if body.date_format is not None:
+        if body.date_format not in VALID_DATE_FORMATS:
+            raise HTTPException(400, detail="Invalid date_format")
+        fields.append("date_format=?"); vals.append(body.date_format)
+    if body.time_format is not None:
+        if body.time_format not in VALID_TIME_FORMATS:
+            raise HTTPException(400, detail="Invalid time_format")
+        fields.append("time_format=?"); vals.append(body.time_format)
+    if body.currency is not None:
+        if body.currency not in VALID_CURRENCIES:
+            raise HTTPException(400, detail="Invalid currency")
+        fields.append("currency=?"); vals.append(body.currency)
     if fields:
         vals.append(u["id"])
         with _db() as conn:

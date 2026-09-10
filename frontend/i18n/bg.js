@@ -861,6 +861,13 @@ window._i18n = {
   'ah_pub_settings_font_label':   'Размер на текста',
   'ah_pub_settings_language_label': 'Език',
   'ah_pub_settings_language_auto':  'Автоматично (браузър)',
+  'ah_pub_settings_date_format_label': 'Формат на датата',
+  'ah_pub_settings_time_format_label': 'Формат на часа',
+  'ah_pub_settings_currency_label':    'Валута',
+  'ah_pub_format_browser_default':     'Настройка на браузъра',
+  'ah_pub_time_format_24':             '24-часов',
+  'ah_pub_time_format_12':             '12-часов (AM/PM)',
+  'ah_pub_currency_system_default':    'По подразбиране на системата',
   'ah_pub_disable_software_keyboard': 'Не показвай екранната клавиатура',
   'ah_pub_per_device':              'Запазва се само на това устройство',
 

@@ -861,6 +861,13 @@ window._i18n = {
   'ah_pub_settings_font_label':   'Tamaño del texto',
   'ah_pub_settings_language_label': 'Idioma',
   'ah_pub_settings_language_auto':  'Automático (navegador)',
+  'ah_pub_settings_date_format_label': 'Formato de fecha',
+  'ah_pub_settings_time_format_label': 'Formato de hora',
+  'ah_pub_settings_currency_label':    'Moneda',
+  'ah_pub_format_browser_default':     'Ajuste propio del navegador',
+  'ah_pub_time_format_24':             '24 horas',
+  'ah_pub_time_format_12':             '12 horas (AM/PM)',
+  'ah_pub_currency_system_default':    'Predeterminado del sistema',
   'ah_pub_disable_software_keyboard': 'No mostrar el teclado en pantalla',
   'ah_pub_per_device':              'Guardado solo en este dispositivo',
 

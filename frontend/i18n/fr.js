@@ -861,6 +861,13 @@ window._i18n = {
   'ah_pub_settings_font_label':   'Taille du texte',
   'ah_pub_settings_language_label': 'Langue',
   'ah_pub_settings_language_auto':  'Automatique (navigateur)',
+  'ah_pub_settings_date_format_label': 'Format de date',
+  'ah_pub_settings_time_format_label': "Format d'heure",
+  'ah_pub_settings_currency_label':    'Devise',
+  'ah_pub_format_browser_default':     'Réglage du navigateur',
+  'ah_pub_time_format_24':             '24 heures',
+  'ah_pub_time_format_12':             '12 heures (AM/PM)',
+  'ah_pub_currency_system_default':    'Par défaut du système',
   'ah_pub_disable_software_keyboard': 'Ne pas afficher le clavier virtuel',
   'ah_pub_per_device':              'Enregistré uniquement sur cet appareil',
 

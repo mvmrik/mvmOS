@@ -861,6 +861,13 @@ window._i18n = {
   'ah_pub_settings_font_label':   '文字サイズ',
   'ah_pub_settings_language_label': '言語',
   'ah_pub_settings_language_auto':  '自動（ブラウザに合わせる）',
+  'ah_pub_settings_date_format_label': '日付形式',
+  'ah_pub_settings_time_format_label': '時刻形式',
+  'ah_pub_settings_currency_label':    '通貨',
+  'ah_pub_format_browser_default':     'ブラウザの設定を使用',
+  'ah_pub_time_format_24':             '24時間制',
+  'ah_pub_time_format_12':             '12時間制(AM/PM)',
+  'ah_pub_currency_system_default':    'システムのデフォルト',
   'ah_pub_disable_software_keyboard': 'ソフトウェアキーボードを表示しない',
   'ah_pub_per_device':              'この端末のみに保存',
 

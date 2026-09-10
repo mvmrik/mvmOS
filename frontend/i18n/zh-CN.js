@@ -861,6 +861,13 @@ window._i18n = {
   'ah_pub_settings_font_label':   '文字大小',
   'ah_pub_settings_language_label': '语言',
   'ah_pub_settings_language_auto':  '自动（跟随浏览器）',
+  'ah_pub_settings_date_format_label': '日期格式',
+  'ah_pub_settings_time_format_label': '时间格式',
+  'ah_pub_settings_currency_label':    '货币',
+  'ah_pub_format_browser_default':     '浏览器自身设置',
+  'ah_pub_time_format_24':             '24小时制',
+  'ah_pub_time_format_12':             '12小时制(AM/PM)',
+  'ah_pub_currency_system_default':    '系统默认',
   'ah_pub_disable_software_keyboard': '不显示屏幕键盘',
   'ah_pub_per_device':              '仅保存在此设备上',
 

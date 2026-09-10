@@ -15,7 +15,7 @@ A visitor to a public app does not receive a Linux account, a desktop session, T
 
 ## Public profiles
 
-Apps Hub provides lightweight profiles for people using public pages. A profile can have a username, display name, avatar, language, theme, font-size preferences, favourites, notifications, and a session token. Self-registration can be allowed or closed by the installation administrator; administrators can also create, edit, remove, or promote public profiles from Apps Hub.
+Apps Hub provides lightweight profiles for people using public pages. A profile can have a username, display name, avatar, language, theme, font-size, date format, time format and currency preferences, favourites, notifications, and a session token. These display and regional choices follow the account between devices and are available to public apps, while leaving the browser or installation defaults in place until the profile chooses an override. Self-registration can be allowed or closed by the installation administrator; administrators can also create, edit, remove, or promote public profiles from Apps Hub.
 
 ## Public app directory and PWA
 

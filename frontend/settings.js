@@ -62,6 +62,7 @@ const Settings = (() => {
     { value: "DKK", label: "kr DKK — Danish Krone" },
     { value: "RUB", label: "₽ RUB — Russian Ruble" },
     { value: "INR", label: "₹ INR — Indian Rupee" },
+    { value: "BTC", label: "₿ BTC — Bitcoin" },
   ];
 
   let currentSettings = {};

@@ -861,6 +861,13 @@ window._i18n = {
   'ah_pub_settings_font_label':   'Размер текста',
   'ah_pub_settings_language_label': 'Язык',
   'ah_pub_settings_language_auto':  'Автоматически (браузер)',
+  'ah_pub_settings_date_format_label': 'Формат даты',
+  'ah_pub_settings_time_format_label': 'Формат времени',
+  'ah_pub_settings_currency_label':    'Валюта',
+  'ah_pub_format_browser_default':     'Настройка браузера',
+  'ah_pub_time_format_24':             '24-часовой',
+  'ah_pub_time_format_12':             '12-часовой (AM/PM)',
+  'ah_pub_currency_system_default':    'Системное значение по умолчанию',
   'ah_pub_disable_software_keyboard': 'Не показывать экранную клавиатуру',
   'ah_pub_per_device':              'Сохраняется только на этом устройстве',
 

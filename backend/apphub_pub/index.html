@@ -809,10 +809,15 @@ const FONT_PREVIEW_PX = { sm: 13, md: 15, lg: 17, xl: 19, xxl: 21, xxxl: 23 };
 // without needing this list touched.
 const LANG_NAMES = { en: 'English', bg: 'Български', fr: 'Français', es: 'Español', de: 'Deutsch', ru: 'Русский', 'zh-CN': '简体中文', 'pt-BR': 'Português (Brasil)', ja: '日本語' };
 
+const CURRENCIES = ['EUR','USD','GBP','CHF','JPY','CNY','TRY','UAH','PLN','RON','CZK','HUF','CAD','AUD','SEK','NOK','DKK','RUB','INR','BTC'];
+
 function renderSettings(c) {
   let theme = _me.theme || 'dark';
   let fontSize = _me.font_size || 'md';
   let language = _me.language || 'auto';
+  let dateFormat = _me.date_format || '';
+  let timeFormat = _me.time_format || '';
+  let currency = _me.currency || '';
   let disableSoftwareKeyboard = false;
   try { disableSoftwareKeyboard = JSON.parse(localStorage.getItem('apphub_public_display') || '{}').disable_software_keyboard === true; } catch (_) {}
   const availableLangs = (window.mvmOS && window.mvmOS.availableLangs) || ['en'];
@@ -831,6 +836,21 @@ function renderSettings(c) {
         <div style="font-weight:600;font-size:13px">${t('ah_pub_settings_language_label')}</div>
         <div id="st-lang" style="display:flex;flex-wrap:wrap;gap:10px"></div>
       </div>
+      <div class="card" style="padding:16px;display:flex;flex-direction:column;gap:12px">
+        <div style="font-weight:600;font-size:13px">${t('ah_pub_settings_date_format_label')}</div>
+        <div id="st-date-format" style="display:flex;flex-wrap:wrap;gap:10px"></div>
+      </div>
+      <div class="card" style="padding:16px;display:flex;flex-direction:column;gap:12px">
+        <div style="font-weight:600;font-size:13px">${t('ah_pub_settings_time_format_label')}</div>
+        <div id="st-time-format" style="display:flex;flex-wrap:wrap;gap:10px"></div>
+      </div>
+      <div class="card" style="padding:16px;display:flex;flex-direction:column;gap:12px">
+        <div style="font-weight:600;font-size:13px">${t('ah_pub_settings_currency_label')}</div>
+        <select id="st-currency" style="padding:8px 10px;border-radius:8px;border:2px solid var(--border);background:var(--surface2);color:var(--fg)">
+          <option value="">${esc(t('ah_pub_currency_system_default'))}</option>
+          ${CURRENCIES.map(cur => `<option value="${cur}" ${currency===cur?'selected':''}>${cur}</option>`).join('')}
+        </select>
+      </div>
       <label class="card" style="padding:16px;display:flex;align-items:center;justify-content:space-between;gap:16px;cursor:pointer">
         <span><strong style="display:block;font-size:13px">${t('ah_pub_disable_software_keyboard')}</strong><small style="display:block;margin-top:4px;color:var(--fg2)">${t('ah_pub_per_device')}</small></span>
         <input id="st-disable-software-keyboard" type="checkbox" ${disableSoftwareKeyboard ? 'checked' : ''}>
@@ -841,6 +861,10 @@ function renderSettings(c) {
   const themeWrap = c.querySelector('#st-theme');
   const fontWrap  = c.querySelector('#st-font');
   const langWrap  = c.querySelector('#st-lang');
+  const dateFormatWrap = c.querySelector('#st-date-format');
+  const timeFormatWrap = c.querySelector('#st-time-format');
+  const currencySelect = c.querySelector('#st-currency');
+  currencySelect.onchange = () => { currency = currencySelect.value; save(); };
   c.querySelector('#st-disable-software-keyboard').addEventListener('change', event => {
     disableSoftwareKeyboard = event.target.checked;
     window.mvmOSKeyboardPreference?.setEnabled(disableSoftwareKeyboard);
@@ -882,6 +906,39 @@ function renderSettings(c) {
     });
   }
 
+  function renderDateFormatButtons() {
+    const options = [
+      { value: '', label: t('ah_pub_format_browser_default') },
+      { value: 'DD/MM/YYYY', label: 'DD/MM/YYYY' },
+      { value: 'MM/DD/YYYY', label: 'MM/DD/YYYY' },
+      { value: 'YYYY-MM-DD', label: 'YYYY-MM-DD' },
+    ];
+    dateFormatWrap.innerHTML = options.map(o => `
+      <button type="button" class="st-date-format-btn" data-value="${o.value}" style="cursor:pointer;border-radius:8px;padding:10px 16px;
+        border:2px solid ${dateFormat===o.value?'var(--accent)':'var(--border)'};background:var(--surface2);color:var(--fg);font-size:13px;font-weight:600">
+        ${esc(o.label)}
+      </button>`).join('');
+    dateFormatWrap.querySelectorAll('.st-date-format-btn').forEach(btn => {
+      btn.onclick = () => { dateFormat = btn.dataset.value; renderDateFormatButtons(); save(); };
+    });
+  }
+
+  function renderTimeFormatButtons() {
+    const options = [
+      { value: '', label: t('ah_pub_format_browser_default') },
+      { value: '24', label: t('ah_pub_time_format_24') },
+      { value: '12', label: t('ah_pub_time_format_12') },
+    ];
+    timeFormatWrap.innerHTML = options.map(o => `
+      <button type="button" class="st-time-format-btn" data-value="${o.value}" style="cursor:pointer;border-radius:8px;padding:10px 16px;
+        border:2px solid ${timeFormat===o.value?'var(--accent)':'var(--border)'};background:var(--surface2);color:var(--fg);font-size:13px;font-weight:600">
+        ${esc(o.label)}
+      </button>`).join('');
+    timeFormatWrap.querySelectorAll('.st-time-format-btn').forEach(btn => {
+      btn.onclick = () => { timeFormat = btn.dataset.value; renderTimeFormatButtons(); save(); };
+    });
+  }
+
   let _saving = false, _dirty = false;
   async function save() {
     // Applied to _me up front, not after the PUT answers: applyLanguage() below
@@ -889,6 +946,7 @@ function renderSettings(c) {
     // a re-render that read the old _me.language would highlight the previous
     // language while the page was already showing the new one.
     _me.theme = theme; _me.font_size = fontSize; _me.language = language;
+    _me.date_format = dateFormat; _me.time_format = timeFormat; _me.currency = currency;
     window.MvmLayout && MvmLayout.applyTheme(theme, fontSize);
     window.MvmLayout && MvmLayout.applyLanguage && MvmLayout.applyLanguage(language);
     // A click landing mid-save used to be applied on screen and then dropped;
@@ -902,7 +960,7 @@ function renderSettings(c) {
       const r = await fetch(BASE + '/me', {
         method: 'PUT',
         headers: {'Content-Type':'application/json','X-Pub-Token':_token},
-        body: JSON.stringify({ theme, font_size: fontSize, language })
+        body: JSON.stringify({ theme, font_size: fontSize, language, date_format: dateFormat, time_format: timeFormat, currency })
       });
       if (!r.ok) {
         if (errEl) errEl.textContent = t('ah_pub_error_saving');
@@ -915,6 +973,8 @@ function renderSettings(c) {
   renderThemeSwatches();
   renderFontButtons();
   renderLangButtons();
+  renderDateFormatButtons();
+  renderTimeFormatButtons();
 }
 
 // ── Credits tab ─────────────────────────────────────────────────
