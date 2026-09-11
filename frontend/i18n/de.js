@@ -1326,4 +1326,16 @@ window._i18n = {
   'ah_credit_services_button':    'Kostenpflichtige Optionen für Benutzer',
   'ah_credit_services_hint_short':'Setzen Sie 0, um eine Option kostenlos zu halten.',
 
+  "um_backend_batch_confirm": "Bestätigen Sie die Backend-Installation für alle Apps in diesem gemeinsamen Update.",
+  "um_update_failed": "Update fehlgeschlagen.",
+  "ah_public_rename": "Öffentlich umbenennen",
+  "ah_public_name_prompt": "Öffentlicher Name (bis zu 80 Zeichen). Leer lassen, um den ursprünglichen Namen wiederherzustellen.",
+  "ah_public_name_invalid": "Der öffentliche Name darf höchstens 80 Zeichen haben.",
+  "ah_action_failed": "Die Änderung konnte nicht gespeichert werden.",
+  "ah_allow_invitations": "Einladungen erlauben",
+  "ah_invitations_hint": "Benutzer können andere über einen einmaligen Link einladen, der 7 Tage gültig ist. Deaktivieren Sie öffentliche Registrierungen, um nur Einladungen zuzulassen.",
+  "ah_invite_user": "Jemanden einladen",
+  "ah_invitation_copy": "Kopieren Sie diesen einmaligen Einladungslink. Er läuft in 7 Tagen ab.",
+  "ah_invitation_failed": "Die Einladung konnte nicht erstellt werden. Sie können bis zu 20 ungenutzte Einladungen haben.",
+  "ah_invitation_invalid": "Diese Einladung ist ungültig, abgelaufen, bereits verwendet oder Einladungen sind deaktiviert.",
 };

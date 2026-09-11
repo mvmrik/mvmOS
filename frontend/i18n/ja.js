@@ -1326,4 +1326,16 @@ window._i18n = {
   'ah_credit_services_button':    'ユーザー向けの有料オプション',
   'ah_credit_services_hint_short':'0を設定するとそのオプションは無料になります。',
 
+  "um_backend_batch_confirm": "今回の一括更新で、すべてのアプリのバックエンドのインストールを承認してください。",
+  "um_update_failed": "更新に失敗しました。",
+  "ah_public_rename": "公開名を変更",
+  "ah_public_name_prompt": "公開名（80文字以内）。空欄にすると元の名前に戻ります。",
+  "ah_public_name_invalid": "公開名は80文字以内にしてください。",
+  "ah_action_failed": "変更を保存できませんでした。",
+  "ah_allow_invitations": "招待を許可",
+  "ah_invitations_hint": "ユーザーは7日間有効な使い切りリンクで他の人を招待できます。公開登録を無効にすると、招待による登録のみ許可されます。",
+  "ah_invite_user": "ユーザーを招待",
+  "ah_invitation_copy": "この使い切り招待リンクをコピーしてください。7日後に期限切れになります。",
+  "ah_invitation_failed": "招待を作成できませんでした。未使用の招待は最大20件です。",
+  "ah_invitation_invalid": "この招待は無効、期限切れ、使用済み、または招待が無効になっています。",
 };

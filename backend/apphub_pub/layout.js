@@ -457,6 +457,9 @@
   // balance, profile/settings links, logout — moves into a dropdown opened by
   // tapping the avatar. The credit balance also gets a small pill next to the
   // avatar itself, so it's visible without opening the menu.
+  var publicNames = {};
+  var originalTitle = document.title;
+
   function buildHeader(appMeta, user, credits) {
     var hdr = document.createElement('header');
     hdr.className = 'mvm-hdr';
@@ -464,11 +467,11 @@
     var crumbs = document.createElement('div');
     crumbs.className = 'mvm-crumbs';
     var homeIsCurrent = !APP_ID || APP_ID === 'apphub';
-    var homeLabel = '🧩 ' + esc(tt('ah_pub_home', 'Home'));
+    var homeLabel = '🧩 ' + esc(publicNames.apphub || tt('ah_pub_home', 'Home'));
     if (homeIsCurrent) {
       crumbs.innerHTML = '<span class="mvm-cur">' + homeLabel + '</span>';
     } else {
-      var label = appMeta ? (esc(appMeta.icon || '') + ' ' + esc(appMeta.name || APP_ID)) : esc(APP_ID);
+      var label = appMeta ? (esc(appMeta.icon || '') + ' ' + esc(publicNames[APP_ID] || appMeta.name || APP_ID)) : esc(publicNames[APP_ID] || APP_ID);
       crumbs.innerHTML = '<a href="/pub/apphub/">' + homeLabel + '</a><span class="mvm-sep">/</span><span class="mvm-cur">' + label + '</span>';
     }
     hdr.appendChild(crumbs);
@@ -500,9 +503,21 @@
           + (hasCredits ? '<a class="mvm-menu-item" href="/pub/apphub/?tab=credits" data-tab="credits">🪙 ' + esc(creditsText) + '</a>' : '')
           + '<a class="mvm-menu-item" href="/pub/apphub/?tab=profile" data-tab="profile">👤 ' + esc(tt('ah_pub_tab_profile', 'Profile')) + '</a>'
           + '<a class="mvm-menu-item" href="/pub/apphub/?tab=settings" data-tab="settings">⚙️ ' + esc(tt('ah_pub_tab_settings', 'Settings')) + '</a>'
+          + (user.invitations ? '<button class="mvm-menu-item mvm-invite" type="button">✉ ' + esc(tt('ah_invite_user', 'Invite someone')) + '</button>' : '')
           + '<button class="mvm-menu-item mvm-menu-logout" type="button">↪ ' + esc(tt('ah_logout', 'Logout')) + '</button>'
         + '</div>';
 
+      var inviteBtn = box.querySelector('.mvm-invite');
+      if (inviteBtn) inviteBtn.onclick = async function(event) {
+        event.stopPropagation(); inviteBtn.disabled = true;
+        try {
+          var response = await fetch('/api/pub/apphub/invitations', {method: 'POST', headers: {'X-Pub-Token': localStorage.getItem(TOKEN_KEY)}});
+          if (!response.ok) throw new Error('invitation_failed');
+          var data = await response.json();
+          window.prompt(tt('ah_invitation_copy', 'Copy this single-use link. It expires in 7 days.'), new URL(data.url, location.origin).href);
+        } catch (_) { window.alert(tt('ah_invitation_failed', 'Could not create an invitation.')); }
+        finally { inviteBtn.disabled = false; }
+      };
       var menuBtn = box.querySelector('.mvm-avatar-btn');
       var menu = box.querySelector('.mvm-menu');
       menuBtn.onclick = function (e) {
@@ -616,7 +631,10 @@
   async function refresh() {
     renderHeader();   // placeholder, or the previous header while this reloads
 
-    var base = await Promise.all([fetchAppMeta(), fetchUser()]);
+    var base = await Promise.all([fetchAppMeta(), fetchUser(),
+      fetch('/api/pub/apphub/branding').then(function(r) { return r.ok ? r.json() : {}; }).catch(function() { return {}; })]);
+    publicNames = base[2].names || {};
+    document.title = publicNames[APP_ID] || originalTitle;
     // The balance is only worth asking for where the installation has the
     // feature at all — /me says so, and without it the endpoint does not exist.
     var credits = base[1] && base[1].credits ? await fetchCredits() : null;

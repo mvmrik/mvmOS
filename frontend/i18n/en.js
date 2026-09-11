@@ -1326,4 +1326,16 @@ window._i18n = {
   'ah_credit_services_button':    'Paid options for users',
   'ah_credit_services_hint_short':'Set 0 to keep an option free.',
 
+  "um_backend_batch_confirm": "Confirm backend installation for all apps in this Update All run.",
+  "um_update_failed": "Update failed.",
+  "ah_public_rename": "Rename publicly",
+  "ah_public_name_prompt": "Public name (up to 80 characters). Leave empty to restore the original name.",
+  "ah_public_name_invalid": "The public name must be at most 80 characters.",
+  "ah_action_failed": "Could not save the change.",
+  "ah_allow_invitations": "Allow invitations",
+  "ah_invitations_hint": "Users can invite others with a single-use link valid for 7 days. Turn off public registrations to allow registration by invitation only.",
+  "ah_invite_user": "Invite someone",
+  "ah_invitation_copy": "Copy this single-use invitation link. It expires in 7 days.",
+  "ah_invitation_failed": "Could not create an invitation. You can have up to 20 unused invitations.",
+  "ah_invitation_invalid": "This invitation is invalid, expired, already used, or invitations are disabled.",
 };

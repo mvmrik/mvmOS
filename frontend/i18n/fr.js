@@ -1326,4 +1326,16 @@ window._i18n = {
   'ah_credit_services_button':    'Options payantes pour les utilisateurs',
   'ah_credit_services_hint_short':'Définissez 0 pour garder une option gratuite.',
 
+  "um_backend_batch_confirm": "Confirmez l’installation du backend pour toutes les applications de cette mise à jour groupée.",
+  "um_update_failed": "La mise à jour a échoué.",
+  "ah_public_rename": "Renommer publiquement",
+  "ah_public_name_prompt": "Nom public (80 caractères maximum). Laissez vide pour rétablir le nom d’origine.",
+  "ah_public_name_invalid": "Le nom public ne doit pas dépasser 80 caractères.",
+  "ah_action_failed": "Impossible d’enregistrer la modification.",
+  "ah_allow_invitations": "Autoriser les invitations",
+  "ah_invitations_hint": "Les utilisateurs peuvent inviter d’autres personnes avec un lien à usage unique valable 7 jours. Désactivez les inscriptions publiques pour autoriser uniquement les inscriptions sur invitation.",
+  "ah_invite_user": "Inviter quelqu’un",
+  "ah_invitation_copy": "Copiez ce lien d’invitation à usage unique. Il expire dans 7 jours.",
+  "ah_invitation_failed": "Impossible de créer une invitation. Vous pouvez avoir jusqu’à 20 invitations inutilisées.",
+  "ah_invitation_invalid": "Cette invitation est invalide, expirée, déjà utilisée ou les invitations sont désactivées.",
 };

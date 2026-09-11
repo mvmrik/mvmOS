@@ -1326,4 +1326,16 @@ window._i18n = {
   'ah_credit_services_button':    '面向用户的付费选项',
   'ah_credit_services_hint_short':'设为 0 可使某个选项保持免费。',
 
+  "um_backend_batch_confirm": "请确认本次批量更新中所有应用的后端安装。",
+  "um_update_failed": "更新失败。",
+  "ah_public_rename": "修改公开名称",
+  "ah_public_name_prompt": "公开名称（最多80个字符）。留空以恢复原始名称。",
+  "ah_public_name_invalid": "公开名称不能超过80个字符。",
+  "ah_action_failed": "无法保存更改。",
+  "ah_allow_invitations": "允许邀请",
+  "ah_invitations_hint": "用户可以通过有效期为7天的一次性链接邀请他人。关闭公开注册后，仅允许受邀者注册。",
+  "ah_invite_user": "邀请他人",
+  "ah_invitation_copy": "复制此一次性邀请链接。它将在7天后过期。",
+  "ah_invitation_failed": "无法创建邀请。您最多可以拥有20个未使用的邀请。",
+  "ah_invitation_invalid": "此邀请无效、已过期、已使用，或邀请功能已关闭。",
 };

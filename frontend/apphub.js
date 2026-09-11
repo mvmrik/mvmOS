@@ -383,6 +383,7 @@ const AppHub = (() => {
       const r = await fetch('/api/apphub/public-apps').catch(()=>null);
       if (!r?.ok) { c.innerHTML = `<div style="padding:20px;color:#f38ba8;font-size:.85rem">${t('ah_error_loading_apps')}</div>`; return; }
       const apps = await r.json();
+      const features = await fetch('/api/apphub/features').then(r => r.ok ? r.json() : {}).catch(() => ({}));
       const servicesResult = await fetch('/api/apphub/credit-services').catch(() => null);
       const serviceData = servicesResult?.ok ? await servicesResult.json() : {premium:false, services:[]};
       const servicesByApp = (serviceData.services || []).reduce((out, service) => {
@@ -414,8 +415,10 @@ const AppHub = (() => {
             <span style="font-size:1.4rem">${esc(a.icon)}</span>
             <div style="flex:1;min-width:0">
               <div style="font-size:.88rem;font-weight:500">${esc(a.name)}</div>
+              ${a.public_name ? `<div style="font-size:.76rem;color:var(--text-dim)">${esc(a.public_name)}</div>` : ''}
               <div style="font-size:.72rem;color:var(--text-dim)">/pub/${esc(a.id)}/</div>
             </div>
+            <button class="ah-rename s-btn s-btn-sm" data-app="${esc(a.id)}" style="cursor:pointer">✎ ${t('ah_public_rename')}${features.public_names ? '' : ' 🔒'}</button>
             ${(servicesByApp[a.id] || []).length ? `<button class="ah-credit-toggle s-btn s-btn-sm" data-app="${esc(a.id)}" aria-expanded="false" style="cursor:pointer;white-space:nowrap">💳 ${t('ah_credit_services_button')}</button>` : ''}
             <label style="display:flex;align-items:center;gap:6px;cursor:pointer;flex-shrink:0">
               <input type="checkbox" data-id="${a.id}" ${a.enabled?'checked':''} style="width:16px;height:16px;cursor:pointer">
@@ -447,6 +450,39 @@ const AppHub = (() => {
               body: JSON.stringify({enabled: cb.checked}),
             });
             render(list);
+          };
+        });
+        list.querySelectorAll('.ah-rename').forEach(btn => {
+          if (!features.public_names) window.mvmOS?.premiumGate(btn, t('ah_public_rename'));
+          btn.onclick = async () => {
+          if (!features.public_names) { window.alert(t('ah_action_failed')); return; }
+          const app = apps.find(a => a.id === btn.dataset.app);
+          const name = await new Promise(resolve => {
+            const overlay = document.createElement('div');
+            overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center';
+            overlay.innerHTML = `<div role="dialog" aria-modal="true" aria-label="${esc(t('ah_public_rename'))}" style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:24px;max-width:380px;width:90%;display:flex;flex-direction:column;gap:12px">
+              <label for="ah-public-name">${t('ah_public_name_prompt')}</label>
+              <input id="ah-public-name" class="s-input" maxlength="80" style="width:100%;box-sizing:border-box">
+              <div style="display:flex;gap:8px;justify-content:flex-end"><button class="s-btn" data-cancel>${t('cancel')}</button><button class="s-btn s-btn-primary" data-save>${t('ah_save')}</button></div>
+            </div>`;
+            document.body.appendChild(overlay);
+            const input = overlay.querySelector('input'); input.value = app.public_name || '';
+            const finish = value => { overlay.remove(); btn.focus(); resolve(value); };
+            overlay.querySelector('[data-cancel]').onclick = () => finish(null);
+            overlay.querySelector('[data-save]').onclick = () => finish(input.value);
+            input.onkeydown = event => { if (event.key === 'Enter') finish(input.value); if (event.key === 'Escape') finish(null); };
+            input.focus(); input.select();
+          });
+          if (name === null || name === undefined) return;
+          if (name.trim().length > 80) { window.alert(t('ah_public_name_invalid')); return; }
+          btn.disabled = true;
+          const response = await fetch(`/api/apphub/public-apps/${encodeURIComponent(app.id)}/name`, {
+            method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify({name})
+          }).catch(() => null);
+          btn.disabled = false;
+          if (response?.status === 402) { window.mvmOS?.premiumGate(btn, t('ah_public_rename')); return; }
+          if (!response?.ok) { window.alert(t('ah_action_failed')); return; }
+          app.public_name = name.trim(); render(list);
           };
         });
         list.querySelectorAll('.ah-credit-toggle').forEach(btn => btn.onclick = () => {
@@ -566,6 +602,11 @@ const AppHub = (() => {
             <span style="font-size:.85rem;font-weight:500">${t('ah_allow_registrations')}</span>
           </label>
           <div style="font-size:.72rem;color:var(--text-dim)">${t('ah_registrations_hint')}</div>
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+            <input type="checkbox" id="ah-invite-toggle" ${settings.invitations_enabled?'checked':''} style="width:16px;height:16px">
+            <span style="font-size:.85rem;font-weight:500">${t('ah_allow_invitations')}</span>
+          </label>
+          <div style="font-size:.72rem;color:var(--text-dim)">${t('ah_invitations_hint')}</div>
         </div>` : ''}
         ${stats ? `<div style="display:flex;gap:8px;padding:12px 16px;border-bottom:1px solid var(--border);align-items:center">
           <div style="flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px;text-align:center">
@@ -582,6 +623,16 @@ const AppHub = (() => {
         </div>
         <div id="ah-users-list"></div>`;
 
+      const inviteToggle = c.querySelector('#ah-invite-toggle');
+      if (inviteToggle) inviteToggle.onchange = async () => {
+        inviteToggle.disabled = true;
+        const response = await fetch('/api/apphub/settings', {
+          method: 'PUT', headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({invitations_enabled: inviteToggle.checked})
+        }).catch(() => null);
+        if (!response?.ok) { inviteToggle.checked = !inviteToggle.checked; window.alert(t('ah_action_failed')); }
+        inviteToggle.disabled = false;
+      };
       const regToggle = c.querySelector('#ah-reg-toggle');
       if (regToggle) regToggle.onchange = async () => {
         await fetch('/api/apphub/settings', {

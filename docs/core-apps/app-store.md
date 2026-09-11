@@ -13,7 +13,7 @@ App Store is the desktop client for browsing, installing, updating, and configur
 
 - Browse apps by category from Store manifests.
 - Search a whole store from its own tab, across every category at once.
-- Install and update apps from the same interface.
+- Install and update apps from the same interface, including a batch update that asks for backend approval once and leaves any failed update available to retry.
 - Manage widget and theme stores.
 - Open an app’s own settings form when the app provides one.
 - Ask for confirmation before an installation that needs a server backend.

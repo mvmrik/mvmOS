@@ -1976,7 +1976,7 @@ const UpdateManager = (() => {
         `;
         if (u.compatible !== false) row.querySelector('.um-update-btn').addEventListener('click', async e => {
           const btn = e.target; btn.disabled = true; btn.textContent = t('um_updating');
-          await doMvmOSUpdate(u);
+          if (!await doMvmOSUpdate(u)) { btn.disabled = false; btn.textContent = t('um_update_btn'); return; }
           mvmosUpdates = mvmosUpdates.filter(x => !(x.id === u.id && x.type === u.type));
           row.remove();
           renderMvmOS();
@@ -1987,14 +1987,23 @@ const UpdateManager = (() => {
 
     mvmosAllBtn.addEventListener('click', async () => {
       mvmosAllBtn.disabled = true; mvmosAllBtn.textContent = t('um_updating');
-      for (const u of [...mvmosUpdates]) {
-        const row = mvmosList.querySelector(`[data-uid="${u.id}_${u.type}"]`);
-        const btn = row?.querySelector('.um-update-btn');
-        if (btn) { btn.disabled = true; btn.textContent = t('um_updating'); }
-        await doMvmOSUpdate(u);
-        row?.remove();
+      const batch = { backendConfirmed: false, cancelled: false };
+      try {
+        for (const u of [...mvmosUpdates]) {
+          if (u.compatible === false) continue;
+          const row = mvmosList.querySelector(`[data-uid="${u.id}_${u.type}"]`);
+          const btn = row?.querySelector('.um-update-btn');
+          if (btn) btn.disabled = true;
+          if (await doMvmOSUpdate(u, batch)) {
+            mvmosUpdates = mvmosUpdates.filter(x => !(x.id === u.id && x.type === u.type));
+            row?.remove();
+          }
+          if (batch.cancelled) break;
+        }
+      } finally {
+        mvmosAllBtn.disabled = false;
+        mvmosAllBtn.textContent = t('um_update_all');
       }
-      mvmosUpdates = [];
       renderMvmOS();
     });
 
@@ -2077,32 +2086,41 @@ const UpdateManager = (() => {
     });
   }
 
-  async function doMvmOSUpdate(u) {
-    if (u.type === 'app') {
-      const payload = { id: u.id, name: u.name, icon: u.icon, category: u.category,
-        version: u.new_version, description: u.description, zip_url: u.zip_url || '',
-        base_url: u.base_url, js_url: u.js_url, store_id: u.store_id };
-      const res = await fetch('/api/plugins/install', { method: 'POST', headers: {'Content-Type':'application/json'},
-        body: JSON.stringify(payload) });
+  async function doMvmOSUpdate(u, batch = null) {
+    const install = async (url, payload) => {
+      const res = await fetch(url, {method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload)});
       const result = await res.json();
-      if (result.needs_backend_confirm) {
-        const confirmed = await mvmOS.requireRoot(
-          t('appstore_backend_title'),
-          `"${u.name}" ${t('appstore_backend_msg') || 'includes a backend component.'}`
-        );
-        if (!confirmed) return;
-        await fetch('/api/plugins/install', { method: 'POST', headers: {'Content-Type':'application/json'},
-          body: JSON.stringify({ ...payload, install_backend: true }) });
-      }
-    } else if (u.type === 'widget') {
-      await fetch('/api/widgets/install', { method: 'POST', headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ id: u.id, name: u.name, icon: u.icon, version: u.new_version,
+      if (!res.ok || result.error) throw new Error(result.error || result.detail || t('um_update_failed'));
+      return result;
+    };
+    try {
+      if (u.type === 'app') {
+        const payload = { id: u.id, name: u.name, icon: u.icon, category: u.category,
+          version: u.new_version, description: u.description, zip_url: u.zip_url || '',
+          base_url: u.base_url, js_url: u.js_url, store_id: u.store_id };
+        const result = await install('/api/plugins/install', payload);
+        if (result.needs_backend_confirm) {
+          if (!batch?.backendConfirmed) {
+            const confirmed = await mvmOS.requireRoot(t('appstore_backend_title'),
+              batch ? t('um_backend_batch_confirm') : `"${u.name}" ${t('appstore_backend_msg')}`);
+            if (!confirmed) { if (batch) batch.cancelled = true; return false; }
+            if (batch) batch.backendConfirmed = true;
+          }
+          const updated = await install('/api/plugins/install', { ...payload, install_backend: true });
+          if (updated.needs_backend_confirm) throw new Error(t('um_update_failed'));
+        }
+      } else if (u.type === 'widget') {
+        await install('/api/widgets/install', { id: u.id, name: u.name, icon: u.icon, version: u.new_version,
           description: u.description, widget_type: u.widget_type, base_url: u.base_url,
-          js_url: u.js_url, store_id: u.store_id }) });
-    } else if (u.type === 'theme') {
-      await fetch('/api/themes/install', { method: 'POST', headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ id: u.id, name: u.name, icon: u.icon, version: u.new_version,
-          description: u.description, base_url: u.base_url, store_id: u.store_id }) });
+          js_url: u.js_url, store_id: u.store_id });
+      } else if (u.type === 'theme') {
+        await install('/api/themes/install', { id: u.id, name: u.name, icon: u.icon, version: u.new_version,
+          description: u.description, base_url: u.base_url, store_id: u.store_id });
+      }
+      return true;
+    } catch (error) {
+      window.alert(`${u.name}: ${error.message}`);
+      return false;
     }
   }
 

@@ -1326,4 +1326,16 @@ window._i18n = {
   'ah_credit_services_button':    'Opciones de pago para usuarios',
   'ah_credit_services_hint_short':'Pon 0 para mantener una opción gratuita.',
 
+  "um_backend_batch_confirm": "Confirma la instalación del backend para todas las aplicaciones de esta actualización conjunta.",
+  "um_update_failed": "La actualización falló.",
+  "ah_public_rename": "Cambiar nombre público",
+  "ah_public_name_prompt": "Nombre público (hasta 80 caracteres). Déjalo vacío para restaurar el nombre original.",
+  "ah_public_name_invalid": "El nombre público debe tener como máximo 80 caracteres.",
+  "ah_action_failed": "No se pudo guardar el cambio.",
+  "ah_allow_invitations": "Permitir invitaciones",
+  "ah_invitations_hint": "Los usuarios pueden invitar a otros con un enlace de un solo uso válido durante 7 días. Desactiva el registro público para permitir solo registros con invitación.",
+  "ah_invite_user": "Invitar a alguien",
+  "ah_invitation_copy": "Copia este enlace de invitación de un solo uso. Caduca en 7 días.",
+  "ah_invitation_failed": "No se pudo crear la invitación. Puedes tener hasta 20 invitaciones sin usar.",
+  "ah_invitation_invalid": "Esta invitación no es válida, ha caducado, ya se ha usado o las invitaciones están desactivadas.",
 };

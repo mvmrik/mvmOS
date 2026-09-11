@@ -17,6 +17,8 @@ A visitor to a public app does not receive a Linux account, a desktop session, T
 
 Apps Hub provides lightweight profiles for people using public pages. A profile can have a username, display name, avatar, language, theme, font-size, date format, time format and currency preferences, favourites, notifications, and a session token. These display and regional choices follow the account between devices and are available to public apps, while leaving the browser or installation defaults in place until the profile chooses an override. Self-registration can be allowed or closed by the installation administrator; administrators can also create, edit, remove, or promote public profiles from Apps Hub.
 
+The administrator can separately allow invitations. Each signed-in public user can then create a single-use registration link that expires after seven days, with up to 20 unused invitations at a time. Invitations may be used while public registration is open, or the administrator can close public registration and leave invitations enabled to make new accounts invitation-only. Used, expired, disabled, or otherwise invalid links cannot create an account.
+
 ## Public app directory and PWA
 
 The Apps Hub public portal lists the apps that the administrator has enabled for public access. It is installable as a PWA, so it can be added to a phone or desktop home screen. Public app pages can also have their own standalone PWA; this is intentionally separate from the main mvmOS desktop PWA described in [[Mobile and PWA]].
@@ -41,6 +43,8 @@ Credits are an optional Apps Hub Premium module for an installation. When the Cr
 
 An administrator can open any public user’s credit panel, add credits, deduct credits, provide a reason, and review the transaction history. Credits are not a payment processor: they are a balance controlled by the administrator of that self-hosted installation.
 
+The same Premium module lets an administrator assign a separate public display name to Apps Hub or any published app. The custom name appears in the public page title, Apps Hub directory, and navigation while the internal app identifier and URL remain unchanged. On an installation without the module, the rename control remains visible in the desktop but opens the Premium prompt; public pages simply use the original app names.
+
 ## Free versus credit-priced features
 
 An app can declare the features or services that it is able to charge for. In Apps Hub, the administrator chooses the price for each declared feature:
@@ -62,6 +66,7 @@ Extensions request only the permissions declared by the app. Review the app’s 
 - Enable public pages only for apps that are ready to be exposed.
 - Use HTTPS for all public pages.
 - Close public registration when you do not need new accounts.
+- If invitations are enabled, treat invitation links as temporary registration credentials and share them only with their intended recipient.
 - Enable app-to-app APIs only for the specific integration you intend to use.
 - Treat public-user administration and credit changes as sensitive operational actions.
 - Review browser extension permissions before installation.

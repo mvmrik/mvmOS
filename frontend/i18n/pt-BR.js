@@ -1326,4 +1326,16 @@ window._i18n = {
   'ah_credit_services_button':    'Opções pagas para usuários',
   'ah_credit_services_hint_short':'Defina 0 para manter uma opção gratuita.',
 
+  "um_backend_batch_confirm": "Confirme a instalação do backend para todos os aplicativos nesta atualização em lote.",
+  "um_update_failed": "A atualização falhou.",
+  "ah_public_rename": "Renomear publicamente",
+  "ah_public_name_prompt": "Nome público (até 80 caracteres). Deixe vazio para restaurar o nome original.",
+  "ah_public_name_invalid": "O nome público deve ter no máximo 80 caracteres.",
+  "ah_action_failed": "Não foi possível salvar a alteração.",
+  "ah_allow_invitations": "Permitir convites",
+  "ah_invitations_hint": "Os usuários podem convidar outras pessoas com um link de uso único válido por 7 dias. Desative os cadastros públicos para permitir cadastro apenas por convite.",
+  "ah_invite_user": "Convidar alguém",
+  "ah_invitation_copy": "Copie este link de convite de uso único. Ele expira em 7 dias.",
+  "ah_invitation_failed": "Não foi possível criar um convite. Você pode ter até 20 convites não utilizados.",
+  "ah_invitation_invalid": "Este convite é inválido, expirou, já foi usado ou os convites estão desativados.",
 };

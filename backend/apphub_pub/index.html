@@ -83,6 +83,8 @@ function _dropToken() {
   document.cookie = 'apphub_token=; Max-Age=0; Path=/';
 }
 let _token = _params.get('token') || localStorage.getItem('apphub_token') || _cookieToken();
+const _invitation = _params.get('invitation') || '';
+let _hubName = 'Apps Hub';
 const _startTab = _params.get('tab') || 'apps';
 // Optional return URL: another app sends the user here to log in, then we send them back.
 // Only same-origin relative paths are honoured, to avoid open-redirects.
@@ -123,7 +125,12 @@ async function boot() {
       else _dropToken();
     } catch(_) { _dropToken(); }
   }
-  if (!_me) showAuth();
+  try {
+    const branding = await fetch(BASE + '/branding').then(r => r.json());
+    _hubName = branding.names?.apphub || 'Apps Hub';
+    document.title = _hubName;
+  } catch (_) {}
+  if (!_me) showAuth(_invitation ? 'register' : 'login');
   else if (_afterAuth()) return;
   else { await _loadPrefs(); showDashboard(_startTab); }
 }
@@ -132,9 +139,9 @@ async function boot() {
 
 async function showAuth(tab) {
   tab = tab || 'login';
-  let regAllowed = true;
+  let regAllowed = false;
   try {
-    const r = await fetch(BASE + '/registration');
+    const r = await fetch(BASE + '/registration?invitation=' + encodeURIComponent(_invitation));
     if (r.ok) regAllowed = !!(await r.json()).allowed;
   } catch (_) {}
   if (!regAllowed) tab = 'login';
@@ -143,8 +150,9 @@ async function showAuth(tab) {
       <div class="card" style="width:100%;max-width:360px;padding:28px;display:flex;flex-direction:column;gap:18px">
         <div style="text-align:center">
           <div style="font-size:2.5rem">🧩</div>
-          <div style="font-weight:700;font-size:1.2rem;margin-top:6px">Apps Hub</div>
+          <div style="font-weight:700;font-size:1.2rem;margin-top:6px">${esc(_hubName)}</div>
           <div style="font-size:.82rem;color:var(--fg2);margin-top:4px">${t('ah_pub_tagline')}</div>
+          ${_invitation && !regAllowed ? `<div class="err">${t('ah_invitation_invalid')}</div>` : ''}
         </div>
         ${regAllowed ? `
         <div style="display:flex;gap:0;background:var(--surface2);border-radius:8px;padding:3px">
@@ -187,6 +195,8 @@ function renderLoginForm() {
     if (r.ok) {
       const d = await r.json(); _token = d.token; _me = d.user;
       localStorage.setItem('apphub_token', _token);
+      history.replaceState(null, '', location.pathname);
+      _me = await fetch(BASE + '/me', {headers:{'X-Pub-Token':_token}}).then(r => r.ok ? r.json() : _me).catch(() => _me);
       if (_afterAuth()) return;
       await _loadPrefs();
       showDashboard();
@@ -217,16 +227,18 @@ function renderRegForm() {
     const pw = f.querySelector('#a-pass').value;
     if (!dn || !un || !pw) { f.querySelector('#a-err').textContent = t('ah_fill_all_fields'); return; }
     f.querySelector('#a-sub').disabled = true;
-    const r = await fetch(BASE + '/register', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({display_name:dn,username:un,password:pw})});
+    const r = await fetch(BASE + '/register', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({display_name:dn,username:un,password:pw,invitation:_invitation})});
     if (r.ok) {
       const d = await r.json(); _token = d.token; _me = d.user;
       localStorage.setItem('apphub_token', _token);
+      history.replaceState(null, '', location.pathname);
+      _me = await fetch(BASE + '/me', {headers:{'X-Pub-Token':_token}}).then(r => r.ok ? r.json() : _me).catch(() => _me);
       if (_afterAuth()) return;
       await _loadPrefs();
       showDashboard();
     } else {
       const d = await r.json().catch(()=>({}));
-      f.querySelector('#a-err').textContent = d.detail || t('ah_registration_failed');
+      f.querySelector('#a-err').textContent = d.detail === 'registration_invitation_invalid' ? t('ah_invitation_invalid') : d.detail === 'registration_disabled' ? t('ah_registration_failed') : d.detail || t('ah_registration_failed');
       f.querySelector('#a-sub').disabled = false;
     }
   };

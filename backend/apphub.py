@@ -121,6 +121,14 @@ def _init_db():
                 language      TEXT NOT NULL DEFAULT 'auto',
                 created_at    TEXT NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS invitations (
+                token_hash TEXT PRIMARY KEY,
+                created_by TEXT NOT NULL REFERENCES public_users(id) ON DELETE CASCADE,
+                created_at TEXT NOT NULL,
+                expires_at TEXT NOT NULL,
+                used_by TEXT REFERENCES public_users(id) ON DELETE SET NULL,
+                used_at TEXT
+            );
             CREATE TABLE IF NOT EXISTS pub_tokens (
                 token      TEXT PRIMARY KEY,
                 user_id    TEXT NOT NULL REFERENCES public_users(id) ON DELETE CASCADE,
@@ -219,16 +227,33 @@ def registrations_enabled() -> bool:
     return get_config("registrations_enabled", "1") == "1"
 
 
+def invitations_enabled() -> bool:
+    return get_config("invitations_enabled", "0") == "1"
+
+
+def _invitation(conn, token: str, now: str):
+    if not token or len(token) > 128:
+        return None
+    return conn.execute(
+        "SELECT token_hash FROM invitations WHERE token_hash=? AND used_at IS NULL AND expires_at>?",
+        (hashlib.sha256(token.encode()).hexdigest(), now)
+    ).fetchone()
+
+
 def user_count() -> int:
     with _db() as conn:
         return conn.execute("SELECT COUNT(*) FROM public_users").fetchone()[0]
 
 
-def registration_status() -> dict:
+def registration_status(invitation: str = "") -> dict:
     """Whether a NEW public self-registration is currently allowed, plus the
     reason it isn't (`disabled` = admin turned registrations off). The reason
     stays server-side; the public page only ever shows/hides the register
     option."""
+    if invitation:
+        with _db() as conn:
+            valid = invitations_enabled() and _invitation(conn, invitation, datetime.now(timezone.utc).isoformat())
+        return {"allowed": bool(valid), "reason": None if valid else "invitation_invalid"}
     if not registrations_enabled():
         return {"allowed": False, "reason": "disabled"}
     return {"allowed": True, "reason": None}
@@ -246,10 +271,17 @@ def create_user_row(uid: str, body: "UserBody", password_hash: Optional[str], no
     with _db() as conn:
         conn.execute("BEGIN IMMEDIATE")
         config = dict(conn.execute(
-            "SELECT key,value FROM hub_config WHERE key='registrations_enabled'"
+            "SELECT key,value FROM hub_config WHERE key IN ('registrations_enabled','invitations_enabled')"
         ).fetchall())
         registrations_open = config.get("registrations_enabled", "1") == "1"
-        if public_registration and not registrations_open:
+        invitation = getattr(body, "invitation", "") if public_registration else ""
+        invite_row = None
+        if invitation:
+            if config.get("invitations_enabled", "0") == "1":
+                invite_row = _invitation(conn, invitation, now)
+            if not invite_row:
+                raise RegistrationBlocked("invitation_invalid")
+        if public_registration and not registrations_open and not invite_row:
             raise RegistrationBlocked("disabled")
         conn.execute(
             "INSERT INTO public_users(id,username,display_name,avatar_color,password_hash,theme,created_at)"
@@ -257,6 +289,9 @@ def create_user_row(uid: str, body: "UserBody", password_hash: Optional[str], no
             (uid, body.username.strip().lower(), body.display_name.strip(),
              body.avatar_color, password_hash, "auto", now)
         )
+        if invite_row:
+            conn.execute("UPDATE invitations SET used_by=?, used_at=? WHERE token_hash=?",
+                         (uid, now, invite_row["token_hash"]))
         conn.commit()
 
 
@@ -750,6 +785,18 @@ def credits_available() -> bool:
     return bool(mod and getattr(mod, "is_available", lambda: False)())
 
 
+def public_names_available() -> bool:
+    mod = _credits()
+    return bool(mod and getattr(mod, "is_available", lambda: False)()
+                and callable(getattr(mod, "public_names", None))
+                and callable(getattr(mod, "set_public_name", None)))
+
+
+def _public_names() -> dict:
+    mod = _credits()
+    return mod.public_names() if public_names_available() else {}
+
+
 def credit_service_catalog() -> list:
     """Discover optional paid actions declared by installed Store apps."""
     root = Path(__file__).resolve().parents[1] / "apps"
@@ -840,6 +887,7 @@ class RegisterBody(BaseModel):
     display_name: str
     password:     str
     avatar_color: str = '#89b4fa'
+    invitation: str = ""
 
 
 @_pub.post("/register")
@@ -887,10 +935,34 @@ async def login(body: LoginBody):
 
 
 @_pub.get("/registration")
-async def registration_info_pub():
+async def registration_info_pub(invitation: str = ""):
     """Public: may a visitor create a new account? Only exposes the boolean —
     the reason (cap reached vs. admin turned off) stays private."""
-    return JSONResponse({"allowed": registration_status()["allowed"]})
+    return JSONResponse({"allowed": registration_status(invitation)["allowed"]})
+
+
+@_pub.post("/invitations")
+async def create_invitation_pub(x_pub_token: Optional[str] = Header(default=None)):
+    user = get_pub_session(x_pub_token)
+    if not user:
+        raise HTTPException(401)
+    now = datetime.now(timezone.utc)
+    token = secrets.token_urlsafe(32)
+    expires = (now + timedelta(days=7)).isoformat()
+    with _db() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        setting = conn.execute("SELECT value FROM hub_config WHERE key='invitations_enabled'").fetchone()
+        if not setting or setting["value"] != "1":
+            raise HTTPException(403, detail="invitations_disabled")
+        conn.execute("DELETE FROM invitations WHERE expires_at <= ?", (now.isoformat(),))
+        count = conn.execute("SELECT COUNT(*) FROM invitations WHERE created_by=? AND used_at IS NULL",
+                             (user["id"],)).fetchone()[0]
+        if count >= 20:
+            raise HTTPException(429, detail="invitation_limit")
+        conn.execute("INSERT INTO invitations(token_hash,created_by,created_at,expires_at) VALUES(?,?,?,?)",
+                     (hashlib.sha256(token.encode()).hexdigest(), user["id"], now.isoformat(), expires))
+    return JSONResponse({"url": "/pub/apphub/?invitation=" + token, "expires_at": expires},
+                        headers={"Cache-Control": "no-store"})
 
 
 @_pub.post("/logout")
@@ -918,6 +990,7 @@ async def me_pub(x_pub_token: Optional[str] = Header(default=None)):
         # draw nothing for a feature that is missing — no locks, no upsell,
         # nothing to notice.
         "credits": credits_available(),
+        "invitations": invitations_enabled(),
     })
 
 
@@ -1031,6 +1104,7 @@ async def list_public_apps(x_pub_token: Optional[str] = Header(default=None)):
 
     u = get_pub_session(x_pub_token)
     usage, shelf = {}, None
+    names = _public_names()
     if u:
         with _db() as conn:
             rows = conn.execute(
@@ -1056,7 +1130,7 @@ async def list_public_apps(x_pub_token: Optional[str] = Header(default=None)):
         au = usage.get(app_id, {})
         result.append({
             "id":             app_id,
-            "name":           m.get("name", app_id),
+            "name":           names.get(app_id) or m.get("name", app_id),
             "icon":           m.get("icon", "📦"),
             "category":       m.get("category", "Utilities"),
             "description":    m.get("description", ""),
@@ -1144,6 +1218,7 @@ async def list_public_apps_admin(session=Depends(get_current_session)):
     """List all public-capable apps with their enabled status."""
     import json
     detected = _detect_public_apps()
+    names = _public_names()
     apps_dir = os.path.join(os.path.dirname(__file__), "..", "apps")
     with _db() as conn:
         rows = {r["app_id"]: r["enabled"] for r in conn.execute("SELECT app_id, enabled FROM public_apps").fetchall()}
@@ -1161,8 +1236,31 @@ async def list_public_apps_admin(session=Depends(get_current_session)):
             "icon":    m.get("icon") or meta.get("icon", "📦"),
             "category": m.get("category", "Utilities"),
             "enabled": bool(rows.get(app_id, 0)),
+            "public_name": names.get(app_id, ""),
         })
     return JSONResponse(result)
+
+
+class PublicAppName(BaseModel):
+    name: str
+
+
+@_admin.put("/public-apps/{app_id}/name")
+async def rename_public_app(app_id: str, body: PublicAppName, session=Depends(get_current_session)):
+    if not public_names_available():
+        raise HTTPException(402, detail="premium_required")
+    if app_id not in _detect_public_apps():
+        raise HTTPException(404)
+    try:
+        _credits().set_public_name(app_id, body.name)
+    except ValueError:
+        raise HTTPException(400, detail="invalid_public_name")
+    return JSONResponse({"ok": True})
+
+
+@_pub.get("/branding")
+async def public_branding():
+    return JSONResponse({"names": _public_names()}, headers={"Cache-Control": "no-store"})
 
 
 class PublicAppToggle(BaseModel):
@@ -1300,18 +1398,22 @@ async def toggle_user_admin(uid: str, body: AdminToggle, session=Depends(get_cur
 async def get_settings_admin(session=Depends(get_current_session)):
     return JSONResponse({
         "registrations_enabled": registrations_enabled(),
+        "invitations_enabled": invitations_enabled(),
         "user_count":            user_count(),
     })
 
 
 class SettingsBody(BaseModel):
     registrations_enabled: Optional[bool] = None
+    invitations_enabled: Optional[bool] = None
 
 
 @_admin.put("/settings")
 async def update_settings_admin(body: SettingsBody, session=Depends(get_current_session)):
     if body.registrations_enabled is not None:
         set_config("registrations_enabled", "1" if body.registrations_enabled else "0")
+    if body.invitations_enabled is not None:
+        set_config("invitations_enabled", "1" if body.invitations_enabled else "0")
     return JSONResponse({"ok": True})
 
 
@@ -1334,7 +1436,7 @@ async def get_features_admin(session=Depends(get_current_session)):
     licence whose premium build has not been downloaded yet is not the same
     thing as a working feature, and only the presence of the code decides.
     """
-    return JSONResponse({"credits": credits_available()})
+    return JSONResponse({"credits": credits_available(), "public_names": public_names_available()})
 
 
 @_admin.get("/credit-services")
