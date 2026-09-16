@@ -11,7 +11,7 @@ Apps Hub is the public-facing layer of a self-hosted mvmOS installation. It lets
 
 ## Public pages are separate from the desktop
 
-A visitor to a public app does not receive a Linux account, a desktop session, Terminal access, or access to the server filesystem. Public users sign in to an Apps Hub profile that belongs only to that self-hosted installation. An administrator decides which installed apps may have a public page and can turn each public app on or off.
+A visitor to a public app does not receive a Linux account, a desktop session, Terminal access, or access to the server filesystem. Public users sign in to an Apps Hub profile that belongs only to that self-hosted installation. An administrator decides which installed apps may have a public page and can turn each public app on or off. When a public page is off, direct visits receive a clear private-page notice instead of the app content.
 
 ## Public profiles
 

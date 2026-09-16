@@ -13,7 +13,7 @@ Linux users sign in to the mvmOS desktop and operate the server. Apps Hub can se
 
 An installed app may publish a standalone public page, such as a shared tool or customer-facing workflow. Apps Hub provides the account layer and directory for these pages. Each app decides what public functionality it offers.
 
-Enabling a public page makes the app available to every profile; each person then decides for themselves whether it appears on their own home screen, from the portal’s Store tab. Notices raised by the installation itself stay on the desktop and never appear on a public page.
+Enabling a public page makes the app available to every profile; each person then decides for themselves whether it appears on their own home screen, from the portal’s Store tab. When an administrator turns a public page off, a direct link shows a private-page notice and does not reveal the app’s public content. Notices raised by the installation itself stay on the desktop and never appear on a public page.
 
 ## App-to-app API
 

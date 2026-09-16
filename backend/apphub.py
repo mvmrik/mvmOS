@@ -3,6 +3,8 @@ Apps Hub — central public identity for all public-facing apps.
 
 Exports (used by other modules via sys.modules["backend.apphub"]):
   get_pub_session(token)  -> dict | None   (includes "is_admin": 0|1)
+  is_app_public(app_id)   -> bool
+  private_page(app_name, icon="🔒") -> HTMLResponse  (shared "app is private" screen)
   get_users_by_ids(ids)   -> list[dict]
   get_favourites(uid)     -> list[dict]
   add_favourite(uid, fav_id) -> None (raises ValueError)
@@ -203,6 +205,22 @@ def is_app_public(app_id: str) -> bool:
     with _db() as conn:
         row = conn.execute("SELECT enabled FROM public_apps WHERE app_id=?", (app_id,)).fetchone()
     return bool(row and row["enabled"])
+
+
+def private_page(app_name: str, icon: str = "🔒") -> HTMLResponse:
+    """Shared "this app's public page is off" screen, used by every store
+    app's public index route instead of each one keeping its own copy."""
+    return HTMLResponse(f"""<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>{app_name}</title>
+<style>body{{font-family:system-ui,sans-serif;display:flex;align-items:center;justify-content:center;
+height:100vh;margin:0;background:#1e1e2e;color:#a6adc8;flex-direction:column;gap:12px}}
+.icon{{font-size:3rem}}.msg{{font-size:1.1rem;font-weight:700;color:#cdd6f4}}
+.sub{{font-size:.9rem;color:#6c7086}}</style>
+</head><body>
+<div class="icon">{icon}</div>
+<div class="msg">{app_name} is private</div>
+<div class="sub">Access is not available to the public.</div>
+</body></html>""", status_code=403)
 
 
 # ── Config & registrations ──────────────────────────────────────────
