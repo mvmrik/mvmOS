@@ -961,8 +961,12 @@ async def _apply_invoice_result(state: dict, invoice_id: str, data: dict) -> Non
         if pending and pending.get("invoice_id") == invoice_id:
             pending["status"] = data.get("status")
             pending["received_sats"] = data.get("received_sats", 0)
-        _update_history_entry(state, invoice_id, status=data.get("status"),
-                              received_sats=data.get("received_sats", 0))
+            if data.get("txid"):
+                pending["txid"] = data["txid"]
+        history_fields = {"status": data.get("status"), "received_sats": data.get("received_sats", 0)}
+        if data.get("txid"):
+            history_fields["txid"] = data["txid"]
+        _update_history_entry(state, invoice_id, **history_fields)
         _save(state)
     elif data.get("status") == "cancelled":
         # Mirrors the same cleanup as "not_found" — reached when the
@@ -1000,6 +1004,46 @@ async def btc_check_invoice(invoice_id: str, _session=Depends(get_current_sessio
     return JSONResponse(data)
 
 
+@router.get("/btc/invoice/{invoice_id}/license")
+async def btc_recover_invoice_license(invoice_id: str, _session=Depends(get_current_session)):
+    """Return a paid invoice's key without touching this installation state.
+
+    History recovery is deliberately read-only: a buyer may have entered a
+    different key since this payment, so revealing an old one must never
+    overwrite the current license or trigger premium delivery.
+    """
+    data = await _poll_invoice(invoice_id)
+    if data is None:
+        raise HTTPException(502, detail="unreachable")
+    if data.get("status") != "paid" or not data.get("license_code"):
+        raise HTTPException(409, detail="Invoice is not paid")
+    return JSONResponse({"license_key": data["license_code"]})
+
+
+async def _cancel_remote_invoice(invoice_id: str):
+    """Cancel an invoice with retries for a transient CDN/origin failure.
+
+    Cancellation is idempotent on mvmos.org: retrying it can never charge or
+    reactivate anything. The retry is deliberately limited to gateway-style
+    failures; a real application response must still reach the caller intact.
+    """
+    import httpx
+
+    for attempt in range(3):
+        try:
+            async with httpx.AsyncClient(timeout=8) as client:
+                response = await client.post(f"{_BTC_INVOICE_URL}/{invoice_id}/cancel")
+        except httpx.RequestError:
+            response = None
+
+        if response is not None and response.status_code not in (502, 503, 504):
+            return response
+        if attempt < 2:
+            await asyncio.sleep(0.5 * (attempt + 1))
+
+    raise HTTPException(502, detail="unreachable")
+
+
 @router.post("/btc/invoice/{invoice_id}/cancel")
 async def btc_cancel_invoice(invoice_id: str, _session=Depends(get_current_session)):
     """Cancel a pending invoice: recorded as cancelled on mvmos.org so it
@@ -1008,11 +1052,7 @@ async def btc_cancel_invoice(invoice_id: str, _session=Depends(get_current_sessi
     slipped in right before the cancel click is still applied normally —
     cancelling never discards money that actually arrived.
     """
-    try:
-        async with httpx.AsyncClient(timeout=15) as client:
-            r = await client.post(f"{_BTC_INVOICE_URL}/{invoice_id}/cancel")
-    except Exception:
-        raise HTTPException(502, detail="unreachable")
+    r = await _cancel_remote_invoice(invoice_id)
     if r.status_code not in (200, 400):
         raise HTTPException(r.status_code, detail=r.text)
     data = r.json()

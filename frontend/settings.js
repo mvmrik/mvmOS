@@ -279,6 +279,8 @@ const Settings = (() => {
                   <div id="btc-status" style="margin-top:10px;font-size:.85rem;font-weight:600;color:var(--text-dim);text-align:left"></div>
                   <div id="btc-received" style="margin-top:4px;font-size:.78rem;color:#e0a355;text-align:left"></div>
                   <div id="btc-waiting-elapsed" style="margin-top:4px;font-size:.78rem;color:var(--text-dim);text-align:left"></div>
+                  <div id="btc-payment-reference" style="margin-top:7px;font-size:.75rem;color:var(--text-dim);text-align:left;font-family:var(--mono,monospace)"></div>
+                  <div id="btc-transaction" style="display:none;margin-top:4px;font-size:.75rem;color:var(--text-dim);text-align:left;font-family:var(--mono,monospace);word-break:break-all"></div>
                   <div style="margin-top:10px;text-align:left;display:flex;gap:8px">
                     <button class="s-btn-sm" id="btc-cancel">${t('btc_pay_cancel')}</button>
                     <button class="s-btn-sm" id="btc-close" style="display:none">${t('btc_pay_close')}</button>
@@ -878,9 +880,9 @@ const Settings = (() => {
     // just learned, so it doesn't sit showing "pending" until the Settings
     // window is closed and reopened (the same class of staleness as the
     // brand-new-invoice case above, just for a status change instead).
-    function updateHistoryStatus(invoiceId, status) {
+    function updateHistoryStatus(invoiceId, status, details) {
       const entry = (premium.invoice_history || []).find(inv => inv.invoice_id === invoiceId);
-      if (entry) entry.status = status;
+      if (entry) Object.assign(entry, details || {}, {status});
       renderBtcHistory();
     }
 
@@ -951,38 +953,67 @@ const Settings = (() => {
       }
     }
 
+    function updateTransactionLine(txid) {
+      const el = body.querySelector('#btc-transaction');
+      if (!el) return;
+      el.textContent = txid ? t('btc_pay_transaction', {txid}) : '';
+      el.style.display = txid ? 'block' : 'none';
+    }
+
     function showBtcInvoice(data, initialStatus, opts) {
       const lockControls = !(opts && opts.lockControls === false);
       if (lockControls) setPurchaseControlsVisible(false);
       const box = body.querySelector('#btc-invoice');
       box.style.display = 'block';
       box.dataset.invoiceId = data.invoice_id;
-      body.querySelector('#btc-cancel').style.display = '';
-      body.querySelector('#btc-close').style.display = lockControls ? 'none' : '';
-      body.querySelector('#btc-send-label').textContent = t('btc_pay_send', {amount: data.amount_sats});
+      const closedInvoice = initialStatus === 'cancelled' || initialStatus === 'paid';
+      body.querySelector('#btc-cancel').style.display = closedInvoice ? 'none' : '';
+      body.querySelector('#btc-close').style.display = closedInvoice || !lockControls ? '' : 'none';
+      body.querySelector('#btc-send-label').textContent = closedInvoice
+        ? (initialStatus === 'cancelled' ? t('btc_pay_status_cancelled') : t('btc_pay_paid'))
+        : t('btc_pay_send', {amount: data.amount_sats});
       body.querySelector('#btc-address').textContent = data.address;
       body.querySelector('#btc-address').dataset.invoiceId = data.invoice_id;
-      const btcAmount = (data.amount_sats / 100000000).toFixed(8);
-      const uri = `bitcoin:${data.address}?amount=${btcAmount}`;
-      body.querySelector('#btc-qr').src = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(uri)}`;
+      // A short, non-secret reference lets support find the private invoice
+      // without asking the buyer for a wallet's sending address.
+      body.querySelector('#btc-payment-reference').textContent = t('btc_pay_reference', {
+        reference: data.invoice_id.slice(0, 12),
+      });
+      const qr = body.querySelector('#btc-qr');
+      qr.style.display = closedInvoice ? 'none' : '';
+      if (!closedInvoice) {
+        const btcAmount = (data.amount_sats / 100000000).toFixed(8);
+        const uri = `bitcoin:${data.address}?amount=${btcAmount}`;
+        qr.src = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(uri)}`;
+      }
       const statusEl = body.querySelector('#btc-status');
-      statusEl.textContent = initialStatus === 'seen' ? t('btc_pay_seen') : t('btc_pay_pending');
+      statusEl.textContent = initialStatus === 'paid' ? t('btc_pay_paid')
+        : initialStatus === 'cancelled' ? t('btc_pay_status_cancelled')
+        : initialStatus === 'seen' ? t('btc_pay_seen') : t('btc_pay_pending');
       updateReceivedLine(box, data.amount_sats, data.received_sats || 0);
+      updateTransactionLine(data.txid);
+      if (window._btcPollTimer) clearInterval(window._btcPollTimer);
+      stopWaitingClock();
+      if (closedInvoice) {
+        body.querySelector('#btc-waiting-elapsed').textContent = '';
+        return;
+      }
       if (data.created_local_at) startWaitingClock(data.created_local_at);
 
-      if (window._btcPollTimer) clearInterval(window._btcPollTimer);
       window._btcPollTimer = setInterval(async () => {
         const r = await fetch('/api/premium/btc/invoice/' + data.invoice_id).catch(() => null);
         const st = r?.ok ? await r.json() : null;
         if (!st) { statusEl.textContent = t('btc_pay_unreachable'); return; }
         if (st.amount_sats) updateReceivedLine(box, st.amount_sats, st.received_sats || 0);
+        updateTransactionLine(st.txid);
         if (st.status === 'seen') {
           statusEl.textContent = t('btc_pay_seen');
-          updateHistoryStatus(data.invoice_id, 'seen');
+          updateHistoryStatus(data.invoice_id, 'seen', {received_sats: st.received_sats || 0, txid: st.txid});
         } else if (st.status === 'paid') {
           statusEl.textContent = t('btc_pay_paid');
           clearInterval(window._btcPollTimer);
           stopWaitingClock();
+          updateHistoryStatus(data.invoice_id, 'paid', {received_sats: st.received_sats || 0, txid: st.txid});
           if (st.premium) showPremState(st.premium);
         } else if (st.status === 'cancelled') {
           // Cancelled from elsewhere (another tab/session) while this one
@@ -1075,15 +1106,20 @@ const Settings = (() => {
       wrap.innerHTML = list.map((inv, idx) => {
         const when = formatDate(inv.paid_at || inv.created_local_at, s.date_format, s.timezone);
         const planLabel = inv.plan === 'yearly' ? t('btc_pay_plan_yearly') : t('btc_pay_plan_monthly');
-        // Pending/seen rows are the only ones still worth acting on — an
-        // underpaid or forgotten invoice has no other way back to its
-        // address/amount once the box that showed them has been closed.
-        const clickable = inv.status === 'pending' || inv.status === 'seen';
+        // Pending/seen rows keep the address accessible. A paid row has a
+        // password-gated recovery control instead, so an accidentally removed
+        // local licence can be restored without exposing it in the history.
+        const clickable = inv.status !== 'paid';
+        const recovery = inv.status === 'paid'
+          ? `<button class="s-btn-sm btc-recover-license" data-idx="${idx}">${t('btc_pay_recover_license')}</button>
+             <div class="btc-recovery-result" style="display:none;flex-basis:100%;font-family:var(--mono,monospace);font-size:.78rem;word-break:break-all"></div>`
+          : '';
         return `<div class="${clickable ? 'btc-history-row' : ''}" data-idx="${idx}"
-            style="display:flex;align-items:center;gap:10px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:8px 12px;margin-bottom:6px;font-size:.82rem;${clickable ? 'cursor:pointer' : ''}">
+            style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:8px 12px;margin-bottom:6px;font-size:.82rem;${clickable ? 'cursor:pointer' : ''}">
           <div style="flex:1">${planLabel} — ${inv.amount_sats} sats${clickable ? ' · ' + t('btc_pay_history_show_address') : ''}</div>
           <div style="color:var(--text-dim)">${when}</div>
           <div style="color:${statusColor(inv.status)};font-weight:600;min-width:60px;text-align:right">${statusLabel(inv.status)}</div>
+          ${recovery}
         </div>`;
       }).join('');
       wrap.querySelectorAll('.btc-history-row').forEach(row => {
@@ -1097,6 +1133,31 @@ const Settings = (() => {
           // fresh purchase.
           const isCurrent = premium.pending_invoice && premium.pending_invoice.invoice_id === inv.invoice_id;
           showBtcInvoice(inv, inv.status, {lockControls: !!isCurrent});
+        });
+      });
+      wrap.querySelectorAll('.btc-recover-license').forEach(btn => {
+        btn.addEventListener('click', async e => {
+          e.stopPropagation();
+          const inv = list[parseInt(btn.dataset.idx, 10)];
+          if (!inv) return;
+          const password = await mvmOS.confirmPassword(t('btc_pay_recover_license'), t('subscription_reveal_desc'));
+          if (!password) return;
+          btn.disabled = true;
+          btn.textContent = t('btc_pay_recovering_license');
+          const res = await fetch('/api/premium/btc/invoice/' + inv.invoice_id + '/license').catch(() => null);
+          const data = res?.ok ? await res.json() : null;
+          const result = btn.parentElement.querySelector('.btc-recovery-result');
+          if (!data?.license_key) {
+            btn.disabled = false;
+            btn.textContent = t('btc_pay_recover_license');
+            result.textContent = t('btc_pay_recovery_failed');
+            result.style.display = 'block';
+            result.style.color = '#e05555';
+            return;
+          }
+          result.textContent = t('btc_pay_license_recovered', {license: data.license_key});
+          result.style.display = 'block';
+          result.style.color = 'var(--accent)';
         });
       });
     }
