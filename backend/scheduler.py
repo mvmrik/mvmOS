@@ -120,7 +120,7 @@ def _get_config(app_id: str) -> dict:
 
 
 @router.api_route("/api/scheduler/tick", methods=["GET", "POST"])
-async def scheduler_tick():
+def scheduler_tick():
     now = datetime.now()
     results = []
 

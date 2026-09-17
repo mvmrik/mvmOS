@@ -76,6 +76,7 @@ from .apphub import router as apphub_router, public_page_router as apphub_public
 from .notifications import router as notifications_router
 from .platform_api import router as platform_router
 from .extensions import router as extensions_router
+from .wizard import router as wizard_router
 from .notfound import render_404_html
 from .db import APPS_DIR, WIDGETS_DIR, THEMES_DIR
 from . import app_backends, app_isolation, public_loader, projects
@@ -112,6 +113,7 @@ app.include_router(apphub_public_router, prefix="/pub/apphub")
 app.include_router(notifications_router)
 app.include_router(platform_router)
 app.include_router(extensions_router)
+app.include_router(wizard_router)
 
 app_backends.load_all(app)
 
@@ -204,7 +206,7 @@ async def public_app_icon(app_id: str):
 
 
 @app.get("/pub/{app_id}/pwa-icon-{size}.png", include_in_schema=False)
-async def public_app_icon_png(app_id: str, size: int):
+def public_app_icon_png(app_id: str, size: int):
     meta = _public_pwa_meta(app_id)
     if not meta or size not in (192, 512):
         return Response(status_code=404)

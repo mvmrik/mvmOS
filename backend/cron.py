@@ -93,7 +93,7 @@ async def list_cron_users(session=Depends(get_current_session)):
 # ── Read ──────────────────────────────────────────────────────────────────────
 
 @router.get("")
-async def list_cron(user: str = Query(""), session=Depends(get_current_session)):
+def list_cron(user: str = Query(""), session=Depends(get_current_session)):
     me = session["effective_user"]
     username = user.strip() or me
     text = _read_crontab(username)
@@ -126,7 +126,7 @@ class AddRequest(BaseModel):
 
 
 @router.post("")
-async def add_cron(body: AddRequest, session=Depends(get_current_session)):
+def add_cron(body: AddRequest, session=Depends(get_current_session)):
     username = _resolve_target(session, body.target_user, body.sudo_password)
     text = _read_crontab(username)
     if body.schedule:
@@ -153,7 +153,7 @@ class EditRequest(BaseModel):
 
 
 @router.put("")
-async def edit_cron(body: EditRequest, session=Depends(get_current_session)):
+def edit_cron(body: EditRequest, session=Depends(get_current_session)):
     username = _resolve_target(session, body.target_user, body.sudo_password)
     text = _read_crontab(username)
     if body.schedule:
@@ -183,7 +183,7 @@ class ToggleRequest(BaseModel):
 
 
 @router.post("/toggle")
-async def toggle_cron(body: ToggleRequest, session=Depends(get_current_session)):
+def toggle_cron(body: ToggleRequest, session=Depends(get_current_session)):
     username = _resolve_target(session, body.target_user, body.sudo_password)
     text = _read_crontab(username)
     lines = text.splitlines()
@@ -232,7 +232,7 @@ class DeleteRequest(BaseModel):
 
 
 @router.delete("")
-async def delete_cron(body: DeleteRequest, session=Depends(get_current_session)):
+def delete_cron(body: DeleteRequest, session=Depends(get_current_session)):
     username = _resolve_target(session, body.target_user, body.sudo_password)
     text = _read_crontab(username)
     lines = [l for l in text.splitlines() if l.strip() != body.raw.strip()]

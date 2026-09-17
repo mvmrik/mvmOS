@@ -159,7 +159,7 @@ async def status(session=Depends(get_current_session)):
 
 
 @router.post("/enable")
-async def enable(body: "PasswordRequest", session=Depends(get_current_session)):
+def enable(body: "PasswordRequest", session=Depends(get_current_session)):
     username = _verify_actor(body.password, session)
     if not _is_admin(username):
         raise HTTPException(status_code=403, detail="Administrator access is required")

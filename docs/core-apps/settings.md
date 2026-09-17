@@ -16,6 +16,8 @@ Settings collects system-level configuration in one desktop window. Apps that re
 - Start Menu configuration.
 - Backups, SSH access, and local user accounts.
 - System information and Core updates.
+- The Setup Wizard, which can be reopened after first login to review regional, privacy, app, and Premium choices.
+- Optional anonymous usage statistics, disabled by default and configurable from the System section.
 - The subscription area, reserved for future Premium license management.
 
 ## Change safely

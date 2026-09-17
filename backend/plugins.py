@@ -702,7 +702,7 @@ async def delete_plugin_review(plugin_id: str, session=Depends(get_current_sessi
     return JSONResponse(response.json(), status_code=response.status_code)
 
 @router.delete("/{plugin_id}")
-async def uninstall_plugin(plugin_id: str, session=Depends(get_current_session)):
+def uninstall_plugin(plugin_id: str, session=Depends(get_current_session)):
     if any(a["id"] == plugin_id for a in SYSTEM_APPS):
         return JSONResponse({"error": "System apps cannot be uninstalled"}, status_code=400)
     app_dir = _app_dir(plugin_id)

@@ -57,11 +57,27 @@ async def get_settings(_session=Depends(get_current_session)):
 
 @router.post("")
 async def save_settings(body: SettingsBody, _session=Depends(get_current_session)):
+    """Merge the posted keys into the stored settings.
+
+    Callers send only the keys they own — the regional tab sends the seven
+    regional keys, the error reporter sends one. Writing the body as the whole
+    blob therefore deleted every setting the caller happened not to mention,
+    so changing the language silently reset the wallpaper, the gestures and the
+    error-reporting choice. Merging keeps each caller to its own keys.
+    """
     with get_conn() as conn:
+        row = conn.execute("SELECT value FROM settings WHERE key = 'main'").fetchone()
+        try:
+            saved = json.loads(row["value"]) if row else {}
+        except (TypeError, ValueError):
+            saved = {}
+        if not isinstance(saved, dict):
+            saved = {}
+        saved.update(body.settings or {})
         conn.execute(
             "INSERT INTO settings (key, value) VALUES ('main', ?) "
             "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-            (json.dumps(body.settings),)
+            (json.dumps(saved),)
         )
     return {"ok": True}
 

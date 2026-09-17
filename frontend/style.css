@@ -1473,3 +1473,110 @@ body.splashing #taskbar { visibility: hidden; }
 }
 #ss-unlock-box button:hover { background: #6d28d9; }
 #ss-unlock-err { color: #f87171; font-size: .8rem; min-height: 1em; }
+
+/* ── Setup wizard ─────────────────────────────────────────────────────────── */
+/* The blue dot that marks something the owner has not seen yet. Used on the
+   Settings tab and beside the wizard row itself. */
+.settings-tab-dot {
+  display: inline-block; width: 7px; height: 7px; margin-left: 6px;
+  border-radius: 50%; background: #3b82f6; flex-shrink: 0; vertical-align: middle;
+}
+.settings-tab-dot[hidden] { display: none; }
+
+.wiz-overlay {
+  position: fixed; inset: 0; z-index: 99998;
+  background: rgba(0,0,0,.62);
+  display: flex; align-items: center; justify-content: center;
+  padding: 24px; box-sizing: border-box;
+}
+.wiz {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius, 8px); box-shadow: var(--shadow);
+  width: 100%; max-width: 900px; height: 100%; max-height: 620px;
+  display: flex; flex-direction: column; overflow: hidden;
+}
+.wiz-head {
+  display: flex; align-items: center; gap: 12px;
+  padding: 16px 20px; border-bottom: 1px solid var(--border);
+}
+.wiz-title { font-size: 1rem; font-weight: 600; flex: 1; }
+.wiz-dots { display: flex; gap: 6px; }
+.wiz-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--border); transition: background .15s;
+}
+.wiz-dot.seen { background: var(--text-dim); }
+.wiz-dot.active { background: var(--accent); }
+.wiz-body { flex: 1; overflow: auto; padding: 20px; min-height: 0; }
+/* The embedded App Store brings its own full-height layout, so its step gives
+   it the whole body instead of the usual padding. */
+.wiz-body:has(.wiz-store) { padding: 20px 20px 0; display: flex; flex-direction: column; }
+.wiz-store { flex: 1; min-height: 320px; position: relative; overflow: hidden; }
+.wiz-lead { margin: 0 0 18px; font-size: .9rem; line-height: 1.55; color: var(--text); }
+
+/* Welcome screen: one logo, one sentence and the version, centred in whatever
+   height the body happens to have rather than pinned to the top of it. */
+.wiz-welcome {
+  height: 100%; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; text-align: center;
+  gap: 14px; padding: 12px 8px;
+}
+.wiz-welcome-logo {
+  width: 108px; height: 108px; object-fit: contain;
+  filter: drop-shadow(0 6px 18px rgba(0, 0, 0, .35));
+}
+.wiz-welcome-title { font-size: 1.6rem; font-weight: 600; letter-spacing: -.01em; }
+.wiz-welcome-lead {
+  margin: 0; max-width: 46ch; font-size: .88rem;
+  line-height: 1.65; color: var(--text-dim);
+}
+.wiz-welcome-version {
+  display: inline-flex; align-items: baseline; gap: 8px; margin-top: 4px;
+  padding: 7px 16px; border: 1px solid var(--border); border-radius: 999px;
+  background: var(--surface2);
+}
+.wiz-welcome-version-label {
+  font-size: .68rem; text-transform: uppercase; letter-spacing: .09em;
+  color: var(--text-dim);
+}
+.wiz-welcome-version-num {
+  font-size: .95rem; font-weight: 600; color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Shown only if the embedded store cannot be rendered, so the step still
+   leads somewhere instead of ending in an empty panel. */
+.wiz-store-fallback {
+  height: 100%; display: flex; align-items: center; justify-content: center;
+}
+.wiz-note { margin: 18px 0 0; font-size: .78rem; line-height: 1.5; color: var(--text-dim); }
+/* The "nothing of yours is sent" paragraph is the one a reader must not skim. */
+.wiz-note-strong { margin-top: 10px; color: var(--text); }
+.wiz-row {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding: 10px 0; border-bottom: 1px solid var(--border);
+}
+.wiz-row label { flex: 1; min-width: 140px; font-size: .86rem; }
+.wiz-row select { min-width: 200px; }
+.wiz-check { display: flex; align-items: flex-start; gap: 12px; padding: 12px 0; }
+.wiz-check-title { font-weight: 500; font-size: .88rem; }
+.wiz-check-desc { font-size: .8rem; color: var(--text-dim); margin-top: 3px; line-height: 1.45; }
+.wiz-new {
+  display: inline-block; margin-left: 6px; padding: 1px 7px; border-radius: 10px;
+  background: #3b82f6; color: #fff; font-size: .65rem; font-weight: 600;
+  letter-spacing: .02em; vertical-align: middle;
+}
+.wiz-premium { display: flex; align-items: center; gap: 14px; margin-bottom: 18px; }
+.wiz-premium-icon { font-size: 2rem; }
+.wiz-premium-copy { font-size: .88rem; line-height: 1.55; }
+.wiz-foot {
+  display: flex; align-items: center; gap: 8px;
+  padding: 14px 20px; border-top: 1px solid var(--border);
+}
+.wiz-foot button:disabled { opacity: .45; cursor: not-allowed; }
+
+@media (max-width: 700px) {
+  .wiz-overlay { padding: 0; }
+  .wiz { max-width: none; max-height: none; border-radius: 0; border: none; }
+  .wiz-row select { min-width: 0; width: 100%; }
+}

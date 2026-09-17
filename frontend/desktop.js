@@ -1508,6 +1508,10 @@ const Desktop = (() => {
     document.addEventListener('mvmos-plugins-loaded', () => renderIcons());
     mvmOS._loadAllPlugins();
     _watchDesktop();
+    // Last, and never awaited: a fresh installation gets the wizard on screen,
+    // an updated one only gets its blue dot. Either way the desktop is already
+    // finished booting, so a slow or failed call here costs nothing.
+    window.Wizard?.maybeAutoRun();
   }
 
   // ── Mobile swipe pages ────────────────────────────────────────────────────

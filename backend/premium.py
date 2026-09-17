@@ -25,6 +25,7 @@ from pydantic import BaseModel
 
 from .auth import get_current_session
 from .db import get_conn
+from . import analytics
 
 router = APIRouter(prefix="/api/premium", tags=["premium"])
 
@@ -210,6 +211,16 @@ async def heartbeat_loop() -> None:
                     clear_all_premium()
             else:
                 clear_all_premium()
+            # Anonymous statistics ride this wake-up instead of owning a timer.
+            # Off unless the owner switched them on, and sent in a thread so a
+            # slow or unreachable site never holds up the event loop.
+            if analytics.enabled():
+                try:
+                    await asyncio.to_thread(
+                        analytics.send, _device_id(state), state.get("status") == "premium"
+                    )
+                except Exception:
+                    pass
         except Exception:
             pass
         await asyncio.sleep(HEARTBEAT_SECONDS)

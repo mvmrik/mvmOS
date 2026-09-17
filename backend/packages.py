@@ -1,5 +1,6 @@
 import asyncio
 import subprocess
+import threading
 import re
 import time
 from fastapi import APIRouter, Depends, Query
@@ -59,10 +60,22 @@ SECTION_LABELS = {
 
 def _build_cache() -> list:
     global _pkg_cache, _pkg_cache_time
-    r = subprocess.run(
-        ["apt-cache", "dumpavail"],
-        capture_output=True, text=True
-    )
+    # dumpavail is two million lines, but only five kinds of line are read
+    # below — the rest is description text. Letting grep drop them first leaves
+    # a fifth as much for Python to walk. That matters more than it looks:
+    # parsing is plain Python, which holds the GIL, so the old full walk slowed
+    # down every other request in the process for as long as it ran, every time
+    # the cache expired.
+    _dump = subprocess.Popen(["apt-cache", "dumpavail"], stdout=subprocess.PIPE)
+    try:
+        r = subprocess.run(
+            ["grep", "-E", r"^(Package|Section|Version|Description|Description-en): |^$"],
+            stdin=_dump.stdout, capture_output=True, text=True
+        )
+    finally:
+        if _dump.stdout:
+            _dump.stdout.close()
+        _dump.wait()
     pkgs = []
     cur: dict = {}
     for line in r.stdout.splitlines():
@@ -84,14 +97,54 @@ def _build_cache() -> list:
     return pkgs
 
 
+_inst_cache: tuple = (0.0, frozenset())
+_INST_TTL = 30  # seconds
+
+# These two builds are expensive and shared, and the endpoints that trigger them
+# now run in worker threads, so several can arrive at once on a cold cache. The
+# lock makes the first arrival do the work and the rest wait for its result
+# instead of each running the same scan.
+_inst_lock = threading.Lock()
+_cache_lock = threading.Lock()
+
+
+def _installed_set() -> frozenset:
+    """dpkg -l parsed once and shared. The list only changes when something is
+    installed or removed, but every search, listing and info lookup re-ran it,
+    so several people browsing packages meant the same scan over and over."""
+    ts, val = _inst_cache
+    if val and time.time() - ts < _INST_TTL:
+        return val
+    with _inst_lock:
+        # Re-check: another thread may have filled it while we waited.
+        ts, val = _inst_cache
+        if val and time.time() - ts < _INST_TTL:
+            return val
+        return _build_installed_set()
+
+
+def _build_installed_set() -> frozenset:
+    global _inst_cache
+    r = subprocess.run(["dpkg", "-l"], capture_output=True, text=True)
+    names = frozenset(
+        p["name"] for p in (_parse_dpkg(line) for line in r.stdout.splitlines()) if p
+    )
+    _inst_cache = (time.time(), names)
+    return names
+
+
 def get_cache() -> list:
-    if not _pkg_cache or time.time() - _pkg_cache_time > _CACHE_TTL:
-        _build_cache()
-    return _pkg_cache
+    if _pkg_cache and time.time() - _pkg_cache_time <= _CACHE_TTL:
+        return _pkg_cache
+    with _cache_lock:
+        # Re-check: another thread may have rebuilt it while we waited.
+        if _pkg_cache and time.time() - _pkg_cache_time <= _CACHE_TTL:
+            return _pkg_cache
+        return _build_cache()
 
 
 @router.get("/categories")
-async def categories(session=Depends(get_current_session)):
+def categories(session=Depends(get_current_session)):
     pkgs = get_cache()
     counts: dict[str, int] = {}
     for p in pkgs:
@@ -111,7 +164,7 @@ async def categories(session=Depends(get_current_session)):
 
 
 @router.get("/by-category")
-async def by_category(
+def by_category(
     section: str = Query(""),
     page: int = Query(1, ge=1),
     limit: int = Query(40, le=100),
@@ -119,14 +172,7 @@ async def by_category(
     session=Depends(get_current_session),
 ):
     pkgs = get_cache()
-
-    # get installed set
-    ri = subprocess.run(["dpkg", "-l"], capture_output=True, text=True)
-    installed_set = set()
-    for line in ri.stdout.splitlines():
-        p = _parse_dpkg(line)
-        if p:
-            installed_set.add(p["name"])
+    installed_set = _installed_set()
 
     filtered = [
         p for p in pkgs
@@ -154,7 +200,7 @@ def _parse_dpkg(line: str):
 
 
 @router.get("/installed")
-async def installed(session=Depends(get_current_session)):
+def installed(session=Depends(get_current_session)):
     r = subprocess.run(["dpkg", "-l"], capture_output=True, text=True)
     pkgs = []
     for line in r.stdout.splitlines():
@@ -165,26 +211,18 @@ async def installed(session=Depends(get_current_session)):
 
 
 @router.get("/search")
-async def search(q: str = Query(""), session=Depends(get_current_session)):
+def search(q: str = Query(""), session=Depends(get_current_session)):
     if not q.strip():
         return JSONResponse([])
-    r = subprocess.run(
-        ["apt-cache", "search", "--names-only", q],
-        capture_output=True, text=True
-    )
-    # also get full search if names-only gives too few results
+    # A --names-only pass used to run here as well, and its output was never
+    # read — a second full apt-cache scan, about as expensive as the real one,
+    # discarded on every search.
     r2 = subprocess.run(
         ["apt-cache", "search", q],
         capture_output=True, text=True
     )
 
-    # get installed set
-    ri = subprocess.run(["dpkg", "-l"], capture_output=True, text=True)
-    installed_set = set()
-    for line in ri.stdout.splitlines():
-        p = _parse_dpkg(line)
-        if p:
-            installed_set.add(p["name"])
+    installed_set = _installed_set()
 
     seen = set()
     pkgs = []
@@ -220,7 +258,7 @@ async def search(q: str = Query(""), session=Depends(get_current_session)):
 
 
 @router.get("/info")
-async def pkg_info(name: str = Query(""), session=Depends(get_current_session)):
+def pkg_info(name: str = Query(""), session=Depends(get_current_session)):
     if not re.match(r'^[a-z0-9][a-z0-9.+\-]+$', name):
         return JSONResponse({"error": "Invalid"}, status_code=400)
     r = subprocess.run(["apt-cache", "show", name], capture_output=True, text=True)

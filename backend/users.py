@@ -54,7 +54,7 @@ class CreateUserRequest(BaseModel):
 
 
 @router.post("")
-async def create_user(body: CreateUserRequest, _session=Depends(get_current_session)):
+def create_user(body: CreateUserRequest, _session=Depends(get_current_session)):
     if not body.username.isidentifier():
         raise HTTPException(status_code=400, detail="Invalid username")
     try:
@@ -85,7 +85,7 @@ class UpdateUserRequest(BaseModel):
 
 
 @router.patch("/{username}")
-async def update_user(username: str, body: UpdateUserRequest, _session=Depends(get_current_session)):
+def update_user(username: str, body: UpdateUserRequest, _session=Depends(get_current_session)):
     try:
         pwd.getpwnam(username)
     except KeyError:
@@ -110,7 +110,7 @@ async def update_user(username: str, body: UpdateUserRequest, _session=Depends(g
 
 
 @router.delete("/{username}")
-async def delete_user(username: str, _session=Depends(get_current_session)):
+def delete_user(username: str, _session=Depends(get_current_session)):
     if username == "root":
         raise HTTPException(status_code=403, detail="Cannot delete root")
     try:

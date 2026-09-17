@@ -1,3 +1,4 @@
+import asyncio
 import os
 import subprocess
 import pwd as _pwd
@@ -400,7 +401,7 @@ async def login(request: Request):
         _pending_totp[pending_token] = {"username": username, "expires": time.time() + 300}
         return JSONResponse({"totp_required": True, "pending_token": pending_token}, status_code=202)
 
-    _init_user_xdg(username)
+    await asyncio.to_thread(_init_user_xdg, username)
     token = secrets.token_hex(32)
     with get_conn() as conn:
         conn.execute("INSERT INTO sessions (token, effective_user) VALUES (?, ?)", (token, username))
@@ -422,7 +423,7 @@ class TotpLoginRequest(BaseModel):
 
 
 @router.post("/login/totp")
-async def login_totp(body: TotpLoginRequest, request: Request):
+def login_totp(body: TotpLoginRequest, request: Request):
     ip = request.headers.get("X-Real-IP") or request.client.host
     wait = _check_rate_limit(ip)
     if wait > 0:

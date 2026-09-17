@@ -11,11 +11,11 @@ mvmOS runs on Linux with systemd and Python 3.10 or later. It is a browser deskt
 
 ## Install and first login
 
-Install mvmOS on the server you control, open its URL in a browser, and sign in with a Linux account from that machine. The desktop session uses the permissions of that Linux user, so choose accounts deliberately.
+Install mvmOS on the server you control, open its URL in a browser, and sign in with a Linux account from that machine. The desktop session uses the permissions of that Linux user, so choose accounts deliberately. On a new installation, the Setup Wizard opens after the desktop is ready and guides you through regional preferences, privacy choices, apps, and Premium. You can close it and return from Settings at any time.
 
 ## First checks
 
-- Open [[Settings]] and set language, regional preferences, and display options.
+- Open [[Settings]] to revisit the Setup Wizard, set language and regional preferences, and review display options.
 - Create a backup policy before adding important app data.
 - Review SSH and user access before exposing the installation beyond a trusted network.
 - Open [[App Store]] only after the Core installation is working as expected.

@@ -1,3 +1,4 @@
+import asyncio
 import os
 import shutil
 import stat
@@ -133,7 +134,7 @@ XDG_PLACES = [
 
 
 @router.get("/places")
-async def get_places(session=Depends(get_current_session)):
+def get_places(session=Depends(get_current_session)):
     username = session["effective_user"]
     home = home_for(username)
 
@@ -151,7 +152,7 @@ async def get_places(session=Depends(get_current_session)):
 
 
 @router.get("")
-async def list_dir(path: str = "/", as_root: bool = False, session=Depends(get_current_session)):
+def list_dir(path: str = "/", as_root: bool = False, session=Depends(get_current_session)):
     eu = session["effective_user"]
     real = safe_path(path, home_for(eu))
     # only an actual root session may browse as root — otherwise stay as the user
@@ -177,14 +178,22 @@ async def upload_file(
     dest = safe_path(os.path.join(path, os.path.basename(file.filename)))
     import tempfile
     data = await file.read()
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".mvmostmp") as tmp:
-        tmp.write(data)
-        tmp_path = tmp.name
-    os.chmod(tmp_path, 0o644)
-    try:
-        r = run_as(eu, ["cp", tmp_path, dest])
-    finally:
-        os.unlink(tmp_path)
+
+    # Writing the temp file and forking runuser to copy it into place are both
+    # synchronous, and an upload is as big as the user's file — done on the event
+    # loop, one person uploading held up everyone else for the whole write. In a
+    # thread it costs one worker and nothing else waits behind it.
+    def _store():
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".mvmostmp") as tmp:
+            tmp.write(data)
+            tmp_path = tmp.name
+        os.chmod(tmp_path, 0o644)
+        try:
+            return run_as(eu, ["cp", tmp_path, dest])
+        finally:
+            os.unlink(tmp_path)
+
+    r = await asyncio.to_thread(_store)
     if r.returncode != 0:
         raise HTTPException(status_code=403, detail="Permission denied")
     return {"ok": True, "name": file.filename}
@@ -212,24 +221,29 @@ async def upload_chunk(
     if not safe_id:
         raise HTTPException(400, "Invalid upload_id")
 
-    os.makedirs(_CHUNK_TMP_DIR, exist_ok=True)
-
-    # Clean up stale uploads older than 24h
-    try:
-        cutoff = time.time() - 86400
-        for f in os.listdir(_CHUNK_TMP_DIR):
-            fp = os.path.join(_CHUNK_TMP_DIR, f)
-            if os.path.isfile(fp) and os.path.getmtime(fp) < cutoff:
-                os.unlink(fp)
-    except Exception:
-        pass
-
     tmp_path = os.path.join(_CHUNK_TMP_DIR, f"{safe_id}_{filename}.mvmostmp")
 
     chunk_data = await file.read()
     mode = "ab" if chunk_index > 0 else "wb"
-    with open(tmp_path, mode) as f:
-        f.write(chunk_data)
+
+    # The directory scan and the chunk write run once per chunk, so a single
+    # large file used to mean hundreds of short stalls on the event loop,
+    # scattered through everyone else's requests. Off the loop they cost nobody.
+    def _write_chunk():
+        os.makedirs(_CHUNK_TMP_DIR, exist_ok=True)
+        # Clean up stale uploads older than 24h
+        try:
+            cutoff = time.time() - 86400
+            for f in os.listdir(_CHUNK_TMP_DIR):
+                fp = os.path.join(_CHUNK_TMP_DIR, f)
+                if os.path.isfile(fp) and os.path.getmtime(fp) < cutoff:
+                    os.unlink(fp)
+        except Exception:
+            pass
+        with open(tmp_path, mode) as f:
+            f.write(chunk_data)
+
+    await asyncio.to_thread(_write_chunk)
 
     if chunk_index < total_chunks - 1:
         return {"ok": True, "done": False, "chunk": chunk_index}
@@ -241,14 +255,18 @@ async def upload_chunk(
 
     # Move to destination
     dest = safe_path(os.path.join(path, filename))
-    os.chmod(tmp_path, 0o644)
-    try:
-        r = run_as(eu, ["cp", tmp_path, dest])
-    finally:
+
+    def _finalize():
+        os.chmod(tmp_path, 0o644)
         try:
-            os.unlink(tmp_path)
-        except Exception:
-            pass
+            return run_as(eu, ["cp", tmp_path, dest])
+        finally:
+            try:
+                os.unlink(tmp_path)
+            except Exception:
+                pass
+
+    r = await asyncio.to_thread(_finalize)
     if r.returncode != 0:
         raise HTTPException(403, "Permission denied")
     return {"ok": True, "done": True, "name": filename}
@@ -296,7 +314,7 @@ class CopyRequest(BaseModel):
     move: bool = False
 
 @router.post("/copy")
-async def copy_file(body: CopyRequest, session=Depends(get_current_session)):
+def copy_file(body: CopyRequest, session=Depends(get_current_session)):
     eu = session["effective_user"]
     src = safe_path(body.src)
     dst_dir = safe_path(body.dst_dir)
@@ -308,7 +326,7 @@ async def copy_file(body: CopyRequest, session=Depends(get_current_session)):
     return {"ok": True}
 
 @router.post("/rename")
-async def rename(body: RenameRequest, session=Depends(get_current_session)):
+def rename(body: RenameRequest, session=Depends(get_current_session)):
     eu = session["effective_user"]
     src = safe_path(body.path)
     dst = safe_path(os.path.join(os.path.dirname(body.path), body.new_name))
@@ -323,7 +341,7 @@ class DeleteRequest(BaseModel):
 
 
 @router.delete("/delete")
-async def delete(body: DeleteRequest, session=Depends(get_current_session)):
+def delete(body: DeleteRequest, session=Depends(get_current_session)):
     eu = session["effective_user"]
     real = safe_path(body.path)
     r = run_as(eu, ["rm", "-rf", real])
@@ -337,7 +355,7 @@ class MkdirRequest(BaseModel):
 
 
 @router.post("/mkdir")
-async def mkdir(body: MkdirRequest, session=Depends(get_current_session)):
+def mkdir(body: MkdirRequest, session=Depends(get_current_session)):
     eu = session["effective_user"]
     real = safe_path(body.path)
     r = run_as(eu, ["mkdir", "-p", real])
@@ -352,7 +370,7 @@ class ChmodRequest(BaseModel):
 
 
 @router.post("/chmod")
-async def chmod(body: ChmodRequest, session=Depends(get_current_session)):
+def chmod(body: ChmodRequest, session=Depends(get_current_session)):
     eu = session["effective_user"]
     if eu != "root":
         raise HTTPException(status_code=403, detail="Permission denied")
@@ -374,7 +392,7 @@ class WriteRequest(BaseModel):
     content: str
 
 @router.post("/write")
-async def write_file(body: WriteRequest, session=Depends(get_current_session)):
+def write_file(body: WriteRequest, session=Depends(get_current_session)):
     eu = session["effective_user"]
     real = safe_path(body.path)
     if run_as(eu, ["test", "-d", real]).returncode == 0:
@@ -385,7 +403,7 @@ async def write_file(body: WriteRequest, session=Depends(get_current_session)):
     return {"ok": True}
 
 @router.get("/search")
-async def search_files(path: str, q: str, session=Depends(get_current_session)):
+def search_files(path: str, q: str, session=Depends(get_current_session)):
     eu = session["effective_user"]
     real = safe_path(path, home_for(eu))
     if run_as(eu, ["test", "-d", real]).returncode != 0:
@@ -416,7 +434,7 @@ async def search_files(path: str, q: str, session=Depends(get_current_session)):
     return JSONResponse({"results": results})
 
 @router.get("/dirsize")
-async def dir_size(path: str, session=Depends(get_current_session)):
+def dir_size(path: str, session=Depends(get_current_session)):
     eu = session["effective_user"]
     real = safe_path(path, home_for(eu))
     if run_as(eu, ["test", "-d", real]).returncode != 0:
@@ -429,7 +447,7 @@ async def dir_size(path: str, session=Depends(get_current_session)):
     return {"size": total}
 
 @router.get("/raw")
-async def raw_file(path: str, session=Depends(get_current_session)):
+def raw_file(path: str, session=Depends(get_current_session)):
     import mimetypes
     eu = session["effective_user"]
     real = safe_path(path, home_for(eu))
@@ -483,7 +501,7 @@ class DownloadZipRequest(BaseModel):
 
 @router.post("/download-zip")
 @router.post("/download-zip/")
-async def download_zip(body: DownloadZipRequest, session=Depends(get_current_session)):
+def download_zip(body: DownloadZipRequest, session=Depends(get_current_session)):
     import io, zipfile, mimetypes
     eu = session["effective_user"]
     home = home_for(eu)
@@ -574,7 +592,7 @@ class TrashMoveRequest(BaseModel):
     paths: list[str]
 
 @router.post("/trash/move")
-async def trash_move(body: TrashMoveRequest, session=Depends(get_current_session)):
+def trash_move(body: TrashMoveRequest, session=Depends(get_current_session)):
     import json as _json
     from datetime import datetime
     eu = session["effective_user"]
@@ -613,7 +631,7 @@ async def trash_move(body: TrashMoveRequest, session=Depends(get_current_session
 
 
 @router.get("/trash/list")
-async def trash_list(session=Depends(get_current_session)):
+def trash_list(session=Depends(get_current_session)):
     import json as _json
     eu = session["effective_user"]
     trash_files = os.path.join(_trash_dir(eu), "files")
@@ -648,7 +666,7 @@ class TrashRestoreRequest(BaseModel):
     names: list[str]
 
 @router.post("/trash/restore")
-async def trash_restore(body: TrashRestoreRequest, session=Depends(get_current_session)):
+def trash_restore(body: TrashRestoreRequest, session=Depends(get_current_session)):
     import json as _json
     eu = session["effective_user"]
     trash_files = os.path.join(_trash_dir(eu), "files")
@@ -673,7 +691,7 @@ async def trash_restore(body: TrashRestoreRequest, session=Depends(get_current_s
 
 
 @router.delete("/trash/empty")
-async def trash_empty(session=Depends(get_current_session)):
+def trash_empty(session=Depends(get_current_session)):
     eu = session["effective_user"]
     trash_files = os.path.join(_trash_dir(eu), "files")
     trash_info  = os.path.join(_trash_dir(eu), "info")
@@ -692,16 +710,34 @@ async def desktop_watch(session=Depends(get_current_session)):
     mkdir_as(desktop_dir, username)
 
     def _snapshot():
-        r = run_as(username, ["ls", "-1", desktop_dir])
-        files = [f for f in r.stdout.splitlines() if f and not f.startswith('.')]
-        return {f: stat_mtime_as(os.path.join(desktop_dir, f), username) for f in files}
+        # One runuser call for the whole directory. It used to be `ls` plus a
+        # separate `stat` per entry, so a desktop with ten icons forked eleven
+        # PAM sessions — every two seconds, for as long as the desktop stayed
+        # open, per connected desktop. find gives name and mtime together, and
+        # the tab keeps names with spaces intact.
+        r = run_as(username, ["find", desktop_dir, "-maxdepth", "1", "-mindepth", "1",
+                              "-printf", "%f\t%T@\n"])
+        snap = {}
+        for line in r.stdout.splitlines():
+            name, _, mtime = line.partition("\t")
+            if not name or name.startswith('.'):
+                continue
+            try:
+                snap[name] = float(mtime)
+            except ValueError:
+                snap[name] = 0.0
+        return snap
 
     async def generate():
-        last = _snapshot()
+        # to_thread, because this is an async generator: anything synchronous
+        # here runs on the event loop and stalls every other request while it
+        # forks. This one repeats forever, so on the loop it was a permanent
+        # tax that grew with each open desktop.
+        last = await asyncio.to_thread(_snapshot)
         yield "data: ok\n\n"
         while True:
             await asyncio.sleep(2)
-            current = _snapshot()
+            current = await asyncio.to_thread(_snapshot)
             if current != last:
                 last = current
                 yield "data: changed\n\n"
@@ -710,7 +746,7 @@ async def desktop_watch(session=Depends(get_current_session)):
                              headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 @router.get("/desktop/list")
-async def desktop_files(session=Depends(get_current_session)):
+def desktop_files(session=Depends(get_current_session)):
     username = session["effective_user"]
     desktop_dir = os.path.join(home_for(username), "Desktop")
     mkdir_as(desktop_dir, username)
@@ -750,7 +786,7 @@ class NewAppRequest(BaseModel):
     label: str = ""
 
 @router.post("/desktop/app")
-async def desktop_new_app(body: NewAppRequest, session=Depends(get_current_session)):
+def desktop_new_app(body: NewAppRequest, session=Depends(get_current_session)):
     username = session["effective_user"]
     desktop_dir = os.path.join(home_for(username), "Desktop")
     mkdir_as(desktop_dir, username)
@@ -767,7 +803,7 @@ class NewFolderRequest(BaseModel):
     name: str
 
 @router.post("/desktop/link")
-async def desktop_new_link(body: NewLinkRequest, session=Depends(get_current_session)):
+def desktop_new_link(body: NewLinkRequest, session=Depends(get_current_session)):
     username = session["effective_user"]
     desktop_dir = os.path.join(home_for(username), "Desktop")
     mkdir_as(desktop_dir, username)
@@ -779,14 +815,14 @@ async def desktop_new_link(body: NewLinkRequest, session=Depends(get_current_ses
     return JSONResponse({"ok": True, "name": filename})
 
 @router.post("/desktop/folder")
-async def desktop_new_folder(body: NewFolderRequest, session=Depends(get_current_session)):
+def desktop_new_folder(body: NewFolderRequest, session=Depends(get_current_session)):
     username = session["effective_user"]
     desktop_dir = os.path.join(home_for(username), "Desktop")
     mkdir_as(os.path.join(desktop_dir, body.name), username)
     return JSONResponse({"ok": True})
 
 @router.delete("/desktop/entry")
-async def desktop_delete_entry(path: str, session=Depends(get_current_session)):
+def desktop_delete_entry(path: str, session=Depends(get_current_session)):
     username = session["effective_user"]
     real = safe_path(path)
     desktop_dir = safe_path(os.path.join(home_for(username), "Desktop"))
@@ -798,7 +834,7 @@ async def desktop_delete_entry(path: str, session=Depends(get_current_session)):
     return JSONResponse({"ok": True})
 
 @router.post("/chown")
-async def chown(body: ChownRequest, session=Depends(get_current_session)):
+def chown(body: ChownRequest, session=Depends(get_current_session)):
     eu = session["effective_user"]
     real = safe_path(body.path)
     spec = body.owner + ((":" + body.group) if body.group else "")
@@ -813,7 +849,7 @@ class CompressRequest(BaseModel):
     dest: str
 
 @router.post("/compress")
-async def compress_to_zip(body: CompressRequest, session=Depends(get_current_session)):
+def compress_to_zip(body: CompressRequest, session=Depends(get_current_session)):
     import zipfile, tempfile, io as _io
     eu = session["effective_user"]
     dest = safe_path(body.dest)
@@ -849,7 +885,7 @@ class ExtractRequest(BaseModel):
     path: str
 
 @router.post("/extract")
-async def extract_archive(body: ExtractRequest, session=Depends(get_current_session)):
+def extract_archive(body: ExtractRequest, session=Depends(get_current_session)):
     import zipfile, tarfile, tempfile, io as _io
     eu = session["effective_user"]
     real = safe_path(body.path)

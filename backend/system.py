@@ -9,6 +9,37 @@ from .auth import get_current_session, require_root_session
 router = APIRouter(prefix="/api/system", tags=["system"])
 
 
+# ── Shared snapshot cache ─────────────────────────────────────────────────────
+# The desktop polls /hardware and /resources every few seconds, and every open
+# desktop polls independently — so N desktops meant N sets of df/free/hostname
+# forks per interval, all of them reading the same machine. A snapshot is held
+# for a moment and shared, which collapses simultaneous pollers onto one read
+# without any of them seeing data older than its own poll interval. The lock
+# matters as much as the TTL: without it, N callers arriving together on a cold
+# entry each run the work before the first one can store it.
+_SNAP_TTL = 2.0
+_snap_cache: dict = {}
+_snap_locks: dict = {}
+
+
+def _snapshot(key: str, build):
+    """Run build() at most once per _SNAP_TTL seconds across all callers."""
+    import threading, time as _time
+
+    lock = _snap_locks.setdefault(key, threading.Lock())
+    hit = _snap_cache.get(key)
+    if hit and _time.monotonic() - hit[0] < _SNAP_TTL:
+        return hit[1]
+    with lock:
+        # Re-check: another caller may have filled it while we waited.
+        hit = _snap_cache.get(key)
+        if hit and _time.monotonic() - hit[0] < _SNAP_TTL:
+            return hit[1]
+        value = build()
+        _snap_cache[key] = (_time.monotonic(), value)
+        return value
+
+
 def _as_user(user: str, cmd: list) -> list:
     """Wrap a command so it runs as `user` (the session's effective_user).
 
@@ -39,7 +70,7 @@ def _git(args):
 
 
 @router.get("/info")
-async def system_info(session=Depends(get_current_session)):
+def system_info(session=Depends(get_current_session)):
     version = _local_version()
 
     # git info
@@ -224,8 +255,7 @@ async def power_stop(bg: BackgroundTasks, session=Depends(require_root_session))
 
 # ── System hardware info ──────────────────────────────────────────────────────
 
-@router.get("/hardware")
-async def get_hardware(session=Depends(get_current_session)):
+def _hardware_snapshot():
     import re, time
 
     def read_file(path, fallback=""):
@@ -330,7 +360,7 @@ async def get_hardware(session=Depends(get_current_session)):
             os_pretty = line.split("=", 1)[1].strip().strip('"')
             break
 
-    return JSONResponse({
+    return {
         "cpu_model": cpu_model,
         "cpu_cores": cpu_cores,
         "cpu_freq_mhz": cpu_freq_avg,
@@ -347,15 +377,23 @@ async def get_hardware(session=Depends(get_current_session)):
         "disks": disks,
         "network": net_devs,
         "temps": temps,
-    })
+    }
+
+
+# Plain `def`, so FastAPI runs it in its worker threadpool instead of on the
+# event loop. The body forks df/hostname/uname, and a fork on a busy box takes
+# long enough that doing it on the loop stalled every other request in flight —
+# public Apps Hub pages included, which is what made them feel seconds slow.
+@router.get("/hardware")
+def get_hardware(session=Depends(get_current_session)):
+    return JSONResponse(_snapshot("hardware", _hardware_snapshot))
 
 
 # ── Process & resource monitoring ─────────────────────────────────────────────
 
-@router.get("/resources")
-async def get_resources(session=Depends(get_current_session)):
+def _resources_snapshot():
     # CPU — read /proc/stat twice with 200ms interval for accurate usage
-    import re
+    import re, time
     def _read_cpu_stat():
         with open('/proc/stat') as f:
             line = f.readline()
@@ -364,7 +402,7 @@ async def get_resources(session=Depends(get_current_session)):
         total = sum(vals)
         return idle, total
     idle1, total1 = _read_cpu_stat()
-    await asyncio.sleep(0.2)
+    time.sleep(0.2)
     idle2, total2 = _read_cpu_stat()
     diff_total = total2 - total1
     diff_idle  = idle2  - idle1
@@ -389,17 +427,25 @@ async def get_resources(session=Depends(get_current_session)):
         disk_total = int(parts[1])
         disk_used  = int(parts[2])
 
-    return JSONResponse({
+    return {
         "cpu_pct":    cpu_pct,
         "mem_total":  mem_total,
         "mem_used":   mem_used,
         "disk_total": disk_total,
         "disk_used":  disk_used,
-    })
+    }
+
+
+# The 200ms CPU sampling window used to be an `await asyncio.sleep` on the loop
+# with the free/df forks around it blocking outright. In the threadpool the
+# whole sampling window costs one worker thread and nothing else waits on it.
+@router.get("/resources")
+def get_resources(session=Depends(get_current_session)):
+    return JSONResponse(_snapshot("resources", _resources_snapshot))
 
 
 @router.get("/processes")
-async def get_processes(session=Depends(get_current_session)):
+def get_processes(session=Depends(get_current_session)):
     r = subprocess.run(
         ["ps", "aux", "--sort=-%cpu"],
         capture_output=True, text=True
@@ -433,7 +479,7 @@ class KillRequest(_BM2):
     sudo_password: str = ""
 
 @router.post("/processes/kill")
-async def kill_process(body: KillRequest, session=Depends(get_current_session)):
+def kill_process(body: KillRequest, session=Depends(get_current_session)):
     if body.signal not in ("TERM", "KILL", "HUP", "INT", "STOP", "CONT"):
         return JSONResponse({"error": "Invalid signal"}, status_code=400)
     if body.pid <= 1:
@@ -502,18 +548,45 @@ def _service_enabled(name: str) -> bool:
 
 
 @router.get("/services")
-async def list_services(session=Depends(get_current_session)):
-    result = []
-    for svc in KNOWN_SERVICES:
-        if not _service_exists(svc["name"]):
-            continue  # not installed
-        status = _service_status(svc["name"])
-        result.append({
-            **svc,
-            "status": status,
-            "enabled": _service_enabled(svc["name"]),
-        })
-    return JSONResponse(result)
+def list_services(session=Depends(get_current_session)):
+    # systemctl takes as many units as you give it and answers for all of them
+    # in one go. Asked one service at a time, this listing forked up to three
+    # processes for each of the twenty known services — around fifty forks for a
+    # single page, which is where its two seconds came from. Three calls now.
+    names = [svc["name"] for svc in KNOWN_SERVICES]
+
+    r = subprocess.run(["systemctl", "list-unit-files", "--no-pager"] +
+                       [f"{n}.service" for n in names],
+                       capture_output=True, text=True)
+    installed = set()
+    for line in r.stdout.splitlines():
+        unit = line.split()[0] if line.split() else ""
+        if unit.endswith(".service") and unit[:-len(".service")] in names:
+            installed.add(unit[:-len(".service")])
+
+    present = [n for n in names if n in installed]
+    if not present:
+        return JSONResponse([])
+
+    def _batch(verb):
+        """One systemctl call for every unit; falls back per-unit if the reply
+        doesn't line up, so an unexpected systemctl is never worse than before."""
+        out = subprocess.run(["systemctl", verb] + present,
+                             capture_output=True, text=True).stdout.split()
+        if len(out) == len(present):
+            return dict(zip(present, out))
+        return {n: subprocess.run(["systemctl", verb, n],
+                                  capture_output=True, text=True).stdout.strip()
+                for n in present}
+
+    active = _batch("is-active")
+    enabled = _batch("is-enabled")
+
+    return JSONResponse([
+        {**svc, "status": active.get(svc["name"], ""),
+         "enabled": enabled.get(svc["name"]) == "enabled"}
+        for svc in KNOWN_SERVICES if svc["name"] in installed
+    ])
 
 
 class ServiceAction(BaseModel if False else object):
@@ -529,7 +602,7 @@ class ServiceRequest(_BM):
 
 
 @router.post("/services/action")
-async def service_action(body: ServiceRequest, session=Depends(get_current_session)):
+def service_action(body: ServiceRequest, session=Depends(get_current_session)):
     if body.action not in ("start", "stop", "restart", "enable", "disable"):
         return JSONResponse({"error": "Invalid action"}, status_code=400)
 
@@ -645,7 +718,7 @@ class PhpIniSaveRequest(BaseModel):
     sudo_password: str = ""
 
 @router.post("/php-ini")
-async def save_php_ini(body: PhpIniSaveRequest, session=Depends(get_current_session)):
+def save_php_ini(body: PhpIniSaveRequest, session=Depends(get_current_session)):
     path = _find_php_ini()
     if not path:
         raise HTTPException(status_code=404, detail="php.ini not found")
@@ -746,7 +819,7 @@ class MysqlCnfSaveRequest(BaseModel):
     sudo_password: str = ""
 
 @router.post("/mysql-cnf")
-async def save_mysql_cnf(body: MysqlCnfSaveRequest, session=Depends(get_current_session)):
+def save_mysql_cnf(body: MysqlCnfSaveRequest, session=Depends(get_current_session)):
     path = _find_mysql_cnf()
     if not path:
         raise HTTPException(status_code=404, detail="MySQL config not found")
@@ -826,7 +899,7 @@ class NginxConfSaveRequest(BaseModel):
     sudo_password: str = ""
 
 @router.post("/nginx-conf")
-async def save_nginx_conf(body: NginxConfSaveRequest, session=Depends(get_current_session)):
+def save_nginx_conf(body: NginxConfSaveRequest, session=Depends(get_current_session)):
     if not os.path.exists(NGINX_CONF_PATH):
         raise HTTPException(status_code=404, detail="nginx.conf not found")
     for key, value in body.values.items():
@@ -839,7 +912,7 @@ async def save_nginx_conf(body: NginxConfSaveRequest, session=Depends(get_curren
 
 
 @router.post("/nginx-test")
-async def nginx_test(session=Depends(get_current_session)):
+def nginx_test(session=Depends(get_current_session)):
     proc = subprocess.run(["sudo", "nginx", "-t"], capture_output=True, text=True)
     ok = proc.returncode == 0
     output = (proc.stderr or proc.stdout).strip()
@@ -911,7 +984,7 @@ class SshdConfSaveRequest(BaseModel):
     values: dict
 
 @router.post("/sshd-conf")
-async def save_sshd_conf(body: SshdConfSaveRequest, session=Depends(get_current_session)):
+def save_sshd_conf(body: SshdConfSaveRequest, session=Depends(get_current_session)):
     if not os.path.exists(SSH_CONF_PATH):
         raise HTTPException(status_code=404, detail="sshd_config not found")
     for key, value in body.values.items():
@@ -924,7 +997,7 @@ async def save_sshd_conf(body: SshdConfSaveRequest, session=Depends(get_current_
 
 
 @router.post("/sshd-test")
-async def sshd_test(session=Depends(get_current_session)):
+def sshd_test(session=Depends(get_current_session)):
     proc = subprocess.run(["sudo", "sshd", "-t"], capture_output=True, text=True)
     ok = proc.returncode == 0
     output = (proc.stderr or proc.stdout).strip()
@@ -934,7 +1007,7 @@ async def sshd_test(session=Depends(get_current_session)):
 # ── UFW ──────────────────────────────────────────────────────────────────────
 
 @router.get("/ufw-status")
-async def ufw_status(session=Depends(get_current_session)):
+def ufw_status(session=Depends(get_current_session)):
     import re
     proc = subprocess.run(["sudo", "ufw", "status", "numbered"], capture_output=True, text=True)
     output = proc.stdout.strip()
@@ -956,7 +1029,7 @@ async def ufw_status(session=Depends(get_current_session)):
 
 
 @router.post("/ufw-toggle")
-async def ufw_toggle(session=Depends(get_current_session)):
+def ufw_toggle(session=Depends(get_current_session)):
     proc = subprocess.run(["sudo", "ufw", "status"], capture_output=True, text=True)
     enabled = "Status: active" in proc.stdout
     cmd = ["sudo", "ufw", "disable"] if enabled else ["sudo", "ufw", "--force", "enable"]
@@ -970,7 +1043,7 @@ class UfwRuleRequest(BaseModel):
     rule: str  # e.g. "22/tcp", "80", "from 192.168.1.0/24 to any port 22"
 
 @router.post("/ufw-allow")
-async def ufw_allow(body: UfwRuleRequest, session=Depends(get_current_session)):
+def ufw_allow(body: UfwRuleRequest, session=Depends(get_current_session)):
     r = subprocess.run(["sudo", "ufw", "allow"] + body.rule.split(), capture_output=True, text=True)
     if r.returncode != 0:
         return JSONResponse({"error": r.stderr.strip() or r.stdout.strip()}, status_code=500)
@@ -982,7 +1055,7 @@ class UfwDeleteRequest(BaseModel):
     rule: str = ""  # used when UFW is inactive
 
 @router.post("/ufw-delete")
-async def ufw_delete(body: UfwDeleteRequest, session=Depends(get_current_session)):
+def ufw_delete(body: UfwDeleteRequest, session=Depends(get_current_session)):
     proc = subprocess.run(["sudo", "ufw", "status"], capture_output=True, text=True)
     enabled = "Status: active" in proc.stdout
     if enabled and body.num:

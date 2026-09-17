@@ -1848,7 +1848,10 @@ const AppStore = (() => {
     }
   }
 
-  return { openWindow };
+  // render() is exported because the setup wizard hosts the store inside its
+  // own step rather than in a Desktop window. It takes any element, so the
+  // wizard gets the real store instead of a second implementation of it.
+  return { openWindow, render };
 })();
 
 // ── WidgetStore alias (for desktop/taskbar context menus) ─────────────────────

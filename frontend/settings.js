@@ -110,15 +110,20 @@ const Settings = (() => {
     document.documentElement.style.fontSize = TEXT_SCALES[tIdx];
   }
 
+  // Callers pass only the keys they own, so the in-memory copy is merged for the
+  // same reason the server merges: replacing it wholesale left every tab that had
+  // not been opened yet reading defaults, and the next save then wrote those
+  // defaults back over the real values.
   async function saveSettings(data) {
+    const merged = { ...currentSettings, ...data };
     await fetch('/api/settings', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ settings: data }),
     });
-    currentSettings = data;
+    currentSettings = merged;
     // notify other modules
-    window.dispatchEvent(new CustomEvent('settings-changed', { detail: data }));
+    window.dispatchEvent(new CustomEvent('settings-changed', { detail: merged }));
   }
 
   const FM_PREFS_KEY = 'mvmos_fm_prefs';
@@ -226,7 +231,7 @@ const Settings = (() => {
           <div class="settings-tab ${activeTab==='users'?'active':''}" data-tab="users">${t('settings_users')}</div>
           <div class="settings-tab ${activeTab==='updates'?'active':''}" data-tab="updates">${t('settings_updates')}</div>
           <div class="settings-tab ${activeTab==='startmenu'?'active':''}" data-tab="startmenu">${t('settings_startmenu')}</div>
-          <div class="settings-tab ${activeTab==='system'?'active':''}" data-tab="system">${t('settings_system')}</div>
+          <div class="settings-tab ${activeTab==='system'?'active':''}" data-tab="system">${t('settings_system')}<span class="settings-tab-dot" id="s-system-dot" hidden></span></div>
           <div class="settings-tab ${activeTab==='sshaccess'?'active':''}" data-tab="sshaccess">🔐 ${t('settings_ssh_access')}</div>
           <div class="settings-tab ${activeTab==='backup'?'active':''}" data-tab="backup">${t('settings_backup')}</div>
           <div class="settings-tab ${activeTab==='about'?'active':''}" data-tab="about" style="margin-top:auto">${t('settings_about')}</div>
@@ -444,11 +449,11 @@ const Settings = (() => {
                 <div class="settings-radio-group">
                   <label class="radio-opt">
                     <input type="radio" name="time_format" value="24" ${s.time_format !== '12' ? 'checked' : ''}>
-                    <span>24-hour &nbsp;<span class="preview-time" id="prev-24"></span></span>
+                    <span>${t('regional_24h')} &nbsp;<span class="preview-time" id="prev-24"></span></span>
                   </label>
                   <label class="radio-opt">
                     <input type="radio" name="time_format" value="12" ${s.time_format === '12' ? 'checked' : ''}>
-                    <span>12-hour &nbsp;<span class="preview-time" id="prev-12"></span></span>
+                    <span>${t('regional_12h')} &nbsp;<span class="preview-time" id="prev-12"></span></span>
                   </label>
                 </div>
               </div>
@@ -487,7 +492,7 @@ const Settings = (() => {
             </div>
 
             <div class="settings-section">
-              <div class="settings-section-title">🌐 Language &amp; Region</div>
+              <div class="settings-section-title">${t('regional_title')}</div>
 
               <div class="settings-row">
                 <label>${t('regional_language')}</label>
@@ -565,6 +570,26 @@ const Settings = (() => {
                   <div style="font-size:.8rem;color:var(--text-dim);margin-top:2px">${t('system_error_reports_desc')}</div>
                 </div>
                 <label class="toggle"><input type="checkbox" id="s-error-reporting"><span class="toggle-slider"></span></label>
+              </div>
+              <div class="settings-row">
+                <div>
+                  <div style="font-weight:500">${t('system_analytics')}</div>
+                  <div style="font-size:.8rem;color:var(--text-dim);margin-top:2px">${t('system_analytics_desc')}</div>
+                </div>
+                <label class="toggle"><input type="checkbox" id="s-analytics"><span class="toggle-slider"></span></label>
+              </div>
+              <div style="font-size:.78rem;color:var(--text-dim);line-height:1.5;margin-top:4px">${t('system_analytics_detail')}</div>
+              <div style="font-size:.78rem;color:var(--text);line-height:1.5;margin-top:8px">${t('system_analytics_never')}</div>
+              <div style="font-size:.78rem;color:var(--text-dim);line-height:1.5;margin-top:8px">${t('system_analytics_purpose')}</div>
+            </div>
+            <div class="settings-section">
+              <div class="settings-section-title">${t('wiz_settings_title')}</div>
+              <div class="settings-row">
+                <div>
+                  <div style="font-weight:500">${t('wiz_settings_run')}<span class="settings-tab-dot" id="s-wizard-dot" hidden></span></div>
+                  <div style="font-size:.8rem;color:var(--text-dim);margin-top:2px" id="s-wizard-desc">${t('wiz_settings_desc')}</div>
+                </div>
+                <button class="s-btn" id="s-wizard-open">${t('wiz_settings_btn')}</button>
               </div>
             </div>
           </div>
@@ -2534,6 +2559,11 @@ const Settings = (() => {
   function renderSystem(body) {
     const panel = body.querySelector('#sp-system');
     if (!panel) return;
+    // The panel is built once and only shown and hidden again, so re-entering
+    // the tab must not bind a second copy of every listener onto the same
+    // elements — repaint the dots and stop.
+    if (panel.dataset.wired === '1') { _paintWizardDots(body); return; }
+    panel.dataset.wired = '1';
     const cb = panel.querySelector('#s-error-reporting');
     if (!cb) return;
     cb.checked = currentSettings.error_reporting !== false;
@@ -2541,7 +2571,44 @@ const Settings = (() => {
       saveSettings({ error_reporting: cb.checked });
       window.dispatchEvent(new CustomEvent('error-reporting-changed', { detail: cb.checked }));
     });
+
+    // Anonymous statistics are opt-in: anything other than an explicit true is off.
+    const stats = panel.querySelector('#s-analytics');
+    if (stats) {
+      stats.checked = currentSettings.analytics === true;
+      stats.addEventListener('change', () => saveSettings({ analytics: stats.checked }));
+    }
+
+    const openWiz = panel.querySelector('#s-wizard-open');
+    if (openWiz) {
+      openWiz.addEventListener('click', async () => {
+        // Re-running it is a fresh pass over every step, so the state goes back
+        // to unfinished first and only the wizard itself can clear it again.
+        await window.Wizard?.reset();
+        window.Wizard?.open();
+      });
+    }
+    _paintWizardDots(body);
+    const onWizard = () => {
+      // The settings window can be closed while the wizard is still open, so the
+      // listener retires itself once its panel is no longer on the page.
+      if (!body.isConnected) return window.removeEventListener('wizard-changed', onWizard);
+      _paintWizardDots(body);
+    };
+    window.addEventListener('wizard-changed', onWizard);
   }
 
-  return { openWindow, get, initDisplay, loadFMPrefs, loadStartMenuPrefs, defaultStartMenuPrefs, initScreenSaver, initWallpaper, applyStartMenuOpacity: _applyStartMenuOpacity };
+  // One blue dot on the System tab and one beside the wizard row, both driven by
+  // the same "has the wizard got something unseen" flag the backend reports.
+  function _paintWizardDots(body) {
+    const pending = !!window.Wizard?.isPending?.();
+    const tabDot = body.querySelector('#s-system-dot');
+    if (tabDot) tabDot.hidden = !pending;
+    const rowDot = body.querySelector('#s-wizard-dot');
+    if (rowDot) rowDot.hidden = !pending;
+    const desc = body.querySelector('#s-wizard-desc');
+    if (desc) desc.textContent = pending ? t('wiz_settings_pending') : t('wiz_settings_desc');
+  }
+
+  return { openWindow, get, initDisplay, loadFMPrefs, loadStartMenuPrefs, defaultStartMenuPrefs, initScreenSaver, initWallpaper, applyStartMenuOpacity: _applyStartMenuOpacity, LANGUAGES, CURRENCIES, TIMEZONES };
 })();

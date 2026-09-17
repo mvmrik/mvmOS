@@ -309,7 +309,7 @@ async def install_widget(body: InstallRequest, session=Depends(get_current_sessi
 # ── Uninstall ─────────────────────────────────────────────────────────────────
 
 @router.delete("/{widget_id}")
-async def uninstall_widget(widget_id: str, session=Depends(get_current_session)):
+def uninstall_widget(widget_id: str, session=Depends(get_current_session)):
     wdir = _widget_dir(widget_id)
     if os.path.isdir(wdir):
         shutil.rmtree(wdir)
