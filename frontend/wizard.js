@@ -150,10 +150,15 @@ const Wizard = (() => {
 
     const next = _overlay.querySelector('#wiz-next');
     // "Finish" appears on the last step, but stays disabled until every step
-    // has been opened — that is what marks the wizard as read.
+    // has been opened — that is what marks the wizard as read. The privacy
+    // step holds it too, until the statistics question has an answer: a
+    // default nobody chose is not an answer, so the wizard asks for one
+    // instead of assuming.
+    const undecided = step.id === 'privacy' && _settings.analytics === undefined;
     next.textContent = last ? t('wiz_finish') : t('wiz_next');
-    next.disabled = last && !allSeen();
-    next.title = next.disabled ? t('wiz_finish_blocked') : '';
+    next.disabled = undecided || (last && !allSeen());
+    next.title = undecided ? t('wiz_privacy_blocked')
+      : next.disabled ? t('wiz_finish_blocked') : '';
 
     _overlay.querySelector('#wiz-skip').textContent = t('wiz_later');
 
@@ -262,6 +267,7 @@ const Wizard = (() => {
     },
 
     privacy(body, step) {
+      const chosen = _settings.analytics;   // true, false, or never answered
       body.innerHTML = `
         <p class="wiz-lead">${t('wiz_step_privacy_lead')}</p>
         <div class="wiz-check">
@@ -271,8 +277,7 @@ const Wizard = (() => {
             <div class="wiz-check-desc">${t('system_error_reports_desc')}</div>
           </div>
         </div>
-        <div class="wiz-check">
-          <label class="toggle"><input type="checkbox" id="wiz-analytics"><span class="toggle-slider"></span></label>
+        <div class="wiz-check" style="padding-bottom:0">
           <div>
             <div class="wiz-check-title">${t('system_analytics')} ${badge(step)}</div>
             <div class="wiz-check-desc">${t('system_analytics_desc')}</div>
@@ -280,16 +285,31 @@ const Wizard = (() => {
         </div>
         <p class="wiz-note">${t('system_analytics_detail')}</p>
         <p class="wiz-note wiz-note-strong">${t('system_analytics_never')}</p>
-        <p class="wiz-note">${t('system_analytics_purpose')}</p>`;
+        <p class="wiz-note">${t('system_analytics_purpose')}</p>
+        <div class="wiz-choice">
+          <button type="button" class="wiz-choice-btn${chosen === true ? ' picked' : ''}" id="wiz-stats-yes">
+            <span class="wiz-choice-label">${t('wiz_analytics_yes')}</span>
+            <span class="wiz-choice-rec">${t('wiz_analytics_recommended')}</span>
+          </button>
+          <button type="button" class="wiz-choice-btn${chosen === false ? ' picked' : ''}" id="wiz-stats-no">
+            <span class="wiz-choice-label">${t('wiz_analytics_no')}</span>
+          </button>
+        </div>`;
       const errors = body.querySelector('#wiz-errors');
       errors.checked = _settings.error_reporting !== false;
       errors.addEventListener('change', () => {
         saveSetting({ error_reporting: errors.checked });
         window.dispatchEvent(new CustomEvent('error-reporting-changed', { detail: errors.checked }));
       });
-      const stats = body.querySelector('#wiz-analytics');
-      stats.checked = _settings.analytics === true;
-      stats.addEventListener('change', () => saveSetting({ analytics: stats.checked }));
+      // Two buttons rather than a switch, and one of them has to be pressed.
+      // A pre-ticked box would have collected far more yeses and none of them
+      // would have been worth anything: a default nobody touched is not a
+      // choice, and the privacy notice promises this is off until somebody
+      // turns it on. Recommending one side is honest — assuming it is not.
+      // Skipping the wizard on this step answers nothing and leaves it off.
+      const pick = async (value) => { await saveSetting({ analytics: value }); paint(); };
+      body.querySelector('#wiz-stats-yes').onclick = () => pick(true);
+      body.querySelector('#wiz-stats-no').onclick = () => pick(false);
     },
 
     apps(body) {

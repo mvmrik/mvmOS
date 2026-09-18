@@ -11,9 +11,9 @@ Core settings control the behaviour and appearance of the installation. Server-f
 
 ## Setup and privacy
 
-The Setup Wizard appears automatically on a new installation and is always available again from the System section of Settings. It keeps regional choices, optional error reports, app discovery, and Premium information in one guided pass. When an update adds a new wizard screen, Settings marks it for review without interrupting an active desktop session.
+The Setup Wizard appears automatically on a new installation and is always available again from the System section of Settings. It keeps regional choices, optional error reports, the anonymous statistics question, app discovery, and Premium information in one guided pass. When an update adds a new wizard screen, Settings marks it for review without interrupting an active desktop session.
 
-Anonymous usage statistics are optional and disabled by default. If enabled, mvmOS sends only the installation id, mvmOS version, interface language, licence state, installed-app count, and Python and operating-system versions. It does not send hostnames, addresses, user data, app names, licence keys, files, or database contents. Turning the option off stops reports immediately.
+Anonymous usage statistics are optional and disabled until someone switches them on. The privacy step of the Setup Wizard asks the question directly, with a recommended answer but no preselected one, and the wizard waits for a choice instead of assuming one; the same option stays available in the System section of Settings. If enabled, mvmOS sends only five values: a random identifier created for these reports and used for nothing else, the mvmOS version, the interface language, the Linux distribution, and the processor architecture. It does not send hostnames, addresses, user data, app names, licence keys, licence state, files, or database contents. Turning the option off stops reports immediately.
 
 ## Change safely
 

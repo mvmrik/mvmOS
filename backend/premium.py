@@ -191,16 +191,24 @@ async def heartbeat_loop() -> None:
                 await _refresh(state)
                 _save(state)
                 # A licensed installation that has no core premium build on disk
-                # is one that was just updated or restored; fetch it here so the
-                # feature comes back on its own instead of waiting for someone to
-                # re-enter the key.
+                # is one that was just restored; fetch it here so the feature
+                # comes back on its own instead of waiting for someone to
+                # re-enter the key. After a core update (see
+                # request_core_premium_refresh) every build is fetched again.
                 if state.get("status") == "premium":
+                    refresh = bool(state.get("core_premium_refresh"))
+                    fetched = True
                     for name in CORE_PREMIUM_MODULES:
-                        if not os.path.isdir(_core_premium_dir(name)):
+                        if refresh or not os.path.isdir(_core_premium_dir(name)):
                             try:
                                 await download_core_premium(name)
                             except (PermissionError, RuntimeError):
-                                pass
+                                fetched = False
+                    # Cleared only once every module arrived, so a network blip
+                    # right after the update is retried on the next wake-up.
+                    if refresh and fetched:
+                        state["core_premium_refresh"] = False
+                        _save(state)
                 else:
                     # A key that no longer checks out as premium (expired,
                     # revoked, regenerated elsewhere...) must not leave last
@@ -216,9 +224,7 @@ async def heartbeat_loop() -> None:
             # slow or unreachable site never holds up the event loop.
             if analytics.enabled():
                 try:
-                    await asyncio.to_thread(
-                        analytics.send, _device_id(state), state.get("status") == "premium"
-                    )
+                    await asyncio.to_thread(analytics.send)
                 except Exception:
                     pass
         except Exception:
@@ -390,6 +396,19 @@ def clear_core_premium(name: str = None) -> None:
         if os.path.isdir(target):
             shutil.rmtree(target)
         _core_modules.pop(mod_name, None)
+
+
+def request_core_premium_refresh() -> None:
+    """Called by the core updater once a new version is in place. The update
+    never touches backend/premium/, so without this the build made for the
+    previous core would stay until the key was entered anew. Tied to the
+    updater rather than to version.txt, so an installation whose version is
+    edited by hand — a development checkout where backend/premium/ is the
+    source of the published build — never has its working copy replaced.
+    """
+    state = _load()
+    state["core_premium_refresh"] = True
+    _save(state)
 
 
 async def sync_core_premium() -> None:

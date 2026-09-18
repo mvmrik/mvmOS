@@ -223,6 +223,15 @@ async def do_update(session=Depends(get_current_session)):
         except Exception:
             pass
 
+        # backend/premium/ is not part of the release, so the core premium
+        # build is still the one made for the previous version. The first
+        # check-in after the restart fetches it again.
+        try:
+            from .premium import request_core_premium_refresh
+            request_core_premium_refresh()
+        except Exception:
+            pass
+
         yield "data: Update applied.\n\n"
         # Schedule before notifying the browser. The browser reloads as soon as
         # it receives __RESTARTING__, which otherwise cancels this generator

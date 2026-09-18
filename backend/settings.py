@@ -41,6 +41,38 @@ DEFAULTS = {
 }
 
 
+def available_languages() -> set:
+    """Whatever core actually ships, read from the language files themselves.
+
+    Not a hardcoded list: a language is available exactly when its table
+    exists, which is the same rule frontend/i18n/i18n.js follows when it falls
+    back to English on a 404 and the same one _public_lang_bootstrap() in
+    main.py resolves 'auto' against.
+    """
+    i18n_dir = os.path.join(os.path.dirname(__file__), "..", "frontend", "i18n")
+    try:
+        return {f[:-3] for f in os.listdir(i18n_dir)
+                if f.endswith(".js") and f != "i18n.js"}
+    except OSError:
+        return {"en"}
+
+
+def resolve_language(value) -> str:
+    """The language that will really be shown, not the one that is stored.
+
+    Dropping an entry from the picker does not drop the value already saved,
+    and the settings blob is merged rather than replaced, so the three
+    untranslated languages removed in 0.41.0-beta (it, tr, ar) stayed in the
+    database of every installation that had picked one. The desktop hid it
+    twice over — the loader 404s on the missing table and falls back to
+    English, and the picker has no matching <option> so the browser shows its
+    first one — while anything reading the value literally, the anonymous
+    statistics among them, went on reporting a language that was never
+    translated. Every reader goes through here instead.
+    """
+    return value if value in available_languages() else DEFAULTS["language"]
+
+
 class SettingsBody(BaseModel):
     settings: dict
 
@@ -52,7 +84,9 @@ async def get_settings(_session=Depends(get_current_session)):
     if not row:
         return JSONResponse(DEFAULTS)
     saved = json.loads(row["value"])
-    return JSONResponse({**DEFAULTS, **saved})
+    merged = {**DEFAULTS, **saved}
+    merged["language"] = resolve_language(merged.get("language"))
+    return JSONResponse(merged)
 
 
 @router.post("")
@@ -73,7 +107,10 @@ async def save_settings(body: SettingsBody, _session=Depends(get_current_session
             saved = {}
         if not isinstance(saved, dict):
             saved = {}
-        saved.update(body.settings or {})
+        incoming = dict(body.settings or {})
+        if "language" in incoming:
+            incoming["language"] = resolve_language(incoming["language"])
+        saved.update(incoming)
         conn.execute(
             "INSERT INTO settings (key, value) VALUES ('main', ?) "
             "ON CONFLICT(key) DO UPDATE SET value = excluded.value",

@@ -17,7 +17,7 @@ Settings collects system-level configuration in one desktop window. Apps that re
 - Backups, SSH access, and local user accounts.
 - System information and Core updates.
 - The Setup Wizard, which can be reopened after first login to review regional, privacy, app, and Premium choices.
-- Optional anonymous usage statistics, disabled by default and configurable from the System section.
+- Optional anonymous usage statistics, off until someone turns them on, asked once by the Setup Wizard and changeable at any time from the System section.
 - The subscription area, reserved for future Premium license management.
 
 ## Change safely
