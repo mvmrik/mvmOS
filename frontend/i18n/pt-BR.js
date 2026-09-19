@@ -56,6 +56,8 @@ window._i18n = {
   'win_close':                    'Fechar',
   'win_menu':                     'Menu',
   'win_public_page':              'Página pública',
+  'win_pin_size':                 'Fixar tamanho e posição neste dispositivo',
+  'win_unpin_size':               'Desafixar',
 
   // ── Context menu (desktop) ────────────────────────────────────────────────
   'ctx_paste':                    'Colar',

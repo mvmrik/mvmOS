@@ -56,6 +56,8 @@ window._i18n = {
   'win_close':                    'Schließen',
   'win_menu':                     'Menü',
   'win_public_page':              'Öffentliche Seite',
+  'win_pin_size':                 'Größe & Position auf diesem Gerät fixieren',
+  'win_unpin_size':               'Fixierung aufheben',
 
   // ── Context menu (desktop) ────────────────────────────────────────────────
   'ctx_paste':                    'Einfügen',

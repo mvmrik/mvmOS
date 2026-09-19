@@ -56,6 +56,8 @@ window._i18n = {
   'win_close':                    '閉じる',
   'win_menu':                     'メニュー',
   'win_public_page':              '公開ページ',
+  'win_pin_size':                 'このデバイスでサイズと位置を固定',
+  'win_unpin_size':               '固定を解除',
 
   // ── Context menu (desktop) ────────────────────────────────────────────────
   'ctx_paste':                    '貼り付け',

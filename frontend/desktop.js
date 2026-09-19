@@ -7,6 +7,27 @@ const Desktop = (() => {
 
   function isMobile() { return window.innerWidth < 768; }
 
+  // Per-window size/position pinning, kept in localStorage so it only applies
+  // to this device — never synced, never part of any app's own settings.
+  function _readPinnedGeom(id) {
+    try {
+      const raw = JSON.parse(localStorage.getItem('mvmos_win_geom_' + id) || 'null');
+      return raw && raw.pinned ? raw : null;
+    } catch (e) { return null; }
+  }
+  function _writePinnedGeom(id, el, pinned) {
+    try {
+      // Read actual pixel geometry rather than el.style, which can hold
+      // non-pixel values (e.g. width:100% while maximized) that parseInt()
+      // would truncate into a tiny, wrong size on the next open.
+      const r = el.getBoundingClientRect();
+      localStorage.setItem('mvmos_win_geom_' + id, JSON.stringify({
+        pinned, left: Math.round(r.left) + 'px', top: Math.round(r.top) + 'px',
+        width: Math.round(r.width) + 'px', height: Math.round(r.height) + 'px',
+      }));
+    } catch (e) {}
+  }
+
   // fix viewport height on mobile browsers where window.innerHeight is wrong
   function _fixViewport() {
     const el = document.getElementById('desktop');
@@ -644,9 +665,18 @@ const Desktop = (() => {
         el.style.cssText = 'position:fixed;left:0;top:0;width:100vw;height:calc(100vh - 44px);z-index:8000;overflow:hidden';
       }
     } else {
-      const cx = Math.max(20, (window.innerWidth  - width)  / 2 + Math.random() * 40 - 20);
-      const cy = Math.max(20, (window.innerHeight - height - 44) / 2 + Math.random() * 40 - 20);
-      el.style.cssText = `left:${cx}px;top:${cy}px;width:${width}px;height:${height}px`;
+      const pinnedGeom = _readPinnedGeom(id);
+      if (pinnedGeom) {
+        const pw = Math.min(parseInt(pinnedGeom.width) || width, window.innerWidth - 20);
+        const ph = Math.min(parseInt(pinnedGeom.height) || height, window.innerHeight - 64);
+        const pl = Math.min(Math.max(0, parseInt(pinnedGeom.left) || 0), window.innerWidth - Math.min(pw, 100));
+        const pt = Math.min(Math.max(0, parseInt(pinnedGeom.top) || 0), window.innerHeight - 64);
+        el.style.cssText = `left:${pl}px;top:${pt}px;width:${pw}px;height:${ph}px`;
+      } else {
+        const cx = Math.max(20, (window.innerWidth  - width)  / 2 + Math.random() * 40 - 20);
+        const cy = Math.max(20, (window.innerHeight - height - 44) / 2 + Math.random() * 40 - 20);
+        el.style.cssText = `left:${cx}px;top:${cy}px;width:${width}px;height:${height}px`;
+      }
     }
 
     el.innerHTML = `
@@ -659,6 +689,7 @@ const Desktop = (() => {
           ${!mobile ? `<button class="wbtn wbtn-max" title="${t('win_maximize')}"></button>` : ''}
         </div>
         <div class="window-title">${title}</div>
+        ${!mobile ? `<button class="wbtn-pin" title="${t('win_pin_size')}"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg"><path d="M9 4h6l-.5 5.5L18 12v2h-5v5l-1 1l-1-1v-5H6v-2l3.5-2.5z"/></svg></button>` : ''}
         ${appSettings ? `<button class="wbtn-appsettings" title="${t('settings_title')}">⚙</button>` : ''}
       </div>`}
       <div class="window-body"></div>
@@ -715,14 +746,39 @@ const Desktop = (() => {
       clear() { if (footerCustom) footerCustom.innerHTML = ''; },
     };
 
+    let pinned = !!_readPinnedGeom(id);
+    // Pinning is a snapshot, not a live-tracked lock: moving or resizing a
+    // pinned window means the user wants it elsewhere now, so that action
+    // itself clears the pin instead of silently overwriting the saved spot.
+    function unpinOnMove() {
+      if (!pinned) return;
+      pinned = false;
+      const pinBtn = el.querySelector('.wbtn-pin');
+      if (pinBtn) { pinBtn.classList.remove('pinned'); pinBtn.title = t('win_pin_size'); }
+      _writePinnedGeom(id, el, false);
+    }
+
     if (!mobile) {
-      makeWindowDraggable(el, titlebar);
-      makeWindowResizable(el, el.querySelector('.window-resize'), () => onResize && onResize(el));
+      makeWindowDraggable(el, titlebar, unpinOnMove);
+      makeWindowResizable(el, el.querySelector('.window-resize'), () => onResize && onResize(el), unpinOnMove);
     }
 
     el.querySelector('.wbtn-close')?.addEventListener('click', () => closeWindow(id));
     el.querySelector('.wbtn-min')?.addEventListener('click', () => toggleMinimize(id));
-    el.querySelector('.wbtn-max')?.addEventListener('click', () => toggleMaximize(el));
+    el.querySelector('.wbtn-max')?.addEventListener('click', () => { unpinOnMove(); toggleMaximize(el); });
+
+    const pinBtn = el.querySelector('.wbtn-pin');
+    if (pinBtn) {
+      pinBtn.classList.toggle('pinned', pinned);
+      pinBtn.title = pinned ? t('win_unpin_size') : t('win_pin_size');
+      pinBtn.addEventListener('click', e => {
+        e.stopPropagation();
+        pinned = !pinned;
+        pinBtn.classList.toggle('pinned', pinned);
+        pinBtn.title = pinned ? t('win_unpin_size') : t('win_pin_size');
+        _writePinnedGeom(id, el, pinned);
+      });
+    }
 
     if (appSettings) {
       const btn = el.querySelector('.wbtn-appsettings');
@@ -967,10 +1023,10 @@ const Desktop = (() => {
     }
   }
 
-  function makeWindowDraggable(win, handle) {
+  function makeWindowDraggable(win, handle, onEnd) {
     let startX, startY, origX, origY;
     handle.addEventListener('mousedown', e => {
-      if (e.target.classList.contains('wbtn')) return;
+      if (e.target.closest('button')) return;
       e.preventDefault();
       startX = e.clientX; startY = e.clientY;
       origX = parseInt(win.style.left) || 0;
@@ -982,13 +1038,14 @@ const Desktop = (() => {
       function onUp() {
         document.removeEventListener('mousemove', onMove);
         document.removeEventListener('mouseup', onUp);
+        if (onEnd) onEnd();
       }
       document.addEventListener('mousemove', onMove);
       document.addEventListener('mouseup', onUp);
     });
   }
 
-  function makeWindowResizable(win, handle, onChange) {
+  function makeWindowResizable(win, handle, onChange, onEnd) {
     handle.addEventListener('mousedown', e => {
       e.preventDefault();
       e.stopPropagation();
@@ -1002,6 +1059,7 @@ const Desktop = (() => {
       function onUp() {
         document.removeEventListener('mousemove', onMove);
         document.removeEventListener('mouseup', onUp);
+        if (onEnd) onEnd();
       }
       document.addEventListener('mousemove', onMove);
       document.addEventListener('mouseup', onUp);

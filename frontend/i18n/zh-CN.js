@@ -56,6 +56,8 @@ window._i18n = {
   'win_close':                    '关闭',
   'win_menu':                     '菜单',
   'win_public_page':              '公开页面',
+  'win_pin_size':                 '在此设备上固定大小和位置',
+  'win_unpin_size':               '取消固定',
 
   // ── Context menu (desktop) ────────────────────────────────────────────────
   'ctx_paste':                    '粘贴',

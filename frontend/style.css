@@ -507,6 +507,25 @@ html, body {
   transition: background 0.12s, color 0.12s;
 }
 .wbtn-appsettings:hover { background: var(--surface2); color: var(--text); }
+.wbtn-pin {
+  margin-left: auto;
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 4px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.12s, color 0.12s;
+}
+.wbtn-pin svg { display: block; }
+.wbtn-pin:hover { background: var(--surface2); color: var(--text); }
+.wbtn-pin.pinned { color: #ff5f57; }
+.wbtn-pin.pinned:hover { color: #ff5f57; }
+.wbtn-pin + .wbtn-appsettings { margin-left: 0; }
 
 .window-body {
   flex: 1;
