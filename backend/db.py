@@ -26,6 +26,7 @@ SYSTEM_APPS = [
     {"id": "settings",        "name": "Settings",         "icon": "⚙️", "category": "System & Administration"},
     {"id": "notifications",  "name": "Notifications",    "icon": "🔔", "category": "Communication"},
     {"id": "cron-manager",    "name": "Cron Manager",     "icon": "⏰", "category": "System & Administration"},
+    {"id": "clipboard",       "name": "Clipboard",        "icon": "📋", "category": "Utilities"},
 ]
 
 
@@ -205,6 +206,25 @@ def init_db():
                 audience TEXT NOT NULL DEFAULT 'hub'
             );
             CREATE INDEX IF NOT EXISTS idx_notifications_username ON notifications(username, created_at DESC);
+
+            -- Clipboard: text lives here, files live in <install>/clipboard/.
+            -- Ownership is a column, never a folder: audience 'hub' means owner
+            -- is an Apps Hub profile id, 'os' means owner is a desktop login.
+            CREATE TABLE IF NOT EXISTS clipboard_items (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                audience TEXT NOT NULL,
+                owner TEXT NOT NULL,
+                kind TEXT NOT NULL,
+                name TEXT,
+                mime TEXT,
+                size INTEGER NOT NULL DEFAULT 0,
+                text TEXT,
+                stored TEXT,
+                pinned INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL,
+                expires_at TEXT
+            );
+            CREATE INDEX IF NOT EXISTS idx_clipboard_owner ON clipboard_items(audience, owner, id DESC);
         """)
         # migrations for existing DBs
         try:

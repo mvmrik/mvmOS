@@ -28,6 +28,48 @@ const AppHub = (() => {
     return null;
   }
 
+  // ── Signed-in profile in the Start menu ─────────────────────────
+  // The Apps Hub sign-in belongs to the browser, so the Start menu shows it
+  // under the Linux user whenever there is one — that is the profile new
+  // Clipboard items and other Apps Hub features act as.
+  const _t = (k, v) => (window.t ? window.t(k, v) : k);
+  let _menuUser = null, _menuToken = null, _menuAt = 0;
+
+  async function paintMenuProfile(force) {
+    const row = document.getElementById('start-hub-user');
+    if (!row) return;
+    const token = getToken();
+    if (!token) { _menuUser = null; _menuToken = null; row.style.display = 'none'; return; }
+    if (force || _menuToken !== token || !_menuUser || Date.now() - _menuAt > 30000) {
+      _menuUser = await getUser();
+      _menuToken = _menuUser ? token : null;
+      _menuAt = Date.now();
+    }
+    if (!_menuUser) { row.style.display = 'none'; return; }
+    row.innerHTML = `${renderAvatar(_menuUser, 24)}<div class="start-hub-names"><span>${esc(_menuUser.display_name || _menuUser.username)}</span><span class="start-hub-sub">@${esc(_menuUser.username)} · ${esc(_t('app_apphub'))}</span></div>`;
+    row.title = _t('app_apphub');
+    row.style.display = '';
+  }
+
+  (function initMenuProfile() {
+    const row = document.getElementById('start-hub-user');
+    if (!row) return;
+    row.addEventListener('click', () => {
+      document.getElementById('start-menu')?.classList.remove('open');
+      openWindow('account');
+    });
+    const refresh = () => paintMenuProfile(false);
+    window.addEventListener('apphub_login', () => paintMenuProfile(true));
+    window.addEventListener('apphub_logout', () => paintMenuProfile(true));
+    window.addEventListener('storage', e => { if (e.key === 'apphub_token') paintMenuProfile(true); });
+    window.addEventListener('focus', refresh);
+    window.addEventListener('i18n-loaded', () => paintMenuProfile(false));
+    const menu = document.getElementById('start-menu');
+    if (menu) new MutationObserver(() => { if (menu.classList.contains('open')) refresh(); })
+      .observe(menu, { attributes: true, attributeFilter: ['class'] });
+    refresh();
+  })();
+
   /**
    * Call this from any app to ensure the user is logged into Apps Hub.
    * If already logged in, calls cb(user) immediately.
@@ -277,6 +319,7 @@ const AppHub = (() => {
         await fetch('/api/pub/apphub/logout', {method:'POST',headers:{'X-Pub-Token':getToken()}}).catch(()=>{});
         localStorage.removeItem('apphub_token');
         _pubUser = null;
+        window.dispatchEvent(new CustomEvent('apphub_logout'));
         _renderLogin(c);
       };
     }

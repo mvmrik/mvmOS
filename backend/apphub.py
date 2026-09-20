@@ -56,7 +56,11 @@ TOKEN_DAYS = 30
 _DB_PATH = os.path.join(os.path.dirname(__file__), "apphub_data", "data.db")
 
 # Display name/icon for core system apps that have no manifest.json.
-_CORE_APP_META = {"apphub": {"name": "Apps Hub", "icon": "🧩"}}
+_CORE_APP_META = {
+    "apphub":    {"name": "Apps Hub",  "icon": "🧩"},
+    "clipboard": {"name": "Clipboard", "icon": "📋", "category": "Utilities",
+                  "description": "Move text, photos and files between your devices."},
+}
 
 # Public-page appearance prefs: a fixed set of ready-made color pairs and text
 # sizes (not free-form color pickers) so a non-technical user can't land on an
@@ -316,9 +320,10 @@ def create_user_row(uid: str, body: "UserBody", password_hash: Optional[str], no
 def _detect_public_apps() -> list:
     """Apps able to serve a public page: apps/<id>/api.py in the current
     layout, backend/apps/<id>/public.py in the older one. apphub's own public
-    page is core-wired (backend/apphub_pub/), so include it explicitly."""
+    page is core-wired (backend/apphub_pub/), so include it explicitly. The
+    clipboard's public page is core-wired the same way (backend/clipboard_pub/)."""
     here = os.path.dirname(__file__)
-    result = ["apphub"]
+    result = ["apphub", "clipboard"]
 
     # New layout: api.py counts only when it actually serves a public page.
     # An app with desktop_router alone (no public router) is not public.
@@ -1145,13 +1150,14 @@ async def list_public_apps(x_pub_token: Optional[str] = Header(default=None)):
             m = {}
         if m.get("public_directory") is False:
             continue
+        meta = _CORE_APP_META.get(app_id, {})
         au = usage.get(app_id, {})
         result.append({
             "id":             app_id,
-            "name":           names.get(app_id) or m.get("name", app_id),
-            "icon":           m.get("icon", "📦"),
-            "category":       m.get("category", "Utilities"),
-            "description":    m.get("description", ""),
+            "name":           names.get(app_id) or m.get("name") or meta.get("name", app_id),
+            "icon":           m.get("icon") or meta.get("icon", "📦"),
+            "category":       m.get("category") or meta.get("category", "Utilities"),
+            "description":    m.get("description") or meta.get("description", ""),
             "public_url":     f"/pub/{app_id}/",
             "open_count":     au.get("open_count", 0),
             "last_opened_at": au.get("last_opened_at"),

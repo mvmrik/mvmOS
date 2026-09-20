@@ -11,6 +11,7 @@ const FileManager = (() => {
 
     const win = Desktop.createWindow({
       id,
+      pinKey: 'filemanager',
       title: `📁 ${t('app_filemanager')}`,
       width: 720,
       height: 480,

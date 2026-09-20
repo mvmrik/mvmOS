@@ -38,6 +38,10 @@
       <span id="notif-icon">🔔</span>
       <span id="notif-badge" style="display:none"></span>
     </button>
+    <button id="clip-btn" type="button" title="Clipboard" aria-label="Clipboard">
+      <span>📋</span>
+      <span id="clip-badge" style="display:none"></span>
+    </button>
     <div id="clock"></div>
   </div>
   <div id="notif-panel" style="display:none"></div>
@@ -50,6 +54,7 @@
     <span id="current-user-label">…</span>
     <button id="current-user-premium" type="button" style="display:none;margin-left:auto;align-items:center;gap:4px;background:rgba(137,180,250,.14);border:1px solid rgba(137,180,250,.38);border-radius:999px;padding:2px 7px;color:#89b4fa;font-size:.69rem;letter-spacing:.02em;cursor:pointer;font-family:inherit">💎 <span id="current-user-premium-label" data-i18n="start_premium">Premium</span></button>
   </div>
+  <div id="start-hub-user" class="start-menu-user start-menu-hub" style="display:none"></div>
   <div class="start-menu-search-wrap">
     <input id="start-menu-search" class="start-menu-search" type="text" autocomplete="off" data-i18n-ph="search_placeholder" placeholder="Search…">
   </div>
@@ -83,6 +88,7 @@
 <div id="context-menu">
   <div class="ctx-item" id="ctx-paste" style="display:none">📋 <span data-i18n="ctx_paste">Paste</span></div>
   <div class="ctx-sep" id="ctx-paste-sep" style="display:none"></div>
+  <div class="ctx-item" id="ctx-clip-paste">📋 <span data-i18n="ctx_clip_paste">Paste to Clipboard</span></div>
   <div class="ctx-item" id="ctx-new-link">🔗 <span data-i18n="ctx_new_link">New Link</span></div>
   <div class="ctx-item" id="ctx-new-folder">📁 <span data-i18n="ctx_new_folder">New Folder</span></div>
   <div class="ctx-item" id="ctx-files">📁 <span data-i18n="ctx_open_files">Open Files</span></div>
@@ -122,8 +128,10 @@
 <script src="/filemanager.js?v=0.18.2"></script>
 <script src="/startup-manager.js?v=0.18.2"></script>
 <script src="/cron-manager.js?v=0.18.2"></script>
-<script src="/apphub.js?v=0.18.3"></script>
+<script src="/apphub.js?v=1.3.0"></script>
 <script src="/notifications.js?v=0.18.2"></script>
+<script src="/clipboard.js?v=1.3.0"></script>
+<script src="/contextmenu.js?v=1.3.0"></script>
 <script src="/codeeditor.js?v=0.18.2"></script>
 <script src="/folderpicker.js?v=0.18.2"></script>
 <script src="/gamelauncher.js?v=0.18.2"></script>

@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Clipboard</title>
+<style>
+  *,*::before,*::after{box-sizing:border-box}
+  :root{--bg:#1e1e2e;--surface1:#181825;--surface2:#313244;--border:#45475a;--fg:#cdd6f4;--fg2:#a6adc8;--accent:#89b4fa;--red:#f38ba8}
+  body{margin:0;font-family:system-ui,sans-serif;background:var(--pub-bg,var(--bg));color:var(--fg)}
+  #clip{max-width:720px;margin:0 auto;padding:16px;display:flex;flex-direction:column;gap:12px}
+  h1{margin:0;font-size:1.2rem}
+  button{font-family:inherit;cursor:pointer}
+  .btn{border:1px solid var(--border);border-radius:8px;padding:10px 16px;font-size:.9rem;font-weight:600;background:var(--surface2);color:var(--fg)}
+  .btn.primary{background:var(--accent);color:#1e1e2e;border-color:transparent}
+  .btn.danger{color:var(--red)}
+  .btn.sm{padding:6px 12px;font-size:.8rem}
+  .btn:hover{opacity:.88}
+  .bar{display:flex;gap:8px;flex-wrap:wrap}
+  .bar .grow{margin-left:auto}
+  textarea{width:100%;min-height:84px;resize:vertical;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--fg);font:inherit;font-size:.95rem;outline:none}
+  textarea:focus{border-color:var(--accent)}
+  #status{color:var(--accent);font-size:.85rem;min-height:1.2em}
+  .item{display:flex;gap:12px;background:var(--surface1);border:1px solid var(--border);border-radius:12px;padding:12px}
+  .thumb{width:64px;height:64px;flex-shrink:0;border-radius:8px;background:var(--surface2);display:flex;align-items:center;justify-content:center;font-size:1.8rem;overflow:hidden}
+  .thumb img{width:100%;height:100%;object-fit:cover}
+  .main{flex:1;min-width:0}
+  .title{font-weight:600;font-size:.92rem;word-break:break-word}
+  .text{white-space:pre-wrap;word-break:break-word;font-size:.9rem;max-height:5.6em;overflow:hidden;cursor:pointer}
+  .text.open{max-height:none}
+  .meta{color:var(--fg2);font-size:.75rem;margin-top:4px}
+  .acts{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+  .note{color:var(--fg2);font-size:.8rem;line-height:1.5;text-align:center;padding:8px}
+  #drop{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:#000a;color:#fff;font-size:1.3rem;font-weight:700;z-index:50;pointer-events:none}
+</style>
+</head>
+<body>
+<div id="clip">
+  <h1 id="h"></h1>
+  <div class="bar">
+    <button class="btn primary" id="up"></button>
+    <button class="btn" id="cam"></button>
+    <button class="btn" id="pst"></button>
+    <button class="btn danger grow" id="clr"></button>
+  </div>
+  <input type="file" id="file" multiple hidden>
+  <input type="file" id="camfile" accept="image/*" capture="environment" hidden>
+  <textarea id="txt"></textarea>
+  <div class="bar"><button class="btn primary" id="save"></button></div>
+  <div id="status"></div>
+  <div id="list"></div>
+  <div class="note" id="note"></div>
+</div>
+<div id="drop"></div>
+<script src="/i18n/i18n.js"></script>
+<script>
+(function () {
+  var API = '/pub/clipboard/api';
+  var INLINE = ['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/avif', 'image/bmp'];
+  var token = localStorage.getItem('apphub_token');
+  if (!token) { location.replace('/pub/apphub/?return=' + encodeURIComponent(location.href)); return; }
+
+  var $ = function (id) { return document.getElementById(id); };
+  var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
+  var items = [], meta = { retention_hours: 24, max_file_bytes: 50 * 1048576 }, thumbs = {}, queue = Promise.resolve();
+
+  function api(path, opts) {
+    opts = opts || {};
+    opts.headers = Object.assign({ 'X-Pub-Token': token }, opts.headers || {});
+    return fetch(API + path, opts).then(function (res) {
+      if (res.status === 401) { location.replace('/pub/apphub/?return=' + encodeURIComponent(location.href)); throw new Error('auth'); }
+      return res;
+    });
+  }
+  function mb() { return Math.round(meta.max_file_bytes / 1048576); }
+  function errText(res) {
+    return res.json().catch(function () { return {}; }).then(function (d) {
+      var k = d && d.detail;
+      return typeof k === 'string' && k.indexOf('clip_') === 0 ? t(k, { mb: mb() }) : t('clip_error_generic');
+    });
+  }
+  function status(msg) { $('status').textContent = msg || ''; }
+  function flash(msg) { status(msg); setTimeout(function () { if ($('status').textContent === msg) status(''); }, 3500); }
+
+  function enqueue(fn) { queue = queue.then(fn, fn); return queue; }
+
+  function saveText(text) {
+    return enqueue(function () {
+      return api('/text', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: text }) })
+        .then(function (res) { if (!res.ok) return errText(res).then(function (m) { flash(m); return false; }); flash(t('clip_saved')); refresh(); return true; })
+        .catch(function () { return false; });
+    });
+  }
+
+  function stamp() { var d = new Date(), p = function (n) { return String(n).padStart(2, '0'); }; return d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) + '-' + p(d.getHours()) + p(d.getMinutes()) + p(d.getSeconds()); }
+  function named(f) {
+    if (f.name && !/^image\.\w+$/i.test(f.name)) return f;
+    var ext = ((f.type.split('/')[1] || 'png').split('+')[0]).replace('jpeg', 'jpg');
+    return new File([f], 'screenshot-' + stamp() + '.' + ext, { type: f.type });
+  }
+  function saveFiles(list) {
+    var files = Array.prototype.slice.call(list || []).map(named);
+    if (!files.length) return;
+    return enqueue(function () {
+      var ok = 0;
+      return files.reduce(function (p, f) {
+        return p.then(function () {
+          if (f.size > meta.max_file_bytes) { flash(f.name + ': ' + t('clip_error_file_big', { mb: mb() })); return; }
+          status(t('clip_uploading') + ' ' + f.name);
+          var form = new FormData(); form.append('file', f, f.name);
+          return api('/file', { method: 'POST', body: form })
+            .then(function (res) { if (res.ok) { ok++; return; } return errText(res).then(function (m) { flash(f.name + ': ' + m); }); })
+            .catch(function () {});
+        });
+      }, Promise.resolve()).then(function () { if (ok) { flash(t('clip_saved')); refresh(); } else if (!$('status').textContent.length) status(''); });
+    });
+  }
+
+  function size(b) { return b >= 1048576 ? (b / 1048576).toFixed(1) + ' MB' : b >= 1024 ? Math.round(b / 1024) + ' KB' : b + ' B'; }
+  function ago(iso) {
+    var diff = (new Date(iso).getTime() - Date.now()) / 1000, a = Math.abs(diff);
+    var rtf = new Intl.RelativeTimeFormat(window.mvmOS && mvmOS.lang || undefined, { numeric: 'auto' });
+    if (a < 60) return rtf.format(Math.round(diff), 'second');
+    if (a < 3600) return rtf.format(Math.round(diff / 60), 'minute');
+    if (a < 86400) return rtf.format(Math.round(diff / 3600), 'hour');
+    return rtf.format(Math.round(diff / 86400), 'day');
+  }
+  function expiry(i) {
+    if (i.pinned) return '📌 ' + t('clip_pinned');
+    if (!i.expires_at) return '';
+    var m = Math.max(1, Math.ceil((new Date(i.expires_at).getTime() - Date.now()) / 60000));
+    return m >= 60 ? t('clip_expires_h', { h: Math.ceil(m / 60) }) : t('clip_expires_m', { m: m });
+  }
+  function isImg(i) { return i.kind === 'file' && INLINE.indexOf((i.mime || '').toLowerCase()) >= 0; }
+  function icon(i) {
+    if (i.kind === 'text') return '📝';
+    var m = i.mime || '';
+    return m.indexOf('image/') === 0 ? '🖼️' : m.indexOf('video/') === 0 ? '🎞️' : m.indexOf('audio/') === 0 ? '🎵' : m === 'application/pdf' ? '📕' : '📄';
+  }
+
+  function row(i) {
+    var main = i.kind === 'file' ? '<div class="title">' + esc(i.name) + '</div>' : '<div class="text" data-act="expand">' + esc(i.text) + '</div>';
+    var copy = (i.kind === 'text' || isImg(i)) ? '<button class="btn sm" data-act="copy">' + esc(t('clip_copy')) + '</button>' : '';
+    var dl = i.kind === 'file' ? '<button class="btn sm" data-act="download">' + esc(t('clip_download')) + '</button>' : '';
+    var ex = expiry(i);
+    return '<div class="item" data-id="' + i.id + '"><div class="thumb">' + (isImg(i) ? '<img alt="">' : icon(i)) + '</div><div class="main">' + main +
+      '<div class="meta">' + esc((i.kind === 'file' ? size(i.size) + ' · ' : '') + ago(i.created_at) + (ex ? ' · ' + ex : '')) + '</div>' +
+      '<div class="acts">' + copy + dl + '<button class="btn sm" data-act="pin">' + esc(i.pinned ? t('clip_unpin') : t('clip_pin')) + '</button>' +
+      '<button class="btn sm danger" data-act="delete">' + esc(t('clip_delete')) + '</button></div></div></div>';
+  }
+
+  function thumb(i) {
+    if (thumbs[i.id]) return Promise.resolve(thumbs[i.id]);
+    return api('/items/' + i.id + '/file').then(function (r) { return r.ok ? r.blob() : null; })
+      .then(function (b) { if (!b) return null; thumbs[i.id] = URL.createObjectURL(b); return thumbs[i.id]; });
+  }
+
+  function render() {
+    var alive = {}; items.forEach(function (i) { alive[i.id] = 1; });
+    Object.keys(thumbs).forEach(function (id) { if (!alive[id]) { URL.revokeObjectURL(thumbs[id]); delete thumbs[id]; } });
+    $('list').innerHTML = items.length ? items.map(row).join('') : '<div class="note">' + esc(t('clip_empty')) + '</div>';
+    items.filter(isImg).forEach(function (i) {
+      thumb(i).then(function (url) { var img = url && document.querySelector('.item[data-id="' + i.id + '"] img'); if (img) img.src = url; });
+    });
+    $('note').textContent = t('clip_retention_note', { h: meta.retention_hours });
+  }
+
+  function refresh() {
+    return api('/items').then(function (r) { return r.ok ? r.json() : null; }).then(function (d) {
+      if (!d) return;
+      items = d.items || []; meta = { retention_hours: d.retention_hours, max_file_bytes: d.max_file_bytes };
+      render();
+    }).catch(function () {});
+  }
+
+  function copyItem(i) {
+    var p;
+    if (i.kind === 'text') p = navigator.clipboard.writeText(i.text);
+    else p = api('/items/' + i.id + '/file').then(function (r) { return r.blob(); }).then(function (blob) {
+      if (blob.type === 'image/png') return blob;
+      return createImageBitmap(blob).then(function (bmp) {
+        var c = document.createElement('canvas'); c.width = bmp.width; c.height = bmp.height; c.getContext('2d').drawImage(bmp, 0, 0);
+        return new Promise(function (res) { c.toBlob(res, 'image/png'); });
+      });
+    }).then(function (png) { return navigator.clipboard.write([new ClipboardItem({ 'image/png': png })]); });
+    Promise.resolve(p).then(function () { flash(t('clip_copied')); }, function () { flash(t('clip_error_generic')); });
+  }
+
+  function download(i) {
+    api('/items/' + i.id + '/file?download=1').then(function (r) { return r.ok ? r.blob() : null; }).then(function (b) {
+      if (!b) return;
+      var url = URL.createObjectURL(b), a = document.createElement('a');
+      a.href = url; a.download = i.name || 'file'; document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(function () { URL.revokeObjectURL(url); }, 10000);
+    });
+  }
+
+  function pasteFromSystem() {
+    var cb = navigator.clipboard;
+    if (!cb || !cb.readText) { flash(t('clip_paste_blocked')); return; }
+    var read = cb.read ? cb.read().then(function (entries) {
+      var files = [], text = null, chain = Promise.resolve();
+      entries.forEach(function (en) {
+        var img = en.types.filter(function (x) { return x.indexOf('image/') === 0; })[0];
+        if (img) chain = chain.then(function () { return en.getType(img); }).then(function (b) { files.push(new File([b], 'image.' + (img.split('/')[1] || 'png'), { type: img })); });
+        else if (en.types.indexOf('text/plain') >= 0) chain = chain.then(function () { return en.getType('text/plain'); }).then(function (b) { return b.text(); }).then(function (x) { text = x; });
+      });
+      return chain.then(function () { return { files: files, text: text }; });
+    }) : cb.readText().then(function (x) { return { files: [], text: x }; });
+    read.then(function (r) {
+      if (r.files.length) saveFiles(r.files);
+      else if (r.text && r.text.trim()) saveText(r.text);
+      else flash(t('clip_error_empty'));
+    }, function () { flash(t('clip_paste_blocked')); });
+  }
+
+  function boot() {
+    document.title = t('app_clipboard');
+    $('h').textContent = '📋 ' + t('app_clipboard');
+    $('up').textContent = '⬆ ' + t('clip_upload');
+    $('cam').textContent = '📷 ' + t('clip_camera');
+    $('pst').textContent = '📋 ' + t('clip_paste');
+    $('clr').textContent = t('clip_clear');
+    $('txt').placeholder = t('clip_compose_ph');
+    $('save').textContent = t('clip_save');
+    $('drop').textContent = '📋 ' + t('clip_drop_hint');
+
+    $('up').onclick = function () { $('file').click(); };
+    $('cam').onclick = function () { $('camfile').click(); };
+    $('file').onchange = function (e) { saveFiles(e.target.files); e.target.value = ''; };
+    $('camfile').onchange = function (e) { saveFiles(e.target.files); e.target.value = ''; };
+    $('pst').onclick = pasteFromSystem;
+    $('save').onclick = function () { var v = $('txt').value; if (!v.trim()) return; saveText(v).then(function (ok) { if (ok) $('txt').value = ''; }); };
+    $('txt').onkeydown = function (e) { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); $('save').click(); } };
+    $('clr').onclick = function () { if (confirm(t('clip_clear_confirm'))) api('/items', { method: 'DELETE' }).then(refresh); };
+
+    $('list').addEventListener('click', function (e) {
+      var btn = e.target.closest('[data-act]'), rowEl = e.target.closest('.item');
+      if (!btn || !rowEl) return;
+      var id = Number(rowEl.dataset.id), i = items.filter(function (x) { return x.id === id; })[0];
+      if (!i) return;
+      var act = btn.dataset.act;
+      if (act === 'expand') btn.classList.toggle('open');
+      else if (act === 'copy') copyItem(i);
+      else if (act === 'download') download(i);
+      else if (act === 'pin') api('/items/' + id + '/pin', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pinned: !i.pinned }) }).then(refresh);
+      else if (act === 'delete') api('/items/' + id, { method: 'DELETE' }).then(refresh);
+    });
+
+    document.addEventListener('paste', function (e) {
+      if (!e.clipboardData) return;
+      var files = Array.prototype.slice.call(e.clipboardData.files || []);
+      if (files.length) { e.preventDefault(); saveFiles(files); return; }
+      var text = e.clipboardData.getData('text/plain');
+      if (text && text.trim() && !/^(INPUT|TEXTAREA)$/.test((e.target || {}).tagName || '')) { e.preventDefault(); saveText(text); }
+    });
+    var hasFiles = function (e) { return e.dataTransfer && Array.prototype.indexOf.call(e.dataTransfer.types || [], 'Files') >= 0; };
+    document.addEventListener('dragover', function (e) { if (!hasFiles(e)) return; e.preventDefault(); $('drop').style.display = 'flex'; });
+    document.addEventListener('dragleave', function (e) { if (!e.relatedTarget) $('drop').style.display = 'none'; });
+    document.addEventListener('drop', function (e) { $('drop').style.display = 'none'; if (!hasFiles(e)) return; e.preventDefault(); saveFiles(e.dataTransfer.files); });
+
+    refresh();
+    setInterval(function () { if (!document.hidden) refresh(); }, 15000);
+    document.addEventListener('visibilitychange', function () { if (!document.hidden) refresh(); });
+  }
+  (window.mvmOS && window.mvmOS.i18nReady ? window.mvmOS.i18nReady : Promise.resolve()).then(boot);
+})();
+</script>
+</body>
+</html>

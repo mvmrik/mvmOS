@@ -641,7 +641,11 @@ const Desktop = (() => {
   }
 
   // ── Window factory ──
-  function createWindow({ id, title, icon, width = 700, height = 450, onMount, onResize, appSettings, onAppSettings, closeToTray = false }) {
+  // `pinKey` names what the pinned size/position belongs to. It defaults to the
+  // window id; windows whose id is per-instance (filemanager-2, terminal-3,
+  // a viewer keyed by file path) pass a stable key so a pin survives reopening.
+  function createWindow({ id, pinKey, title, icon, width = 700, height = 450, onMount, onResize, appSettings, onAppSettings, closeToTray = false }) {
+    const pinId = pinKey || id;
     // bring existing to front if already open (or restore from tray)
     if (_trayItems[id]) { restoreFromTray(id); return windows[id]?.el; }
     if (windows[id]) {
@@ -665,12 +669,15 @@ const Desktop = (() => {
         el.style.cssText = 'position:fixed;left:0;top:0;width:100vw;height:calc(100vh - 44px);z-index:8000;overflow:hidden';
       }
     } else {
-      const pinnedGeom = _readPinnedGeom(id);
+      const pinnedGeom = _readPinnedGeom(pinId);
       if (pinnedGeom) {
         const pw = Math.min(parseInt(pinnedGeom.width) || width, window.innerWidth - 20);
         const ph = Math.min(parseInt(pinnedGeom.height) || height, window.innerHeight - 64);
-        const pl = Math.min(Math.max(0, parseInt(pinnedGeom.left) || 0), window.innerWidth - Math.min(pw, 100));
-        const pt = Math.min(Math.max(0, parseInt(pinnedGeom.top) || 0), window.innerHeight - 64);
+        // Windows sharing one pin key would open exactly on top of each
+        // other, so each already-open sibling shifts the next one down-right.
+        const siblings = Object.values(windows).filter(w => w.pinId === pinId).length * 30;
+        const pl = Math.min(Math.max(0, (parseInt(pinnedGeom.left) || 0) + siblings), window.innerWidth - Math.min(pw, 100));
+        const pt = Math.min(Math.max(0, (parseInt(pinnedGeom.top) || 0) + siblings), window.innerHeight - 64);
         el.style.cssText = `left:${pl}px;top:${pt}px;width:${pw}px;height:${ph}px`;
       } else {
         const cx = Math.max(20, (window.innerWidth  - width)  / 2 + Math.random() * 40 - 20);
@@ -746,7 +753,7 @@ const Desktop = (() => {
       clear() { if (footerCustom) footerCustom.innerHTML = ''; },
     };
 
-    let pinned = !!_readPinnedGeom(id);
+    let pinned = !!_readPinnedGeom(pinId);
     // Pinning is a snapshot, not a live-tracked lock: moving or resizing a
     // pinned window means the user wants it elsewhere now, so that action
     // itself clears the pin instead of silently overwriting the saved spot.
@@ -755,7 +762,7 @@ const Desktop = (() => {
       pinned = false;
       const pinBtn = el.querySelector('.wbtn-pin');
       if (pinBtn) { pinBtn.classList.remove('pinned'); pinBtn.title = t('win_pin_size'); }
-      _writePinnedGeom(id, el, false);
+      _writePinnedGeom(pinId, el, false);
     }
 
     if (!mobile) {
@@ -776,7 +783,7 @@ const Desktop = (() => {
         pinned = !pinned;
         pinBtn.classList.toggle('pinned', pinned);
         pinBtn.title = pinned ? t('win_unpin_size') : t('win_pin_size');
-        _writePinnedGeom(id, el, pinned);
+        _writePinnedGeom(pinId, el, pinned);
       });
     }
 
@@ -797,7 +804,7 @@ const Desktop = (() => {
     el.style.zIndex = zCounter;
     focusWindow(id);
 
-    windows[id] = { el, title, icon: icon || '📦', minimized: false, origStyle: null, closeToTray, onAppSettings: appSettings ? (onAppSettings || null) : null };
+    windows[id] = { el, pinId, title, icon: icon || '📦', minimized: false, origStyle: null, closeToTray, onAppSettings: appSettings ? (onAppSettings || null) : null };
 
     // taskbar button
     const tbItem = document.createElement('div');

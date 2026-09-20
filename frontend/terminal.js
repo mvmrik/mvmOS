@@ -51,7 +51,7 @@ const Terminal = (() => {
     let ws;
 
     Desktop.createWindow({
-      id, title,
+      id, pinKey: 'terminal', title,
       width: Math.min(window.innerWidth, 500),
       height: 420,
       onMount(body) {
@@ -218,7 +218,7 @@ const Terminal = (() => {
     let term, fitAddon, ws;
 
     Desktop.createWindow({
-      id, title,
+      id, pinKey: 'terminal', title,
       width: 720,
       height: 460,
       onMount(body) {

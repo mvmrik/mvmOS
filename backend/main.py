@@ -74,6 +74,7 @@ from .ssh_access import router as ssh_access_router, init_ssh_access_db
 from .startup import router as startup_router, _init_startup_db, run_startup_apps
 from .apphub import router as apphub_router, public_page_router as apphub_public_router, _init_db as _init_apphub_db, is_app_public
 from .notifications import router as notifications_router
+from .clipboard import router as clipboard_router, purge_on_startup as _purge_clipboard
 from .platform_api import router as platform_router
 from .extensions import router as extensions_router
 from .wizard import router as wizard_router
@@ -84,6 +85,7 @@ from . import app_backends, app_isolation, public_loader, projects
 app = FastAPI(title="mvmOS", redirect_slashes=False)
 
 init_db()
+_purge_clipboard()
 init_ssh_access_db()
 _init_startup_db()
 _init_apphub_db()
@@ -111,6 +113,7 @@ app.include_router(startup_router)
 app.include_router(apphub_router)
 app.include_router(apphub_public_router, prefix="/pub/apphub")
 app.include_router(notifications_router)
+app.include_router(clipboard_router, prefix="/pub/clipboard")
 app.include_router(platform_router)
 app.include_router(extensions_router)
 app.include_router(wizard_router)

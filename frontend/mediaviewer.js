@@ -15,6 +15,7 @@ const ImageViewer = (() => {
     const id = 'imageviewer-' + btoa(unescape(encodeURIComponent(path))).slice(0, 12);
     const win = Desktop.createWindow({
       id,
+      pinKey: 'imageviewer',
       title: '🖼️ ' + name,
       width: 800,
       height: 560,
@@ -94,6 +95,7 @@ const VideoPlayer = (() => {
     const id = 'mediaplayer-' + btoa(unescape(encodeURIComponent(path))).slice(0, 12);
     Desktop.createWindow({
       id,
+      pinKey: audio ? 'audioplayer' : 'videoplayer',
       title: (audio ? '🎵 ' : '▶ ') + name,
       width: audio ? 420 : 800,
       height: audio ? 120 : 500,
@@ -128,6 +130,7 @@ const TextEditor = (() => {
     const id = 'texteditor-' + btoa(unescape(encodeURIComponent(path))).slice(0, 12);
     Desktop.createWindow({
       id,
+      pinKey: 'texteditor',
       title: '📝 ' + name,
       width: 720,
       height: 500,

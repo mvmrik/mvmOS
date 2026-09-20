@@ -23,6 +23,8 @@ The administrator can separately allow invitations. Each signed-in public user c
 
 The Apps Hub public portal lists the apps that the administrator has enabled for public access. It is installable as a PWA, so it can be added to a phone or desktop home screen. Public app pages can also have their own standalone PWA; this is intentionally separate from the main mvmOS desktop PWA described in [[Mobile and PWA]].
 
+The Clipboard is a built-in app with a public page of its own, so it appears in this directory as soon as the administrator enables it. It lets a profile move text, photos and files between a phone and the computer; see [[Clipboard]].
+
 ## Each profile chooses its own home screen
 
 The public portal has two views of the same list. **Apps** is the profile’s own home screen; **Store** is everything the administrator has published, grouped by category, with a description for each app. Adding an app from the Store puts it on the home screen, removing it takes it off again.

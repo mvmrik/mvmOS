@@ -24,6 +24,7 @@ var mvmOS = (() => {
       { id: 'apphub',           name: t('app_apphub'),    icon: '🧩', category: 'Communication', system: true, launch: () => AppHub.openWindow() },
       { id: 'settings',         name: t('app_settings'),  icon: '⚙️', category: 'System & Administration', system: true, launch: () => Settings.openWindow() },
       { id: 'notifications',   name: t('app_notifications'), icon: '🔔', category: 'Communication', system: true, launch: () => Notifications.openWindow() },
+      { id: 'clipboard',        name: t('app_clipboard'), icon: '📋', category: 'Utilities', system: true, launch: () => ClipboardApp.openWindow() },
       { id: 'cron-manager',     name: t('app_cron_manager'), icon: '⏰', category: 'System & Administration', system: true, launch: () => CronManager.openWindow() },
     ];
   }
@@ -1367,6 +1368,7 @@ var mvmOS = (() => {
       return base ? (_pluginsCache.find(p => p.id === base) || null) : null;
     },
     notify,
+    toast: (title, body) => _showToast(title, body || ''),
     storage,
     multiplayer: {
       async createRoom(gameId, opts = {}) {
