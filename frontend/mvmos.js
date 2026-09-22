@@ -558,7 +558,7 @@ var mvmOS = (() => {
     // Settings — only if widget has settings defined
     if (def.settings?.length) {
       items.push({ label: t('wstore_ctx_settings'), action: () => {
-        AppStore.openWindow({ section: 'my-widgets', widgetId: def.id });
+        AppStore.openWindow({ section: 'widget-settings', widgetId: def.id });
       }});
     }
     // Size submenu — only if widget declares sizes
@@ -697,6 +697,23 @@ var mvmOS = (() => {
   let _projectIds = new Set();
   let _projectNoApp = new Set();
   let _pluginsCache = [];
+
+  // Finds apps for the Start menu and the Terminal's quick prompt. An app is
+  // matched by the name shown in the current language, by the name the server
+  // stores for it (the original, English one: "Terminal" while the desktop says
+  // "Терминал") and by its id, so the same word finds it in either language.
+  // Case and accents are ignored.
+  const _fold = s => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
+  function _searchApps(query) {
+    const q = _fold(String(query || '').trim());
+    if (!q) return [];
+    return Object.values(_apps).filter(app => {
+      if (!app || !app.id) return false;
+      const stored = _pluginsCache.find(p => p.id === app.id)?.name;
+      return [app.name, stored, app.id].some(x => _fold(x).includes(q));
+    });
+  }
 
   async function _refreshPlugins() {
     const res = await fetch('/api/plugins');
@@ -1107,6 +1124,13 @@ var mvmOS = (() => {
     document.body.classList.remove('splashing');
     setTimeout(() => el.remove(), 450);
   }
+
+  // The names of the built-in apps are translated when they are registered. If
+  // the table arrives later (or the language is changed) they would keep the
+  // earlier wording, so they are translated again on every language load.
+  window.addEventListener('i18n-loaded', () => {
+    _SYSTEM_APP_DEFS().forEach(def => { if (_apps[def.id]) _apps[def.id].name = def.name; });
+  });
 
   document.addEventListener('DOMContentLoaded', () => {
     _splashProgress(20);
@@ -1579,6 +1603,7 @@ var mvmOS = (() => {
     // as the bell (see _identities() in backend/notifications.py).
     _pubHeaders,
     get _apps() { return _apps; },
+    searchApps: _searchApps,
     get _widgets() { return _widgets; },
     get _editMode() { return _editMode; },
   };

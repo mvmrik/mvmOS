@@ -22,25 +22,10 @@ const AppStore = (() => {
     if (typeof opts === 'string') {
       body?.querySelector?.(`.as-tab[data-tab="${opts}"]`)?.click();
     } else if (opts?.section === 'widgets') {
-      const wt = opts.widgetType || '';
-      const _activate = () => {
-        const tab = body.querySelector('#as-widget-store-tabs .as-tab');
-        if (!tab) return false;
-        body._as.activateTab(tab);
-        // find the store object to pass to loadWidgetStoreCategories
-        fetch('/api/widgets/stores').then(r => r.json()).then(stores => {
-          if (stores[0]) loadWidgetStoreCategories(body, stores[0], wt || null);
-        });
-        return true;
-      };
-      if (!_activate()) {
-        let attempts = 0;
-        const ti = setInterval(() => {
-          if (_activate() || ++attempts > 20) clearInterval(ti);
-        }, 50);
-      }
-    } else if (opts?.section === 'my-widgets') {
-      const tab = body.querySelector('.as-tab[data-tab="my-widgets"]');
+      const tab = body.querySelector('.as-tab[data-tab="wstore"]');
+      if (tab) { body._as._enter = { widgets: opts.widgetType || '' }; tab.click(); }
+    } else if (opts?.section === 'widget-settings') {
+      const tab = body.querySelector('.as-tab[data-tab="widget-installed"]');
       if (tab) {
         if (opts.widgetId) {
           body._as._pendingWidgetSettings = opts.widgetId;
@@ -56,8 +41,7 @@ const AppStore = (() => {
       const tab = body.querySelector('.as-tab[data-tab="app-installed"]');
       if (tab) setTimeout(() => tab.click(), 50);
     } else if (opts?.section === 'themes') {
-      const thTab = body.querySelector('#as-theme-store-tabs .as-tab');
-      if (thTab) thTab.click();
+      body.querySelector('.as-tab[data-tab="tstore"]')?.click();
     }
   }
 
@@ -75,21 +59,18 @@ const AppStore = (() => {
           <div class="as-sidebar-sep"></div>
           <div class="as-sidebar-group-label">${t('as_mvmos_apps')}</div>
 
-          <div id="as-store-tabs"></div>
+          <div class="as-tab" data-tab="store">🏪 ${t('appstore_tab_store')}</div>
           <div class="as-tab" data-tab="app-installed">✅ ${t('as_installed')}</div>
-          <div class="as-tab" data-tab="myapps">${t('as_my_apps')}</div>
           <div class="as-tab" data-tab="app-stores">🔗 ${t('as_stores')}</div>
           <div class="as-sidebar-sep"></div>
           <div class="as-sidebar-group-label">${t('as_mvmos_widgets')}</div>
-          <div id="as-widget-store-tabs"></div>
+          <div class="as-tab" data-tab="wstore">🏪 ${t('appstore_tab_store')}</div>
           <div class="as-tab" data-tab="widget-installed">✅ ${t('as_installed')}</div>
-          <div class="as-tab" data-tab="my-widgets">${t('as_my_widgets')}</div>
           <div class="as-tab" data-tab="widget-stores">🔗 ${t('as_stores')}</div>
           <div class="as-sidebar-sep"></div>
           <div class="as-sidebar-group-label">${t('as_mvmos_themes')}</div>
-          <div id="as-theme-store-tabs"></div>
+          <div class="as-tab" data-tab="tstore">🏪 ${t('appstore_tab_store')}</div>
           <div class="as-tab" data-tab="theme-installed">✅ ${t('as_installed')}</div>
-          <div class="as-tab" data-tab="my-themes">${t('as_my_themes')}</div>
           <div class="as-tab" data-tab="theme-stores">🔗 ${t('as_stores')}</div>
         </nav>
         <div class="as-main">
@@ -126,7 +107,11 @@ const AppStore = (() => {
             <div class="as-list" id="as-search-list"><div class="as-loading">${t('as_type_to_search')}</div></div>
           </div>
 
-          <!-- My Apps -->
+          <!-- Merged stores: apps, widgets, themes -->
+          <div class="as-panel" id="asp-store"><div class="as-list" id="as-store-list"></div></div>
+          <div class="as-panel" id="asp-wstore"><div class="as-list" id="as-wstore-list"></div></div>
+          <div class="as-panel" id="asp-tstore"><div class="as-list" id="as-tstore-list"></div></div>
+
           <!-- App Installed -->
           <div class="as-panel" id="asp-app-installed">
             <div class="as-toolbar">
@@ -134,15 +119,6 @@ const AppStore = (() => {
               <button class="s-btn" id="as-app-installed-refresh">↺</button>
             </div>
             <div class="as-list" id="as-app-installed-list"><div class="as-loading"\>${t('loading')}</div></div>
-          </div>
-
-          <!-- My Apps (custom stores) -->
-          <div class="as-panel" id="asp-myapps">
-            <div class="as-toolbar">
-              <span style="font-size:.8rem;color:var(--text-dim);flex:1">${t('as_custom_apps_label')}</span>
-              <button class="s-btn" id="as-myapps-refresh">↺</button>
-            </div>
-            <div class="as-list" id="as-myapps-list"><div class="as-loading"\>${t('loading')}</div></div>
           </div>
 
           <!-- App Stores management -->
@@ -161,15 +137,6 @@ const AppStore = (() => {
               </div>
             </div>
             <div class="as-list" id="as-stores-list"><div class="as-loading"\>${t('loading')}</div></div>
-          </div>
-
-          <!-- My Widgets -->
-          <div class="as-panel" id="asp-my-widgets">
-            <div class="as-toolbar">
-              <span style="font-size:.8rem;color:var(--text-dim);flex:1">${t('as_custom_widgets_label')}</span>
-              <button class="s-btn" id="as-my-widgets-refresh">↺</button>
-            </div>
-            <div class="as-list" id="as-my-widgets-list"><div class="as-loading"\>${t('loading')}</div></div>
           </div>
 
           <!-- Widget Installed -->
@@ -208,15 +175,6 @@ const AppStore = (() => {
             <div class="as-list" id="as-theme-installed-list"><div class="as-loading"\>${t('loading')}</div></div>
           </div>
 
-          <!-- My Themes (custom stores only) -->
-          <div class="as-panel" id="asp-my-themes">
-            <div class="as-toolbar">
-              <span style="font-size:.8rem;color:var(--text-dim);flex:1">${t('as_custom_themes_label')}</span>
-              <button class="s-btn" id="as-my-themes-refresh">↺</button>
-            </div>
-            <div class="as-list" id="as-my-themes-list"><div class="as-loading"\>${t('loading')}</div></div>
-          </div>
-
           <!-- Theme Stores management -->
           <div class="as-panel" id="asp-theme-stores">
             <div class="as-toolbar" style="flex-wrap:wrap;gap:6px">
@@ -234,8 +192,6 @@ const AppStore = (() => {
             </div>
             <div class="as-list" id="as-tstores-list"><div class="as-loading"\>${t('loading')}</div></div>
           </div>
-
-          <!-- Dynamic store panels (added at runtime) -->
 
           <!-- apt output overlay -->
           <div class="as-output-wrap" id="as-output-wrap" style="display:none">
@@ -276,16 +232,19 @@ const AppStore = (() => {
     body.querySelectorAll('.as-tab').forEach(tab => {
       tab.addEventListener('click', () => {
         activateTab(tab);
+        const merged = { store: 'apps', wstore: 'widgets', tstore: 'themes' }[tab.dataset.tab];
+        if (merged) {
+          const enter = body._as._enter?.[merged] || '';
+          if (body._as._enter) delete body._as._enter[merged];
+          loadMergedStore(body, merged, { enter });
+        }
         if (tab.dataset.tab === 'app-installed') { loadAppInstalled(body); body._as.refreshCurrent = () => loadAppInstalled(body); }
-        if (tab.dataset.tab === 'myapps') { loadMyApps(body); body._as.refreshCurrent = () => loadMyApps(body); }
         if (tab.dataset.tab === 'app-stores') loadStores(body);
         if (tab.dataset.tab === 'browse' && !_browsedLoaded) { _browsedLoaded = true; loadCategories(body); }
         if (tab.dataset.tab === 'installed' && !_installedLoaded) { _installedLoaded = true; loadInstalled(body); }
-        if (tab.dataset.tab === 'my-widgets') { loadMyWidgets(body); body._as.refreshCurrent = () => loadMyWidgets(body); }
         if (tab.dataset.tab === 'widget-installed') { loadWidgetInstalled(body); body._as.refreshCurrent = () => loadWidgetInstalled(body); }
         if (tab.dataset.tab === 'widget-stores') loadWidgetStores(body);
         if (tab.dataset.tab === 'theme-installed') { loadThemeInstalled(body); body._as.refreshCurrent = () => loadThemeInstalled(body); }
-        if (tab.dataset.tab === 'my-themes') { loadMyThemes(body); body._as.refreshCurrent = () => loadMyThemes(body); }
         if (tab.dataset.tab === 'theme-stores') loadThemeStores(body);
       });
     });
@@ -321,9 +280,8 @@ const AppStore = (() => {
     });
     body.querySelector('#as-detail-close').addEventListener('click', () => closeDetail(body));
 
-    // ── App Installed + My Apps refresh ──
+    // ── App Installed refresh ──
     body.querySelector('#as-app-installed-refresh').addEventListener('click', () => loadAppInstalled(body));
-    body.querySelector('#as-myapps-refresh').addEventListener('click', () => loadMyApps(body));
 
     // ── App Stores panel ──
     body.querySelector('#as-stores-add-btn').addEventListener('click', () => {
@@ -336,7 +294,6 @@ const AppStore = (() => {
     body.querySelector('#as-store-submit').addEventListener('click', () => submitAddStore(body));
 
     // ── Widget Stores panel ──
-    body.querySelector('#as-my-widgets-refresh').addEventListener('click', () => loadMyWidgets(body));
     body.querySelector('#as-widget-installed-refresh').addEventListener('click', () => loadWidgetInstalled(body));
     body.querySelector('#as-wstores-add-btn').addEventListener('click', () => {
       const form = body.querySelector('#as-add-wstore-form');
@@ -349,7 +306,6 @@ const AppStore = (() => {
 
     // ── Theme Stores panel ──
     body.querySelector('#as-theme-installed-refresh').addEventListener('click', () => loadThemeInstalled(body));
-    body.querySelector('#as-my-themes-refresh').addEventListener('click', () => loadMyThemes(body));
     body.querySelector('#as-tstores-add-btn').addEventListener('click', () => {
       const form = body.querySelector('#as-add-tstore-form');
       form.style.display = form.style.display === 'none' ? 'flex' : 'none';
@@ -361,178 +317,197 @@ const AppStore = (() => {
 
     body._as = { browseState, activateTab, refreshCurrent: null };
 
-    // ── Load stores → build dynamic tabs ──
+    // Open the app store first, unless the caller asked for something else
+    // (_applyOpts runs right after render and may already have picked a tab).
     const _initSection = opts?.section;
-    loadStoreTabs(body, !_initSection || _initSection === 'apps');
-    loadWidgetStoreTabs(body, _initSection === 'widgets', opts?.widgetType || '');
-    loadThemeStoreTabs(body);
+    setTimeout(() => {
+      if (!body.isConnected || body.querySelector('.as-tab.active') || body._as._suppressWidgetStoreAutoActivate) return;
+      if (!_initSection || _initSection === 'apps') body.querySelector('.as-tab[data-tab="store"]')?.click();
+    }, 0);
   }
 
-  // ── Store tabs (sidebar) ──────────────────────────────────────────────────
-  async function loadStoreTabs(body, autoActivate = false) {
-    const res = await fetch('/api/plugins/stores');
-    const stores = await res.json();
-    const tabsEl = body.querySelector('#as-store-tabs');
-    tabsEl.innerHTML = '';
+  // ── Merged store (apps, widgets, themes) ──────────────────────────────────
+  // Every store of a kind — the official one and any the owner added — is
+  // browsed as ONE category tree, so nobody has to know which store holds what.
+  // The server does the merging (same-named categories become one, the official
+  // store wins a duplicated id, see backend/storemerge.py); this only draws it.
+  // Official items carry ⚡, everything else 📦 and the name of its store.
+  const _escHtml = value => String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
-    stores.forEach(store => {
-      const tab = document.createElement('div');
-      tab.className = 'as-tab';
-      tab.dataset.tab = `store-${store.id}`;
-      tab.textContent = store.official ? `⚡ ${store.name}` : `📦 ${store.name}`;
-      tabsEl.appendChild(tab);
-
-      const panelId = `asp-store-${store.id}`;
-      if (!body.querySelector(`#${panelId}`)) {
-        const panel = document.createElement('div');
-        panel.className = 'as-panel';
-        panel.id = panelId;
-        panel.innerHTML = `<div class="as-list" id="as-store-list-${store.id}"><div class="as-loading"\>${t('loading')}</div></div>`;
-        body.querySelector('.as-main').insertBefore(panel, body.querySelector('#as-output-wrap'));
-      }
-
-      tab.addEventListener('click', () => {
-        body._as.activateTab(tab);
-        loadStoreCategories(body, store);
-        body._as.refreshCurrent = () => loadStoreCategories(body, store);
-      });
-    });
-
-    // auto-activate first store tab unless my-widgets settings pending
-    if (autoActivate && stores.length && !body._as._suppressWidgetStoreAutoActivate) {
-      const firstTab = tabsEl.querySelector('.as-tab');
-      if (firstTab) body._as.activateTab(firstTab);
-      loadStoreCategories(body, stores[0]);
-      body._as.refreshCurrent = () => loadStoreCategories(body, stores[0]);
-    }
+  function sourceMark(item) {
+    if (item.official) return `<span class="as-src as-src-official" title="${_escHtml(t('appstore_official'))}">⚡</span>`;
+    if (item.store_name) return `<span class="as-src" title="${_escHtml(item.store_name)}">📦 ${_escHtml(item.store_name)}</span>`;
+    return '';
   }
 
-  // ── Store categories ──────────────────────────────────────────────────────
-  async function loadStoreCategories(body, store) {
-    const list = body.querySelector(`#as-store-list-${store.id}`);
+  // Store apps that have a Premium half are marked in the list already; the manifest
+  // says so with "premium": true. What Premium adds is read from the store itself
+  // (premium.json next to the app's sources) when the app's page is opened.
+  function premiumMark() {
+    return `<span class="as-premium-mark" title="${_escHtml(t('appstore_premium_title'))}">💎</span>`;
+  }
+
+  async function loadPremiumSection(el, app) {
+    const info = await fetch(`/api/plugins/${encodeURIComponent(app.id)}/premium?store_id=${encodeURIComponent(app.store_id || 0)}`)
+      .then(r => r.json()).catch(() => ({}));
+    if (!el.isConnected) return;
+    const features = Array.isArray(info.features) ? info.features : [];
+    const active = window.mvmOS?.premiumStatus === 'premium';
+    el.innerHTML = `
+      <h3>💎 ${_escHtml(t('appstore_premium_title'))}</h3>
+      <p class="as-premium-summary">${_escHtml(info.summary || t('appstore_premium_generic'))}</p>
+      ${features.length ? `<div class="as-premium-features">${features.map(f => {
+        const head = `<b>${_escHtml(f.title)}</b>${f.short ? `<span>${_escHtml(f.short)}</span>` : ''}`;
+        // The full text opens on click, so a long description does not push the reviews away.
+        return f.description && f.description !== f.short
+          ? `<details><summary>${head}</summary><p>${_escHtml(f.description)}</p></details>`
+          : `<div class="as-premium-feature">${head}</div>`;
+      }).join('')}</div>` : ''}
+      ${active
+        ? `<div class="as-premium-active">✔ ${_escHtml(t('appstore_premium_active'))}</div>`
+        : `<button class="s-btn s-btn-sm s-btn-primary as-premium-get" type="button">${_escHtml(t('appstore_premium_get'))}</button>`}`;
+    el.querySelector('.as-premium-get')?.addEventListener('click',
+      () => window.dispatchEvent(new CustomEvent('open-subscription-settings')));
+  }
+
+  const MERGED_STORES = {
+    apps: {
+      url: '/api/plugins/store', list: '#as-store-list', icon: '📦', empty: 'wstore_no_categories',
+      render: (el, items, body) => { el.className = 'as-app-grid'; renderMvmosApps(el, items, body); },
+    },
+    widgets: {
+      url: '/api/widgets/store', list: '#as-wstore-list', icon: '🔲', empty: 'wstore_no_widgets',
+      render: (el, items, body) => renderWidgetRows(el, items, body, { browse: true }),
+    },
+    themes: {
+      url: '/api/themes/store', list: '#as-tstore-list', icon: '🎨', empty: 'tstore_no_themes',
+      render: (el, items, body) => renderThemeStoreRows(el, items, body),
+    },
+  };
+
+  const _catKey = cat => String(cat.name || '').trim().toLowerCase();
+  const _catName = cat => cat.id === '_other' ? t('appstore_cat_other') : cat.name;
+
+  function _flattenItems(node, trail = []) {
+    let out = (node.items || []).map(it => ({ it, cats: trail }));
+    (node.categories || []).forEach(c => { out = out.concat(_flattenItems(c, trail.concat(_catName(c)))); });
+    return out;
+  }
+
+  async function loadMergedStore(body, kind, { enter = '' } = {}) {
+    const cfg = MERGED_STORES[kind];
+    const list = body.querySelector(cfg.list);
     if (!list) return;
-    // The search box lives outside the content area so it survives drilling
-    // into a category: it always searches the whole store, not the category
-    // that happens to be open.
+    let tree = null;
+    let path = [];          // category names from the root down to what is open
+    let query = '';
+
+    // The search box sits outside the changing content, so it survives drilling
+    // into a category and always searches every store, not just the open category.
     list.innerHTML = `
       <div class="as-toolbar">
-        <input class="as-filter" id="as-store-q-${store.id}" placeholder="${t('appstore_search_store_ph')}" autocomplete="off">
+        <input class="as-filter" type="search" placeholder="${_escHtml(t('appstore_search_store_ph'))}" autocomplete="off">
       </div>
-      <div id="as-store-body-${store.id}"><div class="as-loading">${t('loading')}</div></div>`;
-    const inner = list.querySelector(`#as-store-body-${store.id}`);
-    const query = list.querySelector(`#as-store-q-${store.id}`);
-    let debounce = null;
-    query.addEventListener('input', () => {
-      clearTimeout(debounce);
-      const q = query.value.trim();
-      // Empty query is not an empty result — it means "show me the categories
-      // again", which is where the tab started.
-      debounce = setTimeout(() => q ? searchStoreApps(body, store, q, inner)
-                                    : loadStoreCategories(body, store), 250);
-    });
+      <div class="as-store-warn"></div>
+      <div class="as-store-body"><div class="as-loading">${t('loading')}</div></div>`;
+    const input = list.querySelector('.as-filter');
+    const warn = list.querySelector('.as-store-warn');
+    const inner = list.querySelector('.as-store-body');
 
-    const res = await fetch(`/api/plugins/categories?store_id=${store.id}`);
-    const data = await res.json();
-    if (data.error) { inner.innerHTML = `<div class="as-loading">Error: ${data.error}</div>`; return; }
-
-    // v1 fallback — has _apps, render directly
-    if (data.version === 1 && data._apps) {
-      renderMvmosApps(inner, data._apps.map(a => ({ ...a, official: store.official ?? 0, store_id: store.id })), body);
-      return;
+    function walk() {
+      let node = tree;
+      const trail = [];
+      for (const key of path) {
+        const next = (node.categories || []).find(c => _catKey(c) === key);
+        if (!next) break;
+        node = next;
+        trail.push(next);
+      }
+      // A path that no longer exists (an item vanished from its store) falls back to what is left.
+      path = trail.map(_catKey);
+      return { node, trail };
     }
 
-    const cats = data.categories || [];
-    if (!cats.length) { inner.innerHTML = `<div class="as-loading">${t('wstore_no_categories')}</div>`; return; }
+    function tiles(cats) {
+      const grid = document.createElement('div');
+      grid.className = 'as-cat-grid as-cat-grid-merged';
+      cats.forEach(cat => {
+        const card = document.createElement('div');
+        card.className = 'as-cat-card';
+        card.innerHTML = `
+          <div class="as-cat-icon" style="height:2rem;display:flex;align-items:center;justify-content:center">${_escHtml(cat.icon || cfg.icon)}</div>
+          <div class="as-cat-label">${_escHtml(_catName(cat))}</div>
+          <div style="color:var(--text-dim);font-size:.72rem">${t('appstore_cat_count', { n: cat.count || 0 })}</div>`;
+        card.addEventListener('click', () => { path.push(_catKey(cat)); show(); });
+        grid.appendChild(card);
+      });
+      return grid;
+    }
 
-    inner.innerHTML = '';
-    const grid = document.createElement('div');
-    grid.style.cssText = 'display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;padding:4px 0';
-    cats.forEach(cat => {
-      const card = document.createElement('div');
-      card.style.cssText = 'background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:16px 12px;cursor:pointer;text-align:center;transition:background .15s';
-      card.innerHTML = `
-        <div style="font-size:1.8rem;line-height:1;height:2rem;display:flex;align-items:center;justify-content:center;margin-bottom:8px">${cat.icon || '📦'}</div>
-        <div style="font-weight:600;color:var(--text);font-size:.83rem">${cat.name}</div>
-        <div style="color:var(--text-dim);font-size:.75rem;margin-top:4px">${cat.count ? cat.count + ' apps' : ''}</div>
-      `;
-      card.addEventListener('mouseenter', () => card.style.background = 'var(--surface)');
-      card.addEventListener('mouseleave', () => card.style.background = 'var(--surface2)');
-      card.addEventListener('click', () => loadCategoryApps(body, store, cat, inner));
-      grid.appendChild(card);
-    });
-    inner.appendChild(grid);
-  }
-
-  // ── Store search ──────────────────────────────────────────────────────────
-  // /manifest walks every category of the store server-side and returns one
-  // flat, install-annotated list, so a search can cover the whole store
-  // without the client fetching each category itself. The answer is kept per
-  // store for the lifetime of the window so typing doesn't re-fetch it on
-  // every keystroke.
-  async function searchStoreApps(body, store, query, target) {
-    body._as._storeIndex = body._as._storeIndex || {};
-    if (!body._as._storeIndex[store.id]) {
-      target.innerHTML = `<div class="as-loading">${t('loading')}</div>`;
-      const res = await fetch(`/api/plugins/manifest?store_id=${store.id}`);
-      const apps = await res.json();
-      if (!Array.isArray(apps)) {
-        target.innerHTML = `<div class="as-loading">${t('as_error')}: ${apps.error || t('as_invalid_response')}</div>`;
+    function show() {
+      inner.innerHTML = '';
+      const q = query.trim().toLowerCase();
+      if (q) {
+        const hits = _flattenItems(tree).filter(({ it, cats }) =>
+          (it.name || '').toLowerCase().includes(q) ||
+          (it.id || '').toLowerCase().includes(q) ||
+          (it.description || '').toLowerCase().includes(q) ||
+          cats.some(c => c.toLowerCase().includes(q))).map(h => h.it);
+        const head = document.createElement('div');
+        head.className = 'as-loading';
+        head.textContent = hits.length ? t('appstore_search_results', { n: hits.length })
+                                       : t('appstore_search_none', { q: query.trim() });
+        inner.appendChild(head);
+        if (hits.length) { const el = document.createElement('div'); inner.appendChild(el); cfg.render(el, hits, body); }
         return;
       }
-      body._as._storeIndex[store.id] = apps;
+
+      const { node, trail } = walk();
+      if (trail.length) {
+        const bar = document.createElement('div');
+        bar.className = 'as-toolbar';
+        bar.innerHTML = `<button class="s-btn s-btn-sm" type="button">← ${_escHtml(trail.map(_catName).join(' › '))}</button>`;
+        bar.querySelector('button').addEventListener('click', () => { path.pop(); show(); });
+        inner.appendChild(bar);
+      }
+      if (!node.categories?.length && !node.items?.length) {
+        inner.insertAdjacentHTML('beforeend', `<div class="as-loading">${t(cfg.empty)}</div>`);
+        return;
+      }
+      if (node.categories?.length) inner.appendChild(tiles(node.categories));
+      if (node.items?.length) { const el = document.createElement('div'); inner.appendChild(el); cfg.render(el, node.items, body); }
     }
 
-    const q = query.toLowerCase();
-    const hits = body._as._storeIndex[store.id].filter(a =>
-      (a.name || '').toLowerCase().includes(q) ||
-      (a.id || '').toLowerCase().includes(q) ||
-      (a.description || '').toLowerCase().includes(q) ||
-      (a.category || '').toLowerCase().includes(q));
+    async function fetchTree() {
+      const res = await fetch(cfg.url);
+      const data = await res.json();
+      if (!Array.isArray(data.categories)) throw new Error(data.error || data.detail || t('as_invalid_response'));
+      tree = { categories: data.categories, items: [] };
+      warn.innerHTML = data.errors?.length
+        ? `<div class="as-loading">${_escHtml(t('appstore_store_unreachable', { names: data.errors.join(', ') }))}</div>` : '';
+    }
 
-    target.innerHTML = '';
-    const head = document.createElement('div');
-    head.className = 'as-loading';
-    head.textContent = hits.length ? t('appstore_search_results', { n: hits.length })
-                                   : t('appstore_search_none', { q: query });
-    target.appendChild(head);
-    if (!hits.length) return;
-
-    const appsEl = document.createElement('div');
-    appsEl.className = 'as-app-grid';
-    target.appendChild(appsEl);
-    renderMvmosApps(appsEl, hits.map(a => ({ ...a, official: store.official ?? 0, store_id: store.id })), body);
-    // A refresh follows an install/remove, so the cached list's `installed`
-    // flags are exactly what just changed — drop it and ask again.
-    body._as.refreshCurrent = () => {
-      delete body._as._storeIndex[store.id];
-      return searchStoreApps(body, store, query, target);
+    // A refresh follows an install/remove: the tree is cached server-side, only
+    // the installed flags changed, so ask again and stay where the user is.
+    body._as.refreshCurrent = async () => {
+      try { await fetchTree(); show(); } catch (e) { /* keep what is on screen */ }
     };
-  }
+    input.addEventListener('input', (() => {
+      let debounce = null;
+      return () => {
+        clearTimeout(debounce);
+        debounce = setTimeout(() => { if (tree) { query = input.value; show(); } }, 200);
+      };
+    })());
 
-  // ── Category apps ─────────────────────────────────────────────────────────
-  async function loadCategoryApps(body, store, cat, list) {
-    list.innerHTML = `<div class="as-loading">${t('loading')}</div>`;
-
-    const params = cat.manifest_url
-      ? `category_url=${encodeURIComponent(cat.manifest_url)}`
-      : `store_id=${store.id}&category_id=${encodeURIComponent(cat.id)}`;
-    const res = await fetch(`/api/plugins/category-apps?${params}`);
-    const apps = await res.json();
-    if (!Array.isArray(apps)) { list.innerHTML = `<div class="as-loading">${t('as_error')}: ${apps.error || t('as_invalid_response')}</div>`; return; }
-
-    // back button
-    const backBar = document.createElement('div');
-    backBar.className = 'as-toolbar';
-    backBar.innerHTML = `<button class="s-btn s-btn-sm" id="as-cat-back">← ${cat.name}</button>`;
-    backBar.querySelector('#as-cat-back').addEventListener('click', () => loadStoreCategories(body, store));
-    list.innerHTML = '';
-    list.appendChild(backBar);
-
-    const appsEl = document.createElement('div');
-    appsEl.className = 'as-app-grid';
-    list.appendChild(appsEl);
-    renderMvmosApps(appsEl, apps.map(a => ({ ...a, official: store.official ?? 0, store_id: store.id })), body);
-    body._as.refreshCurrent = () => loadCategoryApps(body, store, cat, list);
+    try { await fetchTree(); }
+    catch (e) { inner.innerHTML = `<div class="as-loading">${t('as_error')}: ${_escHtml(e.message)}</div>`; return; }
+    if (enter) {
+      const want = String(enter).toLowerCase();
+      const match = tree.categories.find(c => String(c.id).toLowerCase() === want || _catKey(c).includes(want));
+      if (match) path = [_catKey(match)];
+    }
+    show();
   }
 
   // ── App Installed (all installed mvmOS apps) ──────────────────────────────
@@ -551,27 +526,7 @@ const AppStore = (() => {
       list.innerHTML = `<div class="as-loading">${t('appstore_no_installed')}</div>`;
       return;
     }
-    renderMvmosApps(list, plugins.map(p => ({ ...p, installed: true })), body);
-  }
-
-  // ── My Apps (custom stores only) ──────────────────────────────────────────
-  async function loadMyApps(body) {
-    const list = body.querySelector('#as-myapps-list');
-    list.innerHTML = `<div class="as-loading">${t('loading')}</div>`;
-    const res = await fetch('/api/plugins');
-    const plugins = await res.json();
-    const myApps = plugins.filter(p => !p.official);
-    if (!myApps.length) {
-      list.innerHTML = `<div class="as-loading">${t('appstore_no_custom')}</div>`;
-      return;
-    }
-    const pendingAppId = body._as?._pendingAppSettings;
-    if (pendingAppId) delete body._as._pendingAppSettings;
-    renderMvmosApps(list, myApps.map(p => ({ ...p, installed: true })), body);
-    if (pendingAppId) {
-      const app = myApps.find(p => p.id === pendingAppId);
-      if (app) _openAppSettings(body, pendingAppId);
-    }
+    renderMvmosApps(list, plugins.map(p => ({ ...p, installed: true })), body, { badge: false });
   }
 
   // ── Stores management ─────────────────────────────────────────────────────
@@ -599,7 +554,6 @@ const AppStore = (() => {
         if (!confirm(`Remove store "${store.name}"?`)) return;
         await fetch(`/api/plugins/stores/${store.id}`, { method: 'DELETE' });
         loadStores(body);
-        loadStoreTabs(body);
       });
       list.appendChild(row);
     });
@@ -623,117 +577,102 @@ const AppStore = (() => {
     body.querySelector('#as-add-store-form').style.display = 'none';
     err.textContent = '';
     loadStores(body);
-    loadStoreTabs(body);
   }
 
   // ── mvmOS app row renderer ────────────────────────────────────────────────
-  function renderMvmosApps(list, apps, body) {
+  // Installing, updating and reinstalling share one flow. Returns true when the
+  // app ended up installed, false when it was cancelled or failed (the button is restored).
+  async function installMvmosApp(body, appData, btn, label) {
+    const restore = () => { btn.disabled = false; btn.textContent = btn.dataset.orig || t('appstore_install'); };
+    if (!appData.official) {
+      const ok = confirm(
+        `⚠️ Third-party app\n\n` +
+        `"${appData.name}" is from an unofficial store.\n\n` +
+        `mvmOS does not verify third-party apps. Install only from sources you trust. ` +
+        `The author is solely responsible for the app's content.\n\n` +
+        `Install anyway?`
+      );
+      if (!ok) return false;
+    }
+    btn.disabled = true; btn.textContent = label;
+    const post = extra => fetch('/api/plugins/install', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...appData, ...extra }),
+    }).then(r => r.json());
+    let result = await post();
+    if (result.needs_backend_confirm) {
+      const confirmed = await _backendConfirmDialog(body, appData.name);
+      if (!confirmed) { restore(); return false; }
+      result = await post({ install_backend: true });
+    }
+    if (result.ok) {
+      const wasOpen = Array.from(document.querySelectorAll('.window')).some(win => win.dataset.winId === appData.id);
+      await mvmOS._refreshPlugins();
+      await mvmOS._loadPlugin(appData.id);
+      if (wasOpen) Desktop.reloadApp?.(appData.id);
+      body._as?.refreshCurrent?.();
+      return true;
+    }
+    restore();
+    if (result.min_core_version) {
+      alert(t('appstore_requires_core').replace('{min}', result.min_core_version).replace('{cur}', result.current_core_version));
+    } else {
+      alert('Failed: ' + (result.error || 'unknown'));
+    }
+    return false;
+  }
+
+  function openMvmosApp(id) {
+    fetch(`/api/plugins/${id}/open`, { method: 'POST' }).catch(() => {});
+    mvmOS._apps?.[id]?.launch?.() ?? mvmOS._loadPlugin(id).then(() => mvmOS._apps?.[id]?.launch?.());
+  }
+
+  async function removeMvmosApp(body, app, btn) {
+    const appLabel = app.name || app.id;
+    const confirmed = app.has_backend
+      ? await _backendConfirmDialog(body, appLabel)
+      : await mvmOS.confirm(`Remove "${appLabel}"?`, { danger: true });
+    if (!confirmed) return false;
+    btn.disabled = true; btn.textContent = t('um_removing');
+    await fetch(`/api/plugins/${app.id}`, { method: 'DELETE' });
+    mvmOS._removeFromStartMenu(app.id);
+    window._desktopRemoveApp?.(app.id);
+    Desktop.removeApp?.(app.id);
+    body._as?.refreshCurrent?.();
+    return true;
+  }
+
+  // The cards only show what is decided in the list: install, or update when there is
+  // one. Everything else about an installed app lives on its own page.
+  function renderMvmosApps(list, apps, body, { badge = true } = {}) {
     list.innerHTML = '';
     apps.forEach(app => {
       const row = document.createElement('article');
       row.className = 'as-app-card';
+      const actions = [
+        app.update_available ? `<button class="s-btn s-btn-sm as-mvmos-update">${t('um_update_btn')}</button>` : '',
+        app.installed
+          ? (badge ? `<span class="as-installed-badge">${t('appstore_installed_badge')}</span>` : '')
+          : `<button class="s-btn s-btn-sm as-mvmos-install">${t('appstore_install')}</button>`,
+      ].join('');
       row.innerHTML = `
         <button class="as-app-card-main" type="button" aria-label="${app.name}">
           <span class="as-app-icon">${app.icon || '📦'}</span>
-          <span class="as-app-copy"><span class="as-app-name">${app.name}</span><span class="as-app-desc">${app.description || ''}</span></span>
+          <span class="as-app-copy"><span class="as-app-name">${app.name}${app.premium ? premiumMark() : ''}${badge ? sourceMark(app) : ''}</span><span class="as-app-desc">${app.description || ''}</span></span>
         </button>
-        <div class="as-app-actions">
-          ${app.update_available ? `<button class="s-btn s-btn-sm as-mvmos-update" data-app='${JSON.stringify(app)}'>${t('um_update_btn')}</button>` : ''}
-          ${app.installed
-            ? `<button class="s-btn s-btn-sm as-mvmos-open" data-id="${app.id}">▶ ${t('appstore_open')}</button>
-               ${app.settings?.length ? `<button class="s-btn s-btn-sm as-mvmos-settings" data-id="${app.id}">⚙</button>` : ''}
-               ${app.is_system ? '' : `<button class="s-btn s-btn-sm s-btn-danger as-mvmos-remove" data-id="${app.id}" data-name="${app.name}" data-has-backend="${app.has_backend ? '1' : '0'}">${t('appstore_remove')}</button>`}`
-            : `<button class="s-btn s-btn-sm as-mvmos-install" data-app='${JSON.stringify(app)}'>${t('appstore_install')}</button>`}
-        </div>
+        ${actions ? `<div class="as-app-actions">${actions}</div>` : ''}
       `;
 
       row.querySelector('.as-app-card-main').addEventListener('click', () => openMvmosAppDetail(body, app));
-
-      async function doInstall(appData, btn, label) {
-        if (!appData.official) {
-          const ok = confirm(
-            `⚠️ Third-party app\n\n` +
-            `"${appData.name}" is from an unofficial store.\n\n` +
-            `mvmOS does not verify third-party apps. Install only from sources you trust. ` +
-            `The author is solely responsible for the app's content.\n\n` +
-            `Install anyway?`
-          );
-          if (!ok) return;
-        }
-        btn.disabled = true; btn.textContent = label;
-        const res = await fetch('/api/plugins/install', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(appData),
-        });
-        const result = await res.json();
-        if (result.needs_backend_confirm) {
-          const confirmed = await _backendConfirmDialog(body, appData.name);
-          if (!confirmed) { btn.disabled = false; btn.textContent = btn.dataset.orig || t('appstore_install'); return; }
-          const res2 = await fetch('/api/plugins/install', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ ...appData, install_backend: true }),
-          });
-          const result2 = await res2.json();
-          console.log('[appstore] install result2:', result2);
-          if (result2.ok) {
-            const wasOpen = Array.from(document.querySelectorAll('.window')).some(win => win.dataset.winId === appData.id);
-            await mvmOS._refreshPlugins();
-            await mvmOS._loadPlugin(appData.id);
-            if (wasOpen) Desktop.reloadApp?.(appData.id);
-            body._as?.refreshCurrent?.();
-          } else {
-            btn.disabled = false; btn.textContent = btn.dataset.orig || t('appstore_install');
-            alert('Failed: ' + (result2.error || 'unknown'));
-          }
-        } else if (result.ok) {
-          const wasOpen = Array.from(document.querySelectorAll('.window')).some(win => win.dataset.winId === appData.id);
-          await mvmOS._refreshPlugins();
-          await mvmOS._loadPlugin(appData.id);
-          if (wasOpen) Desktop.reloadApp?.(appData.id);
-          body._as?.refreshCurrent?.();
-        } else if (result.min_core_version) {
-          btn.disabled = false; btn.textContent = btn.dataset.orig || t('appstore_install');
-          alert(t('appstore_requires_core').replace('{min}', result.min_core_version).replace('{cur}', result.current_core_version));
-        } else {
-          btn.disabled = false; btn.textContent = btn.dataset.orig || t('appstore_install');
-          alert('Failed: ' + (result.error || 'unknown'));
-        }
-      }
-
-      row.querySelector('.as-mvmos-open')?.addEventListener('click', e => {
-        const id = e.target.dataset.id;
-        fetch(`/api/plugins/${id}/open`, { method: 'POST' }).catch(() => {});
-        mvmOS._apps?.[id]?.launch?.() ?? mvmOS._loadPlugin(id).then(() => mvmOS._apps?.[id]?.launch?.());
-      });
-
       row.querySelector('.as-mvmos-install')?.addEventListener('click', async e => {
         e.target.dataset.orig = t('appstore_install');
-        await doInstall(JSON.parse(e.target.dataset.app), e.target, t('um_installing'));
+        await installMvmosApp(body, app, e.target, t('um_installing'));
       });
       row.querySelector('.as-mvmos-update')?.addEventListener('click', async e => {
         e.target.dataset.orig = t('um_update_btn');
-        await doInstall(JSON.parse(e.target.dataset.app), e.target, t('um_updating'));
+        await installMvmosApp(body, app, e.target, t('um_updating'));
       });
-      row.querySelector('.as-mvmos-settings')?.addEventListener('click', e => {
-        _openAppSettings(body, e.target.dataset.id, app);
-      });
-      row.querySelector('.as-mvmos-remove')?.addEventListener('click', async e => {
-        const btn = e.target;
-        const appLabel = btn.dataset.name || btn.dataset.id;
-        const confirmed = btn.dataset.hasBackend === '1'
-          ? await _backendConfirmDialog(body, appLabel)
-          : await mvmOS.confirm(`Remove "${appLabel}"?`, { danger: true });
-        if (!confirmed) return;
-        btn.disabled = true; btn.textContent = t('um_removing');
-        await fetch(`/api/plugins/${btn.dataset.id}`, { method: 'DELETE' });
-        mvmOS._removeFromStartMenu(btn.dataset.id);
-        window._desktopRemoveApp?.(btn.dataset.id);
-        Desktop.removeApp?.(btn.dataset.id);
-        body._as?.refreshCurrent?.();
-      });
-
       list.appendChild(row);
     });
   }
@@ -760,8 +699,61 @@ const AppStore = (() => {
     body.querySelector('.as-wrap').classList.add('as-app-detail-open');
     detail.style.display = 'flex';
     detail.classList.add('as-app-detail');
-    detailBody.innerHTML = `<div class="as-app-detail-head"><span class="as-app-icon">${app.icon || '📦'}</span><div><div class="as-detail-name">${app.name}</div><div class="as-detail-ver">v${app.version || '—'}</div></div></div><p class="as-detail-short">${app.description || ''}</p><a class="as-site-link" target="_blank" rel="noopener" href="https://mvmos.org/app/${encodeURIComponent(app.id)}">${reviewText.siteLink}</a><section class="as-review-section"><h3>${reviewText.title}</h3><div class="as-review-loading">${reviewText.loading}</div></section>`;
+    detailBody.innerHTML = `<div class="as-app-detail-head"><span class="as-app-icon">${app.icon || '📦'}</span><div><div class="as-detail-name">${app.name}</div><div class="as-detail-ver">v${app.version || '—'}</div><div class="as-detail-source"></div></div></div><p class="as-detail-short">${app.description || ''}</p><div class="as-app-detail-actions"></div>${app.premium ? '<section class="as-premium-section"></section>' : ''}<a class="as-site-link" target="_blank" rel="noopener" href="https://mvmos.org/app/${encodeURIComponent(app.id)}">${reviewText.siteLink}</a><section class="as-review-section"><h3>${reviewText.title}</h3><div class="as-review-loading">${reviewText.loading}</div></section>`;
     const reviewsEl = detailBody.querySelector('.as-review-section');
+    const premiumEl = detailBody.querySelector('.as-premium-section');
+    if (premiumEl) loadPremiumSection(premiumEl, app);
+
+    // Everything you can do with an installed app: open it, its settings, pull the
+    // newest version again when something is off, or remove it.
+    async function setupActions() {
+      const actionsEl = detailBody.querySelector('.as-app-detail-actions');
+      const plugins = await fetch('/api/plugins').then(r => r.json()).catch(() => []);
+      const inst = Array.isArray(plugins) ? plugins.find(p => p.id === app.id) : null;
+      if (!inst || !detailBody.contains(actionsEl)) return;
+      const source = inst.is_system ? t('appstore_source_system')
+        : inst.store_name ? t('appstore_source', { name: `${inst.official ? '⚡' : '📦'} ${esc(inst.store_name)}` }) : '';
+      detailBody.querySelector('.as-detail-source').innerHTML = source;
+      const btn = (cls, label, extra = '') => `<button class="s-btn s-btn-sm ${cls}" type="button" ${extra}>${label}</button>`;
+      actionsEl.innerHTML = [
+        app.update_available ? btn('as-act-update', t('um_update_btn')) : '',
+        btn('as-act-open', `▶ ${t('appstore_open')}`),
+        inst.settings?.length ? btn('as-act-settings', `⚙ ${t('app_settings')}`) : '',
+        inst.is_system ? '' : btn('as-act-reinstall', `↻ ${t('appstore_reinstall')}`, `title="${esc(t('appstore_reinstall_hint'))}"`),
+        inst.is_system ? '' : btn('s-btn-danger as-act-remove', t('appstore_remove')),
+      ].join('');
+      const reopen = extra => openMvmosAppDetail(body, { ...app, ...extra, installed: true });
+
+      actionsEl.querySelector('.as-act-open').addEventListener('click', () => openMvmosApp(app.id));
+      actionsEl.querySelector('.as-act-settings')?.addEventListener('click', () => {
+        body._as._pendingAppSettings = app.id;
+        body.querySelector('.as-tab[data-tab="app-installed"]').click();
+      });
+      actionsEl.querySelector('.as-act-update')?.addEventListener('click', async e => {
+        e.target.dataset.orig = t('um_update_btn');
+        if (await installMvmosApp(body, app, e.target, t('um_updating'))) reopen({ update_available: false });
+      });
+      actionsEl.querySelector('.as-act-reinstall')?.addEventListener('click', async e => {
+        const b = e.target;
+        b.dataset.orig = `↻ ${t('appstore_reinstall')}`;
+        b.disabled = true; b.textContent = t('appstore_reinstalling');
+        const res = await fetch(`/api/plugins/${encodeURIComponent(app.id)}/latest`);
+        const latest = await res.json().catch(() => ({}));
+        if (!res.ok || !latest.id) {
+          b.disabled = false; b.textContent = b.dataset.orig;
+          alert(t('appstore_reinstall_failed'));
+          return;
+        }
+        if (await installMvmosApp(body, latest, b, t('appstore_reinstalling'))) {
+          reopen({ version: latest.version, description: latest.description || app.description, icon: latest.icon || app.icon, update_available: false });
+        }
+      });
+      actionsEl.querySelector('.as-act-remove')?.addEventListener('click', async e => {
+        if (await removeMvmosApp(body, { id: app.id, name: app.name, has_backend: inst.has_backend }, e.target)) closeDetail(body);
+      });
+    }
+    if (app.installed) setupActions();
+
     async function loadReviews() {
       reviewsEl.innerHTML = `<h3>${reviewText.title}</h3><div class="as-review-loading">${reviewText.loading}</div>`;
       const res = await fetch(`/api/plugins/${encodeURIComponent(app.id)}/reviews`);
@@ -1118,159 +1110,8 @@ const AppStore = (() => {
     return success;
   }
 
-  // ── Widget store tabs ─────────────────────────────────────────────────────
-  async function loadWidgetStoreTabs(body, autoActivate = false, widgetType = '') {
-    const res = await fetch('/api/widgets/stores');
-    const stores = await res.json();
-    const tabsEl = body.querySelector('#as-widget-store-tabs');
-    tabsEl.innerHTML = '';
-
-    stores.forEach(store => {
-      const tab = document.createElement('div');
-      tab.className = 'as-tab';
-      tab.dataset.tab = `wstore-${store.id}`;
-      tab.dataset.section = 'widgets';
-      tab.textContent = store.official ? `⚡ ${store.name}` : `📦 ${store.name}`;
-      tabsEl.appendChild(tab);
-
-      const panelId = `asp-wstore-${store.id}`;
-      if (!body.querySelector(`#${panelId}`)) {
-        const panel = document.createElement('div');
-        panel.className = 'as-panel';
-        panel.id = panelId;
-        panel.innerHTML = `<div class="as-list" id="as-wstore-list-${store.id}"><div class="as-loading"\>${t('loading')}</div></div>`;
-        body.querySelector('.as-main').insertBefore(panel, body.querySelector('#as-output-wrap'));
-      }
-
-      tab.addEventListener('click', () => {
-        body._as.activateTab(tab);
-        loadWidgetStoreCategories(body, store);
-        body._as.refreshCurrent = () => loadWidgetStoreCategories(body, store);
-      });
-    });
-
-    if (autoActivate && stores.length && !body._as._suppressWidgetStoreAutoActivate) {
-      const firstTab = tabsEl.querySelector('.as-tab');
-      if (firstTab) {
-        body._as.activateTab(firstTab);
-        loadWidgetStoreCategories(body, stores[0], widgetType);
-        body._as.refreshCurrent = () => loadWidgetStoreCategories(body, stores[0]);
-      }
-    }
-  }
-
-  async function loadWidgetStoreCategories(body, store, autoEnter) {
-    const list = body.querySelector(`#as-wstore-list-${store.id}`);
-    if (!list) return;
-    list.innerHTML = `<div class="as-loading">${t('loading')}</div>`;
-    const res = await fetch(`/api/widgets/categories?store_id=${store.id}`);
-    const data = await res.json();
-    if (data.error) { list.innerHTML = `<div class="as-loading">Error: ${data.error}</div>`; return; }
-
-    const cats = data.categories || [];
-    if (!cats.length) { list.innerHTML = `<div class="as-loading">${t('wstore_no_widgets')}</div>`; return; }
-
-    list.innerHTML = '';
-    const grid = document.createElement('div');
-    grid.style.cssText = 'display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;padding:4px 0';
-    const cards = [];
-    cats.forEach(cat => {
-      const card = document.createElement('div');
-      card.style.cssText = 'background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:16px 12px;cursor:pointer;text-align:center;transition:background .15s';
-      card.innerHTML = `
-        <div style="font-size:1.8rem;line-height:1;height:2rem;display:flex;align-items:center;justify-content:center;margin-bottom:8px">${cat.icon || '🔲'}</div>
-        <div style="font-weight:600;color:var(--text);font-size:.83rem">${cat.name}</div>
-        <div style="color:var(--text-dim);font-size:.75rem;margin-top:4px"></div>
-      `;
-      card.addEventListener('mouseenter', () => card.style.background = 'var(--surface)');
-      card.addEventListener('mouseleave', () => card.style.background = 'var(--surface2)');
-      card.addEventListener('click', () => loadWidgetCategoryItems(body, store, cat, list));
-      grid.appendChild(card);
-      cards.push({ cat, card });
-    });
-    list.appendChild(grid);
-
-    if (autoEnter) {
-      const match = cards.find(({ cat }) => cat.id === autoEnter || cat.name.toLowerCase().includes(autoEnter));
-      if (match) match.card.click();
-    }
-  }
-
-  async function loadWidgetCategoryItems(body, store, cat, list, parentCat) {
-    list.innerHTML = `<div class="as-loading">${t('loading')}</div>`;
-
-    if (cat.manifest_url) {
-      let data;
-      try {
-        const res = await fetch(`/api/widgets/manifest?url=${encodeURIComponent(cat.manifest_url)}`);
-        data = await res.json();
-      } catch(e) { list.innerHTML = `<div class="as-loading">Error loading manifest</div>`; return; }
-
-      // manifest has subcategories — render them
-      if (data.categories?.length) {
-        const backFn = parentCat
-          ? () => loadWidgetCategoryItems(body, store, parentCat, list)
-          : () => loadWidgetStoreCategories(body, store);
-        const backBar = document.createElement('div');
-        backBar.className = 'as-toolbar';
-        backBar.innerHTML = `<button class="s-btn s-btn-sm">← ${cat.name}</button>`;
-        backBar.querySelector('button').addEventListener('click', backFn);
-        list.innerHTML = '';
-        list.appendChild(backBar);
-        const grid = document.createElement('div');
-        grid.style.cssText = 'display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;padding:4px 0';
-        data.categories.forEach(sub => {
-          const card = document.createElement('div');
-          card.style.cssText = 'background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:16px 12px;cursor:pointer;text-align:center;transition:background .15s';
-          card.innerHTML = `
-            <div style="font-size:1.8rem;line-height:1;height:2rem;display:flex;align-items:center;justify-content:center;margin-bottom:8px">${sub.icon || '🔲'}</div>
-            <div style="font-weight:600;color:var(--text);font-size:.83rem">${sub.name}</div>
-          `;
-          card.addEventListener('mouseenter', () => card.style.background = 'var(--surface)');
-          card.addEventListener('mouseleave', () => card.style.background = 'var(--surface2)');
-          card.addEventListener('click', () => loadWidgetCategoryItems(body, store, sub, list, cat));
-          grid.appendChild(card);
-        });
-        list.appendChild(grid);
-        body._as.refreshCurrent = () => loadWidgetCategoryItems(body, store, cat, list, parentCat);
-        return;
-      }
-
-      // manifest has widgets — render them
-      const widgets = data.widgets || [];
-      const backFn = parentCat
-        ? () => loadWidgetCategoryItems(body, store, parentCat, list)
-        : () => loadWidgetStoreCategories(body, store);
-      const backBar = document.createElement('div');
-      backBar.className = 'as-toolbar';
-      backBar.innerHTML = `<button class="s-btn s-btn-sm">← ${cat.name}</button>`;
-      backBar.querySelector('button').addEventListener('click', backFn);
-      list.innerHTML = '';
-      list.appendChild(backBar);
-      const el = document.createElement('div');
-      list.appendChild(el);
-      renderWidgetRows(el, widgets.map(w => ({ ...w, official: store.official ?? 0, store_id: store.id })), body);
-      body._as.refreshCurrent = () => loadWidgetCategoryItems(body, store, cat, list, parentCat);
-    } else {
-      // no manifest_url — fetch by store + category_id
-      const res = await fetch(`/api/widgets/category-widgets?store_id=${store.id}&category_id=${encodeURIComponent(cat.id)}`);
-      const widgets = await res.json();
-      if (widgets.error) { list.innerHTML = `<div class="as-loading">Error: ${widgets.error}</div>`; return; }
-      const backBar = document.createElement('div');
-      backBar.className = 'as-toolbar';
-      backBar.innerHTML = `<button class="s-btn s-btn-sm">← ${cat.name}</button>`;
-      backBar.querySelector('button').addEventListener('click', () => loadWidgetStoreCategories(body, store));
-      list.innerHTML = '';
-      list.appendChild(backBar);
-      const el = document.createElement('div');
-      list.appendChild(el);
-      renderWidgetRows(el, widgets.map(w => ({ ...w, official: store.official ?? 0, store_id: store.id })), body);
-      body._as.refreshCurrent = () => loadWidgetCategoryItems(body, store, cat, list);
-    }
-  }
-
-  async function loadMyWidgets(body) {
-    const list = body.querySelector('#as-my-widgets-list');
+  async function loadWidgetInstalled(body) {
+    const list = body.querySelector('#as-widget-installed-list');
     list.innerHTML = `<div class="as-loading">${t('loading')}</div>`;
     const res = await fetch('/api/widgets');
     const widgets = await res.json();
@@ -1286,15 +1127,6 @@ const AppStore = (() => {
       const wData = widgets.find(w => w.id === pendingId);
       if (def && wData) renderWidgetSettingsPage(body, { ...wData, ...def });
     }
-  }
-
-  async function loadWidgetInstalled(body) {
-    const list = body.querySelector('#as-widget-installed-list');
-    list.innerHTML = `<div class="as-loading">${t('loading')}</div>`;
-    const res = await fetch('/api/widgets');
-    const widgets = await res.json();
-    if (!widgets.length) { list.innerHTML = `<div class="as-loading">${t('wstore_no_installed')}</div>`; return; }
-    renderWidgetRows(list, widgets.map(w => ({ ...w, installed: true })), body);
   }
 
   async function loadWidgetStores(body) {
@@ -1320,7 +1152,6 @@ const AppStore = (() => {
         if (!confirm(`Remove store "${store.name}"?`)) return;
         await fetch(`/api/widgets/stores/${store.id}`, { method: 'DELETE' });
         loadWidgetStores(body);
-        loadWidgetStoreTabs(body);
       });
       list.appendChild(row);
     });
@@ -1344,10 +1175,9 @@ const AppStore = (() => {
     body.querySelector('#as-add-wstore-form').style.display = 'none';
     err.textContent = '';
     loadWidgetStores(body);
-    loadWidgetStoreTabs(body);
   }
 
-  function renderWidgetRows(list, widgets, body) {
+  function renderWidgetRows(list, widgets, body, { browse = false } = {}) {
     list.innerHTML = '';
     widgets.forEach(w => {
       const row = document.createElement('div');
@@ -1356,19 +1186,21 @@ const AppStore = (() => {
         <div class="as-pkg-info" style="flex:1">
           <div class="as-pkg-top">
             <span class="as-pkg-name">${w.icon} ${w.name}</span>
+            ${browse ? sourceMark(w) : ''}
             <span class="as-cat-badge as-cat-sm">${w.category}</span>
             ${w.widget_type ? `<span class="as-cat-badge as-cat-sm" style="background:#89b4fa20;color:#89b4fa">${w.widget_type}</span>` : ''}
             ${w.installed ? `<span class="as-installed-badge">${t('appstore_installed_badge')}</span>` : ''}
             ${w.update_available ? `<span class="as-update-badge">${t('appstore_update')}</span>` : ''}
           </div>
           <span class="as-pkg-desc">${w.description || ''}</span>
+          ${!browse && w.installed && w.store_name ? `<span class="as-pkg-ver">${t('appstore_source', { name: `${w.official ? '⚡' : '📦'} ${w.store_name}` })}</span>` : ''}
         </div>
         <div style="display:flex;align-items:center;gap:6px;padding-left:10px;flex-shrink:0">
-          ${w.update_available ? `<button class="s-btn s-btn-sm ws-update" data-widget='${JSON.stringify(w)}'>${t('um_update_btn')}</button>` : ''}
+          ${w.update_available ? `<button class="s-btn s-btn-sm ws-update">${t('um_update_btn')}</button>` : ''}
           ${w.installed
             ? `${(window.mvmOS?._widgets?.[w.id]?.settings?.length) ? `<button class="s-btn s-btn-sm ws-settings" data-id="${w.id}">${t('wstore_settings')}</button>` : ''}
                <button class="s-btn s-btn-sm s-btn-danger ws-remove" data-id="${w.id}">${t('remove')}</button>`
-            : `<button class="s-btn s-btn-sm ws-install" data-widget='${JSON.stringify(w)}'>${t('appstore_install')}</button>`}
+            : `<button class="s-btn s-btn-sm ws-install">${t('appstore_install')}</button>`}
         </div>
       `;
 
@@ -1393,10 +1225,10 @@ const AppStore = (() => {
       }
 
       row.querySelector('.ws-install')?.addEventListener('click', e => {
-        doWidgetInstall(JSON.parse(e.target.dataset.widget), e.target, t('um_installing'));
+        doWidgetInstall(w, e.target, t('um_installing'));
       });
       row.querySelector('.ws-update')?.addEventListener('click', e => {
-        doWidgetInstall(JSON.parse(e.target.dataset.widget), e.target, t('um_updating'));
+        doWidgetInstall(w, e.target, t('um_updating'));
       });
       row.querySelector('.ws-remove')?.addEventListener('click', async e => {
         const btn = e.target;
@@ -1428,7 +1260,7 @@ const AppStore = (() => {
 
     // render inside the active panel's list, same as _openAppSettings
     const activePanel = body.querySelector('.as-panel.active');
-    const list = activePanel?.querySelector('[id^="as-wstore-list-"], #as-my-widgets-list, #as-widget-installed-list') || body.querySelector('.as-main');
+    const list = activePanel?.querySelector('[id^="as-wstore-list-"], #as-widget-installed-list') || body.querySelector('.as-main');
 
     // show loading while reading db values
     list.innerHTML = `<div style="padding:20px;color:var(--text-dim)">${t('loading')}</div>`;
@@ -1596,115 +1428,23 @@ const AppStore = (() => {
     });
   }
 
-  // ── Theme Store tabs (sidebar) ───────────────────────────────────────────────
-  async function loadThemeStoreTabs(body) {
-    const container = body.querySelector('#as-theme-store-tabs');
-    if (!container) return;
-    container.innerHTML = '';
-    const res = await fetch('/api/themes/stores');
-    const stores = await res.json();
-    stores.forEach(store => {
-      const tab = document.createElement('div');
-      tab.className = 'as-tab';
-      tab.dataset.tab = `tstore-${store.id}`;
-      tab.dataset.section = 'themes';
-      tab.dataset.storeManifest = store.manifest_url;
-      tab.textContent = `🏪 ${store.name}`;
-      tab.addEventListener('click', () => {
-        body._as?.activateTab(tab);
-        loadThemeStoreCategories(body, store, tab);
-      });
-      container.appendChild(tab);
-    });
-  }
-
-  async function loadThemeStoreCategories(body, store, tab) {
-    const manifestUrl = typeof store === 'string' ? store : store.manifest_url;
-    const storeId = typeof store === 'object' ? store.id : null;
-    const main = body.querySelector('.as-main');
-    let panel = tab?._panel;
-    if (!panel) {
-      panel = document.createElement('div');
-      panel.className = 'as-panel';
-      panel.innerHTML = `<div class="as-list as-cat-grid" id="as-tcat-grid-${Date.now()}"><div class="as-loading"\>${t('loading')}</div></div>`;
-      main.appendChild(panel);
-      if (tab) tab._panel = panel;
-    }
-    body.querySelectorAll('.as-panel').forEach(p => p.classList.remove('active'));
-    panel.classList.add('active');
-
-    const gridEl = panel.querySelector('[id^="as-tcat-grid"]');
-    gridEl.innerHTML = `<div class="as-loading">${t('loading')}</div>`;
-
-    const res = await fetch('/api/themes/categories');
-    const cats = await res.json();
-
-    if (!cats.length) { gridEl.innerHTML = `<div class="as-loading">${t('appstore_no_categories')}</div>`; return; }
-
-    gridEl.innerHTML = cats.map(c => `
-      <div class="as-cat-card" data-manifest="${c.manifest_url}">
-        <div class="as-cat-icon" style="height:2rem;display:flex;align-items:center;justify-content:center">${c.icon}</div>
-        <div class="as-cat-label">${c.name}</div>
-      </div>
-    `).join('');
-
-    gridEl.querySelectorAll('.as-cat-card').forEach(card => {
-      card.addEventListener('click', () => loadThemeCategoryItems(body, card.dataset.manifest, panel, storeId));
-    });
-  }
-
-  async function loadThemeCategoryItems(body, manifestUrl, panel, storeId) {
-    const gridEl = panel.querySelector('[id^="as-tcat-grid"]');
-    gridEl.innerHTML = `<div class="as-loading">${t('loading')}</div>`;
-
-    const [catRes, installedRes] = await Promise.all([
-      fetch(`/api/themes/category-themes?manifest_url=${encodeURIComponent(manifestUrl)}`),
-      fetch('/api/themes'),
-    ]);
-    const items = await catRes.json();
-    const installed = await installedRes.json();
-    const installedMap = Object.fromEntries(installed.map(t => [t.id, t]));
-
-    gridEl.innerHTML = '';
-    const backBtn = document.createElement('div');
-    backBtn.style.cssText = 'padding:8px 12px;border-bottom:1px solid var(--border);';
-    backBtn.innerHTML = `<button class="s-btn-sm">${t('as_back')}</button>`;
-    backBtn.querySelector('button').addEventListener('click', async () => {
-      const catRes2 = await fetch('/api/themes/categories');
-      const cats2 = await catRes2.json();
-      gridEl.innerHTML = cats2.map(c => `
-        <div class="as-cat-card" data-manifest="${c.manifest_url}">
-          <div class="as-cat-icon" style="height:2rem;display:flex;align-items:center;justify-content:center">${c.icon}</div>
-          <div class="as-cat-label">${c.name}</div>
-        </div>
-      `).join('');
-      gridEl.querySelectorAll('.as-cat-card').forEach(card => {
-        card.addEventListener('click', () => loadThemeCategoryItems(body, card.dataset.manifest, panel, storeId));
-      });
-    });
-    gridEl.appendChild(backBtn);
-
-    if (!items.length) { gridEl.innerHTML += `<div class="as-loading">${t('tstore_no_themes')}</div>`; return; }
-
-    const list = document.createElement('div');
-    list.style.cssText = 'overflow-y:auto;flex:1;';
-    items.forEach(theme => {
-      const inst = installedMap[theme.id];
-      const isActive = inst?.is_active;
+  function renderThemeStoreRows(list, themes, body) {
+    list.innerHTML = '';
+    themes.forEach(theme => {
       const row = document.createElement('div');
       row.className = 'as-pkg-row';
       row.innerHTML = `
-        <div style="font-size:1.4rem;width:28px;text-align:center;flex-shrink:0">${theme.icon}</div>
+        <div style="font-size:1.4rem;width:28px;text-align:center;flex-shrink:0">${theme.icon || '🎨'}</div>
         <div class="as-pkg-info">
-          <div class="as-pkg-top"><span class="as-pkg-name">${theme.name}</span></div>
-          <div class="as-pkg-desc">${theme.description}</div>
+          <div class="as-pkg-top"><span class="as-pkg-name">${theme.name}</span>${sourceMark(theme)}</div>
+          <div class="as-pkg-desc">${theme.description || ''}</div>
           <div class="as-pkg-ver">${theme.version} · ${theme.layout}</div>
         </div>
         <div class="as-pkg-actions">
-          ${isActive ? `<span class="as-installed-badge">${t('as_theme_active')}</span>` :
-            inst ? `<button class="s-btn s-btn-sm ts-activate" data-id="${theme.id}">${t('appstore_activate')}</button>
-                    <button class="s-btn-sm s-btn-danger ts-remove" data-id="${theme.id}">✕</button>` :
-            `<button class="s-btn ts-install" data-theme='${JSON.stringify({...theme, store_id: storeId ?? null})}'>${t('appstore_install')}</button>`
+          ${theme.is_active ? `<span class="as-installed-badge">${t('as_theme_active')}</span>` :
+            theme.installed ? `<button class="s-btn s-btn-sm ts-activate">${t('appstore_activate')}</button>
+                    <button class="s-btn-sm s-btn-danger ts-remove">✕</button>` :
+            `<button class="s-btn ts-install">${t('appstore_install')}</button>`
           }
         </div>
       `;
@@ -1712,53 +1452,49 @@ const AppStore = (() => {
       row.querySelector('.ts-install')?.addEventListener('click', async e => {
         const btn = e.target;
         btn.disabled = true; btn.textContent = t('loading');
-        const data = JSON.parse(btn.dataset.theme);
         const res = await fetch('/api/themes/install', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(data),
+          body: JSON.stringify(theme),
         });
-        if ((await res.json()).ok) {
-          body._as.refreshCurrent?.();
-          loadThemeCategoryItems(body, manifestUrl, panel, storeId);
-        } else { btn.disabled = false; btn.textContent = t('appstore_install'); }
+        if ((await res.json()).ok) body._as.refreshCurrent?.();
+        else { btn.disabled = false; btn.textContent = t('appstore_install'); }
       });
 
-      row.querySelector('.ts-activate')?.addEventListener('click', async e => {
-        await mvmOS._applyTheme(e.target.dataset.id);
-        loadThemeCategoryItems(body, manifestUrl, panel, storeId);
+      row.querySelector('.ts-activate')?.addEventListener('click', async () => {
+        await mvmOS._applyTheme(theme.id);
+        body._as.refreshCurrent?.();
       });
 
       row.querySelector('.ts-remove')?.addEventListener('click', async e => {
-        const btn = e.target;
-        btn.disabled = true;
-        await fetch(`/api/themes/${btn.dataset.id}`, { method: 'DELETE' });
+        e.target.disabled = true;
+        await fetch(`/api/themes/${theme.id}`, { method: 'DELETE' });
         body._as.refreshCurrent?.();
-        loadThemeCategoryItems(body, manifestUrl, panel, storeId);
       });
 
       list.appendChild(row);
     });
-    gridEl.appendChild(list);
   }
 
-  function _renderThemeRows(list, themes, onRefresh) {
+  function _renderThemeRows(list, themes, onRefresh, stores = []) {
     list.innerHTML = '';
-    themes.forEach(t => {
+    themes.forEach(th => {
+      const store = stores.find(s => s.id === th.store_id);
+      const source = store ? ` · ${t('appstore_source', { name: `${store.official ? '⚡' : '📦'} ${store.name}` })}` : '';
       const row = document.createElement('div');
       row.className = 'as-pkg-row';
       row.innerHTML = `
-        <div style="font-size:1.4rem;width:28px;text-align:center;flex-shrink:0">${t.icon}</div>
+        <div style="font-size:1.4rem;width:28px;text-align:center;flex-shrink:0">${th.icon}</div>
         <div class="as-pkg-info">
-          <div class="as-pkg-top"><span class="as-pkg-name">${t.name}</span></div>
-          <div class="as-pkg-desc">${t.description}</div>
-          <div class="as-pkg-ver">${t.version} · ${t.category}</div>
+          <div class="as-pkg-top"><span class="as-pkg-name">${th.name}</span></div>
+          <div class="as-pkg-desc">${th.description}</div>
+          <div class="as-pkg-ver">${th.version} · ${th.category}${source}</div>
         </div>
         <div class="as-pkg-actions">
-          ${t.is_active
+          ${th.is_active
             ? '<span class="as-installed-badge">✓ Active</span>'
-            : `<button class="s-btn s-btn-sm ts-activate" data-id="${t.id}">Activate</button>
-               ${t.id !== 'default' ? `<button class="s-btn-sm s-btn-danger ts-remove" data-id="${t.id}">✕</button>` : ''}`
+            : `<button class="s-btn s-btn-sm ts-activate" data-id="${th.id}">Activate</button>
+               ${th.id !== 'default' ? `<button class="s-btn-sm s-btn-danger ts-remove" data-id="${th.id}">✕</button>` : ''}`
           }
         </div>
       `;
@@ -1779,22 +1515,11 @@ const AppStore = (() => {
   async function loadThemeInstalled(body) {
     const list = body.querySelector('#as-theme-installed-list');
     list.innerHTML = `<div class="as-loading">${t('loading')}</div>`;
-    const res = await fetch('/api/themes');
-    const themes = await res.json();
-    if (!themes.length) { list.innerHTML = `<div class="as-loading">${t('tstore_no_installed')}</div>`; return; }
-    _renderThemeRows(list, themes, () => loadThemeInstalled(body));
-  }
-
-  async function loadMyThemes(body) {
-    const list = body.querySelector('#as-my-themes-list');
-    list.innerHTML = `<div class="as-loading">${t('loading')}</div>`;
     const [themesRes, storesRes] = await Promise.all([fetch('/api/themes'), fetch('/api/themes/stores')]);
     const themes = await themesRes.json();
-    const stores = await storesRes.json();
-    const officialIds = new Set(stores.filter(s => s.official).map(s => s.id));
-    const custom = themes.filter(t => t.store_id && !officialIds.has(t.store_id));
-    if (!custom.length) { list.innerHTML = `<div class="as-loading">${t('tstore_no_custom')}</div>`; return; }
-    _renderThemeRows(list, custom, () => loadMyThemes(body));
+    const stores = await storesRes.json().catch(() => []);
+    if (!themes.length) { list.innerHTML = `<div class="as-loading">${t('tstore_no_installed')}</div>`; return; }
+    _renderThemeRows(list, themes, () => loadThemeInstalled(body), stores);
   }
 
   async function loadThemeStores(body) {
@@ -1819,7 +1544,6 @@ const AppStore = (() => {
       row.querySelector('.ts-del-store')?.addEventListener('click', async e => {
         await fetch(`/api/themes/stores/${e.target.dataset.id}`, { method: 'DELETE' });
         loadThemeStores(body);
-        loadThemeStoreTabs(body);
       });
       list.appendChild(row);
     });
@@ -1841,7 +1565,6 @@ const AppStore = (() => {
       body.querySelector('#as-tstore-url-input').value = '';
       err.textContent = '';
       loadThemeStores(body);
-      loadThemeStoreTabs(body);
     } else {
       const d = await res.json();
       err.textContent = d.detail || t('as_error');

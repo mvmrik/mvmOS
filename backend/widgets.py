@@ -102,6 +102,17 @@ async def remove_store(store_id: int, session=Depends(get_current_session)):
 
 # ── Categories ────────────────────────────────────────────────────────────────
 
+@router.get("/store")
+async def merged_store(session=Depends(get_current_session)):
+    """Every widget store as one category tree (official wins duplicate ids)."""
+    from .storemerge import build_merged_tree
+    with get_conn() as conn:
+        stores = [dict(r) for r in conn.execute("SELECT * FROM widget_stores").fetchall()]
+    installed = _installed_map()
+    return JSONResponse(await build_merged_tree(
+        stores, "widgets", _fetch_json, lambda items: _annotate(items, installed)))
+
+
 @router.get("/manifest")
 async def get_manifest(url: str, session=Depends(get_current_session)):
     try:

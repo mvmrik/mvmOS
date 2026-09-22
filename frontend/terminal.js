@@ -5,6 +5,51 @@ const Terminal = (() => {
 
   const isMobile = () => window.innerWidth < 768 || navigator.maxTouchPoints > 1;
 
+  // ── Open sessions ─────────────────────────────────────────────────────────
+  // Every terminal window registers itself, so a command can go to "the terminal
+  // in use" — the one last clicked or typed in — and not to all of them. A window
+  // that has been closed is no longer in the page and drops out of the list.
+  const sessions = [];
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  const live = () => {
+    for (let i = sessions.length - 1; i >= 0; i--) if (!sessions[i].body.isConnected) sessions.splice(i, 1);
+    return sessions;
+  };
+  function addSession(s) { sessions.push(s); }
+  function useSession(s) {
+    const i = sessions.indexOf(s);
+    if (i !== -1) { sessions.splice(i, 1); sessions.push(s); }
+  }
+
+  // Type a line into the terminal in use, opening one first when there is none.
+  // Rejects when no terminal came up in time.
+  async function run(text) {
+    let s = live().at(-1);
+    if (!s) {
+      openWindow();
+      for (let i = 0; i < 30 && !(s = live().at(-1)); i++) await sleep(100);
+    }
+    if (!s) throw new Error('no terminal');
+    for (let i = 0; i < 80 && !s.ready(); i++) await sleep(100);
+    if (!s.ready()) throw new Error('terminal not ready');
+    if (window.Desktop) Desktop.focusWindow(s.id);
+    s.send(text);
+  }
+
+  // "Open in Terminal" in the File Manager and the commands in Settings send this.
+  document.addEventListener('terminal-run', e => { run(e.detail).catch(() => {}); });
+
+  // The ⚡ button that opens the quick prompt of saved commands.
+  function commandsButton(style) {
+    const b = document.createElement('button');
+    b.textContent = '⚡';
+    b.title = t('tc_button') + ' (' + TerminalCommands.shortcutLabel() + ')';
+    b.dataset.tcShortcut = '';
+    b.style.cssText = style;
+    b.addEventListener('click', () => TerminalCommands.openPalette());
+    return b;
+  }
+
   // ── ANSI → HTML (basic colors for mobile terminal) ───────────────────────
   const ANSI_COLORS = {
     30:'#555',31:'#ff5555',32:'#50fa7b',33:'#f1fa8c',
@@ -99,6 +144,10 @@ const Terminal = (() => {
 
         inputRow.appendChild(prompt);
         inputRow.appendChild(input);
+        inputRow.appendChild(commandsButton([
+          'background:#21262d;color:#f1fa8c;border:1px solid #30363d;border-radius:4px;',
+          'padding:5px 10px;font-size:16px;cursor:pointer;flex-shrink:0;',
+        ].join('')));
         inputRow.appendChild(sendBtn);
         inputRow.appendChild(stopBtn);
 
@@ -205,8 +254,17 @@ const Terminal = (() => {
           input.focus();
         });
         input.addEventListener('keydown', e => { if (e.key === 'Enter') sendCmd(); });
+
+        const session = {
+          id, body,
+          ready: () => _ready && ws.readyState === WebSocket.OPEN,
+          send(text) { input.value = text; sendCmd(); },
+        };
+        addSession(session);
+        input.addEventListener('focus', () => useSession(session));
+        body.addEventListener('mousedown', () => useSession(session));
       },
-      onClose() { if (ws) ws.close(); },
+      onClose() { if (ws) { ws.onclose = ws.onerror = ws.onmessage = null; ws.close(); } },
     });
   }
 
@@ -223,8 +281,21 @@ const Terminal = (() => {
       height: 460,
       onMount(body) {
         body.style.background = '#0d1117';
+        body.style.display = 'flex';
+        body.style.flexDirection = 'column';
+
+        const bar = document.createElement('div');
+        bar.style.cssText = 'display:flex;align-items:center;justify-content:flex-end;gap:8px;padding:2px 6px;background:#161b22;border-bottom:1px solid #30363d;flex-shrink:0;';
+        const hint = document.createElement('span');
+        hint.textContent = TerminalCommands.shortcutLabel();
+        hint.dataset.tcShortcut = '';
+        hint.style.cssText = 'color:#6e7681;font-size:11px;';
+        bar.appendChild(hint);
+        bar.appendChild(commandsButton('background:none;color:#f1fa8c;border:none;border-radius:4px;padding:0 6px;font-size:14px;cursor:pointer;'));
+        body.appendChild(bar);
+
         const container = document.createElement('div');
-        container.style.cssText = 'width:100%;height:100%;padding:2px;';
+        container.style.cssText = 'width:100%;flex:1;min-height:0;padding:2px;';
         body.appendChild(container);
 
         term = new window.Terminal({
@@ -251,12 +322,11 @@ const Terminal = (() => {
         ws = new WebSocket(`${proto}://${location.host}/ws/terminal`);
         ws.binaryType = 'arraybuffer';
 
+        // Typed a moment after the shell starts, its first input is not lost.
+        let opened = false;
         ws.onopen = () => {
           sendResize();
-          document.addEventListener('terminal-run', e => {
-            if (ws.readyState === WebSocket.OPEN)
-              ws.send(new TextEncoder().encode(e.detail + '\n'));
-          });
+          setTimeout(() => { opened = true; }, 300);
         };
         ws.onmessage = e => {
           term.write(e.data instanceof ArrayBuffer ? new Uint8Array(e.data) : e.data);
@@ -279,9 +349,25 @@ const Terminal = (() => {
         });
         ro.observe(body);
         term.focus();
+
+        const session = {
+          id, body,
+          ready: () => opened && ws.readyState === WebSocket.OPEN,
+          send(text) {
+            ws.send(new TextEncoder().encode(text + '\n'));
+            term.focus();
+          },
+        };
+        addSession(session);
+        container.addEventListener('focusin', () => useSession(session));
+        body.addEventListener('mousedown', () => useSession(session));
       },
       onResize() {
         if (fitAddon) try { fitAddon.fit(); } catch (_) {}
+      },
+      onClose() {
+        if (ws) { ws.onclose = ws.onerror = ws.onmessage = null; ws.close(); }
+        if (term) try { term.dispose(); } catch (_) {}
       },
     });
   }
@@ -291,5 +377,5 @@ const Terminal = (() => {
     else openDesktopWindow();
   }
 
-  return { openWindow };
+  return { openWindow, run };
 })();

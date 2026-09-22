@@ -1198,7 +1198,23 @@ html, body {
 .as-wrap.as-app-detail-open .as-main { display:none; }
 .as-wrap.as-app-detail-open .as-detail.as-app-detail { flex:1; width:auto; border-left:0; }
 .as-app-detail-head { display:flex; gap:12px; align-items:center; }
+.as-detail-source { font-size:.74rem; color:var(--text-dim); margin-top:2px; }
+.as-detail-source:empty { display:none; }
+.as-app-detail-actions { display:flex; flex-wrap:wrap; gap:8px; }
+.as-app-detail-actions:empty { display:none; }
 .as-site-link { color:var(--accent); font-size:.82rem; text-decoration:none; }
+.as-premium-mark { margin-left:5px; font-size:.82em; }
+.as-premium-section { border:1px solid var(--border); border-radius:var(--radius,6px); padding:12px 14px; display:flex; flex-direction:column; gap:8px; }
+.as-premium-section h3 { margin:0; font-size:.88rem; }
+.as-premium-summary { margin:0; font-size:.8rem; color:var(--text-dim); line-height:1.4; }
+.as-premium-features { display:flex; flex-direction:column; gap:8px; }
+.as-premium-features details, .as-premium-feature { font-size:.82rem; }
+.as-premium-features summary, .as-premium-feature { display:flex; flex-direction:column; gap:1px; cursor:default; }
+.as-premium-features summary { cursor:pointer; }
+.as-premium-features summary span, .as-premium-feature span { color:var(--text-dim); font-size:.78rem; line-height:1.4; }
+.as-premium-features details p { margin:6px 0 0; color:var(--text-dim); font-size:.78rem; line-height:1.45; }
+.as-premium-active { font-size:.8rem; color:var(--accent); }
+.as-premium-get { align-self:flex-start; }
 .as-review-section { border-top:1px solid var(--border); padding-top:14px; display:flex; flex-direction:column; gap:10px; }
 .as-review-section h3 { margin:0; font-size:.88rem; }
 .as-rating-summary { color:var(--text-dim); font-size:.86rem; }.as-rating-summary strong,.as-rating-summary span { color:#f5c542; }
@@ -1246,6 +1262,11 @@ html, body {
 .as-cat-card:hover { background:var(--surface); border-color:var(--accent); }
 .as-cat-icon { font-size:1.6rem; line-height:1; }
 .as-cat-label { font-size:.75rem; color:var(--text); font-weight:600; }
+.as-cat-grid-merged { padding:10px 4px; }
+.as-src { display:inline-block; margin-left:6px; font-size:.7rem; font-weight:500; color:var(--text-dim); vertical-align:middle; white-space:nowrap; max-width:11em; overflow:hidden; text-overflow:ellipsis; }
+.as-src-official { color:var(--accent); font-size:.85rem; }
+.as-src:not(.as-src-official) { display:block; margin:1px 0 0; max-width:100%; font-weight:400; }
+.as-store-warn:empty { display:none; }
 .as-cat-count { font-size:.68rem; color:var(--text-dim); }
 .as-browse-pkg { display:flex; flex-direction:column; height:100%; }
 .as-pagination { display:flex; align-items:center; gap:10px; padding:8px 12px; border-top:1px solid var(--border); flex-shrink:0; background:var(--titlebar); }

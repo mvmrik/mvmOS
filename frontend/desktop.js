@@ -644,7 +644,7 @@ const Desktop = (() => {
   // `pinKey` names what the pinned size/position belongs to. It defaults to the
   // window id; windows whose id is per-instance (filemanager-2, terminal-3,
   // a viewer keyed by file path) pass a stable key so a pin survives reopening.
-  function createWindow({ id, pinKey, title, icon, width = 700, height = 450, onMount, onResize, appSettings, onAppSettings, closeToTray = false }) {
+  function createWindow({ id, pinKey, title, icon, width = 700, height = 450, onMount, onResize, onClose, appSettings, onAppSettings, closeToTray = false }) {
     const pinId = pinKey || id;
     // bring existing to front if already open (or restore from tray)
     if (_trayItems[id]) { restoreFromTray(id); return windows[id]?.el; }
@@ -804,7 +804,7 @@ const Desktop = (() => {
     el.style.zIndex = zCounter;
     focusWindow(id);
 
-    windows[id] = { el, pinId, title, icon: icon || '📦', minimized: false, origStyle: null, closeToTray, onAppSettings: appSettings ? (onAppSettings || null) : null };
+    windows[id] = { el, pinId, title, icon: icon || '📦', minimized: false, origStyle: null, closeToTray, onClose, onAppSettings: appSettings ? (onAppSettings || null) : null };
 
     // taskbar button
     const tbItem = document.createElement('div');
@@ -987,19 +987,25 @@ const Desktop = (() => {
   function _trayQuit(id) {
     delete _trayItems[id];
     _renderTray();
-    if (windows[id]) {
-      windows[id].el.remove();
-      delete windows[id];
-    }
+    _disposeWindow(id);
+  }
+
+  // Removes a window for good and lets its app release what it holds open
+  // (a terminal's connection, a player's stream).
+  function _disposeWindow(id) {
+    const w = windows[id];
+    if (!w) return;
+    w.el.remove();
+    delete windows[id];
+    if (w.onClose) { try { w.onClose(); } catch (e) { console.error(e); } }
   }
 
   function closeWindow(id) {
     if (!windows[id]) return;
     // if window has close_to_tray active → send to tray instead
     if (windows[id].closeToTray) { sendToTray(id); return; }
-    windows[id].el.remove();
     taskbarWindows.querySelector(`[data-win-id="${id}"]`)?.remove();
-    delete windows[id];
+    _disposeWindow(id);
     // on mobile, focus the previous window if any
     if (isMobile()) {
       const remaining = Object.keys(windows);
@@ -1079,15 +1085,6 @@ const Desktop = (() => {
   const startResults = document.getElementById('start-menu-results');
   const startMain = document.getElementById('start-menu-main');
 
-  function _startMenuAllApps() {
-    // _apps is the whole list already — system apps are merged into it from
-    // _SYSTEM_APP_DEFS(). Listing any of them separately here duplicated every
-    // core app in the search results.
-    return Object.values(window.mvmOS?._apps || {}).map(a => ({
-      id: a.id, label: a.name, emoji: a.icon || '📦',
-    }));
-  }
-
   startSearch.addEventListener('input', () => {
     const q = startSearch.value.trim().toLowerCase();
     // One or two letters match nearly every app, so the menu was replaced by a
@@ -1101,7 +1098,7 @@ const Desktop = (() => {
     startMain.style.display = 'none';
     startResults.style.display = '';
     startResults.innerHTML = '';
-    const matches = _startMenuAllApps().filter(a => a.label.toLowerCase().includes(q));
+    const matches = (window.mvmOS?.searchApps?.(q) || []).map(a => ({ id: a.id, label: a.name || a.id, emoji: a.icon || '📦' }));
     if (!matches.length) {
       startResults.innerHTML = `<div style="padding:8px 14px;font-size:.8rem;color:var(--text-dim)">${t('no_results')}</div>`;
       return;

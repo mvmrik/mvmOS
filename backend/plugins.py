@@ -1,3 +1,4 @@
+import asyncio
 import httpx
 import io
 import json
@@ -384,6 +385,19 @@ async def get_category_apps(store_id: int = 0, category_url: str = "", category_
     return JSONResponse(_annotate(apps, installed))
 
 
+# ── Merged store ──────────────────────────────────────────────────────────────
+
+@router.get("/store")
+async def merged_store(session=Depends(get_current_session)):
+    """Every store's apps as one category tree (official wins duplicate ids)."""
+    from .storemerge import build_merged_tree
+    with get_conn() as conn:
+        stores = [dict(r) for r in conn.execute("SELECT * FROM stores").fetchall()]
+    installed = _installed_map()
+    return JSONResponse(await build_merged_tree(
+        stores, "apps", _fetch_json, lambda items: _annotate(items, installed)))
+
+
 # ── Manifest per store (legacy, kept for update checks) ───────────────────────
 
 @router.get("/manifest")
@@ -471,6 +485,67 @@ async def list_plugins(session=Depends(get_current_session)):
             item["browser_extension"] = None
         result.append(item)
     return JSONResponse(result)
+
+
+@router.get("/{plugin_id}/premium")
+async def store_premium_info(plugin_id: str, store_id: int = 0, session=Depends(get_current_session)):
+    """What Premium adds to a store app: source/apps/<id>/premium.json in the store the
+    app comes from, read next to that store's root manifest (the same file mvmos.org
+    lists). Only the store itself is asked, never the website. An empty answer just
+    means the store publishes no description."""
+    import re
+    if not re.fullmatch(r"[a-z0-9][a-z0-9_-]{0,63}", plugin_id):
+        return {"summary": "", "features": []}
+    with get_conn() as conn:
+        row = conn.execute("SELECT manifest_url FROM stores WHERE id=?", (store_id,)).fetchone() if store_id else None
+        if not row:
+            row = conn.execute("SELECT manifest_url FROM stores WHERE official=1").fetchone()
+    root = (row["manifest_url"] if row else "").rsplit("/", 1)[0]
+    if not root:
+        return {"summary": "", "features": []}
+    try:
+        data = await _fetch_json(f"{root}/source/apps/{plugin_id}/premium.json")
+    except Exception:
+        return {"summary": "", "features": []}
+    features = [
+        {k: str(f.get(k) or "") for k in ("title", "short", "description")}
+        for f in (data.get("features") or []) if isinstance(f, dict) and f.get("title")
+    ]
+    return {"summary": str(data.get("summary") or ""), "features": features}
+
+
+@router.get("/{plugin_id}/latest")
+async def latest_plugin_entry(plugin_id: str, session=Depends(get_current_session)):
+    """The newest store entry of an installed app, fetched fresh (no cache), in the
+    shape POST /install takes — so a broken app can be pulled again as it is now."""
+    with get_conn() as conn:
+        inst = conn.execute("SELECT store_id FROM plugins WHERE id=?", (plugin_id,)).fetchone()
+        if not inst:
+            return JSONResponse({"error": "App is not installed"}, status_code=404)
+        stores = [dict(r) for r in conn.execute(
+            "SELECT id, official, manifest_url FROM stores ORDER BY (id=?) DESC, official DESC, added_at",
+            (inst["store_id"] or 0,)).fetchall()]
+    # The recorded store first, then the others (an app installed before stores were tracked has none).
+    for store in stores:
+        try:
+            _cache_bust(store["manifest_url"])
+            data = await _fetch_json(store["manifest_url"])
+            entries = []
+            if "categories" in data:
+                urls = [c["manifest_url"] for c in data["categories"] if c.get("manifest_url")]
+                for url in urls:
+                    _cache_bust(url)
+                for cat_data in await asyncio.gather(*(_fetch_json(u) for u in urls), return_exceptions=True):
+                    if isinstance(cat_data, dict):
+                        entries.extend(cat_data.get("apps", []))
+            else:
+                entries = data.get("apps", [])
+        except Exception:
+            continue
+        for entry in entries:
+            if entry.get("id") == plugin_id:
+                return JSONResponse({**entry, "official": store["official"], "store_id": store["id"]})
+    return JSONResponse({"error": "App was not found in any store"}, status_code=404)
 
 
 # ── Install ───────────────────────────────────────────────────────────────────

@@ -5,6 +5,9 @@ const FileManager = (() => {
 
   function loadPrefs() { return Settings.loadFMPrefs(); }
 
+  // A folder name with spaces or shell characters must stay one argument.
+  function shQuote(p) { return "'" + String(p).replace(/'/g, "'\\''") + "'"; }
+
   function openWindow(startPath) {
     fmCount++;
     const id = 'filemanager-' + fmCount;
@@ -390,7 +393,7 @@ const FileManager = (() => {
         }
         addItem('⬛ Open in Terminal', () => {
           Terminal.openWindow();
-          setTimeout(() => document.dispatchEvent(new CustomEvent('terminal-run', { detail: `cd ${path}` })), 500);
+          setTimeout(() => document.dispatchEvent(new CustomEvent('terminal-run', { detail: `cd ${shQuote(path)}` })), 500);
         });
         document.body.appendChild(menu);
         const dismiss = () => { menu.remove(); document.removeEventListener('click', dismiss); };
@@ -853,7 +856,7 @@ const FileManager = (() => {
         }
         items.push({ label: '⬛ Open in Terminal', action: () => {
           Terminal.openWindow();
-          setTimeout(() => document.dispatchEvent(new CustomEvent('terminal-run', { detail: `cd ${this.currentPath}` })), 500);
+          setTimeout(() => document.dispatchEvent(new CustomEvent('terminal-run', { detail: `cd ${shQuote(this.currentPath)}` })), 500);
         }});
         items.push({ label: '📁 New Folder', action: () => this.mkdirPrompt() });
         items.push({ label: '🔄 Refresh', action: () => this.navigate(this.currentPath) });

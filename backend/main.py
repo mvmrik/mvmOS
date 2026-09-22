@@ -54,6 +54,7 @@ class _AppStaticFiles(StaticFiles):
 from .db import init_db, get_conn
 from .auth import router as auth_router, get_current_session
 from .terminal import router as terminal_router
+from .savedcommands import router as savedcommands_router
 from .files import router as files_router
 from .desktop import router as desktop_router
 from .settings import router as settings_router
@@ -92,6 +93,7 @@ _init_apphub_db()
 
 app.include_router(auth_router)
 app.include_router(terminal_router)
+app.include_router(savedcommands_router)
 app.include_router(files_router)
 app.include_router(desktop_router)
 app.include_router(settings_router)

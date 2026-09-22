@@ -83,6 +83,20 @@ async def list_theme_categories():
     return all_cats
 
 
+@router.get("/api/themes/store")
+async def merged_theme_store():
+    """Every theme store as one category tree (official wins duplicate ids)."""
+    from .storemerge import build_merged_tree
+    with get_conn() as conn:
+        stores = [dict(r) for r in conn.execute("SELECT * FROM theme_stores").fetchall()]
+        installed = {r["id"]: dict(r) for r in conn.execute("SELECT id, version, is_active FROM themes").fetchall()}
+
+    def annotate(items):
+        return [{**it, "installed": it["id"] in installed,
+                 "is_active": bool(installed.get(it["id"], {}).get("is_active"))} for it in items]
+    return await build_merged_tree(stores, "themes", _fetch_json, annotate)
+
+
 @router.get("/api/themes/category-themes")
 async def list_category_themes(manifest_url: str):
     try:

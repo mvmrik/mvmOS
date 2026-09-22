@@ -14,6 +14,7 @@ The mvmOS desktop runs in the browser and is designed around windows instead of 
 - Launch Core tools and installed Store apps.
 - Work with more than one app window at the same time.
 - Pin a window's size and position with the pin button in its title bar, so that app always opens in the same place on this device. The pin is stored only in this browser, is never synced to other devices, and is released as soon as you move, resize or maximize the window. Pinning is not available on phones, where windows always fill the screen.
+- Find an app by typing at least three letters in the Start menu search or in the Terminal's quick prompt. An app is found by the name shown in your language and also by its original English name or id, so "term" and "терм" both find the Terminal on a Bulgarian desktop. Case and accents are ignored.
 - Send screenshots, text and files to the [[Clipboard]] by pasting with Ctrl+V, dragging files onto the desktop, or choosing Paste to mvmOS Clipboard from the right-click menu.
 - See who you are working as at the top of the Start menu: your Linux user, and directly beneath it the Apps Hub profile this browser is signed in to, with its avatar. The profile row appears only while you are signed in, follows sign-in and sign-out immediately, and opens your Apps Hub account when clicked. The Apps Hub sign-in belongs to the browser, so every desktop window in it acts as the same profile.
 - Use the desktop layout, navigation controls, and theme preferences provided by [[Settings and system]].

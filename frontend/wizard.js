@@ -336,15 +336,8 @@ const Wizard = (() => {
       // The store window calls this after rendering; the wizard hosts the same
       // markup, so without it the sidebar has no way to open on a phone.
       Desktop?.initMobileSidebar?.(host);
-      // Its mvmOS app tab is filled in asynchronously; open it as soon as it
-      // exists so the wizard lands on apps rather than on Linux packages.
-      let tries = 0;
-      const timer = setInterval(() => {
-        if (!host.isConnected) { clearInterval(timer); return; }
-        const tab = host.querySelector('#as-store-tabs .as-tab');
-        if (tab) { tab.click(); clearInterval(timer); }
-        else if (++tries > 40) clearInterval(timer);
-      }, 50);
+      // Land on the mvmOS apps rather than on Linux packages.
+      host.querySelector('.as-tab[data-tab="store"]')?.click();
     },
 
     premium(body, step) {

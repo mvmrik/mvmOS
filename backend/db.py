@@ -225,6 +225,18 @@ def init_db():
                 expires_at TEXT
             );
             CREATE INDEX IF NOT EXISTS idx_clipboard_owner ON clipboard_items(audience, owner, id DESC);
+
+            -- Terminal: commands a person saved to run with one click. Owner is
+            -- the Linux user the desktop session works as.
+            CREATE TABLE IF NOT EXISTS saved_commands (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                owner TEXT NOT NULL,
+                name TEXT NOT NULL,
+                command TEXT NOT NULL,
+                cwd TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_saved_commands_owner ON saved_commands(owner, name);
         """)
         # migrations for existing DBs
         try:
