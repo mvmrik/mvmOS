@@ -58,6 +58,8 @@ window._i18n = {
   'win_public_page':              '公开页面',
   'win_pin_size':                 '在此设备上固定大小和位置',
   'win_unpin_size':               '取消固定',
+  'win_always_on_top':            '窗口置顶',
+  'win_not_on_top':               '取消置顶',
 
   // ── Context menu (desktop) ────────────────────────────────────────────────
   'ctx_paste':                    '粘贴',
@@ -481,6 +483,11 @@ window._i18n = {
   'fm_empty_folder':              '空文件夹',
   'fm_duration':                  '时长',
   'fm_move_to_trash_failed':      '无法移到回收站',
+  'fm_back':                      '← 返回',
+  'fm_delete_failed':             '无法删除',
+  'fm_rename_failed':             '无法重命名',
+  'fm_paste_failed':              '无法粘贴',
+  'fm_permission_hint':           '你的 Linux 用户需要对该项目及其所在文件夹拥有写入权限。仅属于所有者的组还不够，该组也必须有写入权限（例如对文件夹执行 chmod -R g+w）；权限为 755 的文件夹允许组读取，但不允许删除。',
   'fm_download_failed':           '下载失败',
   'fm_network_error':             '网络错误',
   'fm_cannot_read':               '无法读取目录',

@@ -58,6 +58,8 @@ window._i18n = {
   'win_public_page':              'Öffentliche Seite',
   'win_pin_size':                 'Größe & Position auf diesem Gerät fixieren',
   'win_unpin_size':               'Fixierung aufheben',
+  'win_always_on_top':            'Immer im Vordergrund',
+  'win_not_on_top':               'Nicht mehr im Vordergrund halten',
 
   // ── Context menu (desktop) ────────────────────────────────────────────────
   'ctx_paste':                    'Einfügen',
@@ -481,6 +483,11 @@ window._i18n = {
   'fm_empty_folder':              'Leerer Ordner',
   'fm_duration':                  'Dauer',
   'fm_move_to_trash_failed':      'Konnte nicht in den Papierkorb verschoben werden',
+  'fm_back':                      '← Zurück',
+  'fm_delete_failed':             'Löschen fehlgeschlagen',
+  'fm_rename_failed':             'Umbenennen fehlgeschlagen',
+  'fm_paste_failed':              'Einfügen fehlgeschlagen',
+  'fm_permission_hint':           'Dein Linux-Benutzer braucht Schreibrechte für das Element und für den Ordner, der es enthält. Mitglied der Gruppe des Eigentümers zu sein reicht nur, wenn diese Gruppe ebenfalls Schreibrechte hat (zum Beispiel chmod -R g+w auf den Ordner); Ordner mit Modus 755 erlauben der Gruppe Lesen, aber nicht Löschen.',
   'fm_download_failed':           'Download fehlgeschlagen',
   'fm_network_error':             'Netzwerkfehler',
   'fm_cannot_read':               'Verzeichnis kann nicht gelesen werden',

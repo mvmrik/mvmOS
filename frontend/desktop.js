@@ -566,18 +566,18 @@ const Desktop = (() => {
           const paths = toDelete.map(en => en.path);
           const choice = await FileManager.deleteDialog(paths.length);
           if (!choice) return;
+          const errors = [];
           if (choice === 'trash') {
-            await fetch('/api/files/trash/move', { method: 'POST', headers: {'Content-Type':'application/json'},
-              body: JSON.stringify({ paths }) });
+            errors.push(await FileManager.fileRequest('/api/files/trash/move', 'POST', { paths }));
           } else {
             for (const p of paths) {
-              await fetch('/api/files/delete', { method: 'DELETE', headers: {'Content-Type':'application/json'},
-                body: JSON.stringify({ path: p }) });
+              errors.push(await FileManager.fileRequest('/api/files/delete', 'DELETE', { path: p }));
             }
           }
           _desktopSelected.clear();
           await loadDesktopFiles();
           renderIcons();
+          FileManager.showErrors(t(choice === 'trash' ? 'fm_move_to_trash_failed' : 'fm_delete_failed'), errors);
         } else {
           removeFromDesktop(id);
         }
@@ -696,6 +696,7 @@ const Desktop = (() => {
           ${!mobile ? `<button class="wbtn wbtn-max" title="${t('win_maximize')}"></button>` : ''}
         </div>
         <div class="window-title">${title}</div>
+        ${!mobile ? `<button class="wbtn-ontop" title="${t('win_always_on_top')}"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg"><path d="M5 4h14"/><path d="M12 20V9"/><path d="M7 13l5-5l5 5"/></svg></button>` : ''}
         ${!mobile ? `<button class="wbtn-pin" title="${t('win_pin_size')}"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg"><path d="M9 4h6l-.5 5.5L18 12v2h-5v5l-1 1l-1-1v-5H6v-2l3.5-2.5z"/></svg></button>` : ''}
         ${appSettings ? `<button class="wbtn-appsettings" title="${t('settings_title')}">⚙</button>` : ''}
       </div>`}
@@ -774,6 +775,19 @@ const Desktop = (() => {
     el.querySelector('.wbtn-min')?.addEventListener('click', () => toggleMinimize(id));
     el.querySelector('.wbtn-max')?.addEventListener('click', () => { unpinOnMove(); toggleMaximize(el); });
 
+    const onTopBtn = el.querySelector('.wbtn-ontop');
+    if (onTopBtn) {
+      onTopBtn.addEventListener('click', e => {
+        e.stopPropagation();
+        const w = windows[id];
+        if (!w) return;
+        w.onTop = !w.onTop;
+        onTopBtn.classList.toggle('active', w.onTop);
+        onTopBtn.title = w.onTop ? t('win_not_on_top') : t('win_always_on_top');
+        focusWindow(id);
+      });
+    }
+
     const pinBtn = el.querySelector('.wbtn-pin');
     if (pinBtn) {
       pinBtn.classList.toggle('pinned', pinned);
@@ -804,17 +818,14 @@ const Desktop = (() => {
     el.style.zIndex = zCounter;
     focusWindow(id);
 
-    windows[id] = { el, pinId, title, icon: icon || '📦', minimized: false, origStyle: null, closeToTray, onClose, onAppSettings: appSettings ? (onAppSettings || null) : null };
+    windows[id] = { el, pinId, title, icon: icon || '📦', minimized: false, onTop: false, origStyle: null, closeToTray, onClose, onAppSettings: appSettings ? (onAppSettings || null) : null };
 
     // taskbar button
     const tbItem = document.createElement('div');
     tbItem.className = 'taskbar-item active';
     tbItem.dataset.winId = id;
     tbItem.textContent = title;
-    tbItem.addEventListener('click', () => {
-      if (windows[id].minimized) { toggleMinimize(id); focusWindow(id); }
-      else focusWindow(id);
-    });
+    tbItem.addEventListener('click', () => _taskbarItemClick(id));
     tbItem.addEventListener('contextmenu', e => {
       e.preventDefault();
       e.stopPropagation();
@@ -858,6 +869,17 @@ const Desktop = (() => {
 
   let _lastFocusedId = null;
 
+  // A taskbar button behaves like on every other desktop: it restores a
+  // minimized window, raises one hidden behind others, and minimizes the
+  // window that is already in front.
+  function _taskbarItemClick(id) {
+    const w = windows[id];
+    if (!w) return;
+    if (w.minimized) { toggleMinimize(id); focusWindow(id); }
+    else if (w.el.classList.contains('focused')) toggleMinimize(id);
+    else focusWindow(id);
+  }
+
   function focusWindow(id) {
     Object.values(windows).forEach(w => {
       w.el.classList.remove('focused');
@@ -871,6 +893,12 @@ const Desktop = (() => {
       const tb = taskbarWindows.querySelector(`[data-win-id="${id}"]`);
       if (tb) tb.classList.add('active');
     }
+    // Always-on-top windows are raised again after every focus change, so a
+    // normal window can take the focus but never cover them.
+    Object.entries(windows).forEach(([wid, w]) => {
+      if (w.onTop && wid !== id) w.el.style.zIndex = ++zCounter;
+    });
+    if (windows[id]?.onTop) windows[id].el.style.zIndex = ++zCounter;
     if (id) _lastFocusedId = id;
     _updateFsActiveWindow(id);
   }
@@ -975,10 +1003,7 @@ const Desktop = (() => {
       tbItem.className = 'taskbar-item active';
       tbItem.dataset.winId = id;
       tbItem.textContent = windows[id].title;
-      tbItem.addEventListener('click', () => {
-        if (windows[id].minimized) { toggleMinimize(id); focusWindow(id); }
-        else focusWindow(id);
-      });
+      tbItem.addEventListener('click', () => _taskbarItemClick(id));
       taskbarWindows.appendChild(tbItem);
     }
     focusWindow(id);

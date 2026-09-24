@@ -58,6 +58,8 @@ window._i18n = {
   'win_public_page':              'Página pública',
   'win_pin_size':                 'Fixar tamanho e posição neste dispositivo',
   'win_unpin_size':               'Desafixar',
+  'win_always_on_top':            'Sempre no topo',
+  'win_not_on_top':               'Deixar de manter no topo',
 
   // ── Context menu (desktop) ────────────────────────────────────────────────
   'ctx_paste':                    'Colar',
@@ -481,6 +483,11 @@ window._i18n = {
   'fm_empty_folder':              'Pasta vazia',
   'fm_duration':                  'Duração',
   'fm_move_to_trash_failed':      'Não foi possível mover para a lixeira',
+  'fm_back':                      '← Voltar',
+  'fm_delete_failed':             'Não foi possível excluir',
+  'fm_rename_failed':             'Não foi possível renomear',
+  'fm_paste_failed':              'Não foi possível colar',
+  'fm_permission_hint':           'Seu usuário Linux precisa de permissão de escrita no item e na pasta que o contém. Estar no grupo do proprietário só basta quando esse grupo também tem permissão de escrita (por exemplo chmod -R g+w na pasta); pastas com modo 755 deixam o grupo ler, mas não excluir.',
   'fm_download_failed':           'Falha no download',
   'fm_network_error':             'Erro de rede',
   'fm_cannot_read':               'Não é possível ler o diretório',

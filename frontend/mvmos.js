@@ -1314,7 +1314,7 @@ var mvmOS = (() => {
       // Delete a file or folder
       async delete(path) {
         const r = await fetch('/api/files/delete', {
-          method: 'POST',
+          method: 'DELETE',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ path }),
         });
@@ -1329,12 +1329,31 @@ var mvmOS = (() => {
         });
         return r.json();
       },
-      // Rename/move a file or folder
+      // Rename/move a file or folder. The backend renames only within one
+      // folder, so a new folder is reached with a move first, then the name
+      // is changed there.
       async rename(from, to) {
+        const split = p => {
+          const trimmed = p.replace(/\/+$/, '');
+          const i = trimmed.lastIndexOf('/');
+          return [i > 0 ? trimmed.slice(0, i) : '/', trimmed.slice(i + 1)];
+        };
+        const [fromDir, fromName] = split(from);
+        const [toDir, toName] = split(to);
+        let path = from;
+        if (toDir !== fromDir) {
+          const r = await fetch('/api/files/copy', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ src: from, dst_dir: toDir, move: true }),
+          });
+          if (!r.ok || toName === fromName) return r.json();
+          path = (toDir === '/' ? '' : toDir) + '/' + fromName;
+        }
         const r = await fetch('/api/files/rename', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ from, to }),
+          body: JSON.stringify({ path, new_name: toName }),
         });
         return r.json();
       },

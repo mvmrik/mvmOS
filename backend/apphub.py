@@ -319,7 +319,7 @@ def create_user_row(uid: str, body: "UserBody", password_hash: Optional[str], no
 
 def _detect_public_apps() -> list:
     """Apps able to serve a public page: apps/<id>/api.py in the current
-    layout, backend/apps/<id>/public.py in the older one. apphub's own public
+    layout (unless its manifest says "public_api_only"), backend/apps/<id>/public.py in the older one. apphub's own public
     page is core-wired (backend/apphub_pub/), so include it explicitly. The
     clipboard's public page is core-wired the same way (backend/clipboard_pub/)."""
     here = os.path.dirname(__file__)
@@ -338,6 +338,15 @@ def _detect_public_apps() -> list:
             mod = sys.modules.get(f"app_public_{app_id}")
             if mod is not None and getattr(mod, "router", None) is None:
                 continue
+            # "public_api_only": the public router is only an endpoint another
+            # page calls with the visitor's token (e.g. a game's statistics
+            # fetched from inside Game Hub), not a page an admin switches on.
+            try:
+                with open(os.path.join(live, app_id, "manifest.json"), encoding="utf-8") as f:
+                    if json.load(f).get("public_api_only") is True:
+                        continue
+            except (OSError, ValueError):
+                pass
             result.append(app_id)
 
     old = os.path.join(here, "apps")

@@ -58,6 +58,8 @@ window._i18n = {
   'win_public_page':              'Página pública',
   'win_pin_size':                 'Fijar tamaño y posición en este dispositivo',
   'win_unpin_size':               'Dejar de fijar',
+  'win_always_on_top':            'Siempre visible',
+  'win_not_on_top':               'Dejar de mantener encima',
 
   // ── Context menu (desktop) ────────────────────────────────────────────────
   'ctx_paste':                    'Pegar',
@@ -481,6 +483,11 @@ window._i18n = {
   'fm_empty_folder':              'Carpeta vacía',
   'fm_duration':                  'Duración',
   'fm_move_to_trash_failed':      'No se pudo mover a la papelera',
+  'fm_back':                      '← Atrás',
+  'fm_delete_failed':             'No se pudo eliminar',
+  'fm_rename_failed':             'No se pudo renombrar',
+  'fm_paste_failed':              'No se pudo pegar',
+  'fm_permission_hint':           'Tu usuario de Linux necesita permiso de escritura sobre el elemento y sobre la carpeta que lo contiene. Pertenecer al grupo del propietario solo basta si ese grupo también tiene permiso de escritura (por ejemplo chmod -R g+w en la carpeta); las carpetas con modo 755 permiten al grupo leer, pero no eliminar.',
   'fm_download_failed':           'Error en la descarga',
   'fm_network_error':             'Error de red',
   'fm_cannot_read':               'No se puede leer el directorio',

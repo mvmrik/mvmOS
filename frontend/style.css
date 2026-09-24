@@ -531,6 +531,24 @@ html, body {
 .wbtn-pin.pinned { color: #ff5f57; }
 .wbtn-pin.pinned:hover { color: #ff5f57; }
 .wbtn-pin + .wbtn-appsettings { margin-left: 0; }
+.wbtn-ontop {
+  margin-left: auto;
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 4px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.12s, color 0.12s;
+}
+.wbtn-ontop svg { display: block; }
+.wbtn-ontop:hover { background: var(--surface2); color: var(--text); }
+.wbtn-ontop.active, .wbtn-ontop.active:hover { color: var(--accent); }
+.wbtn-ontop + .wbtn-pin { margin-left: 0; }
 
 .window-body {
   flex: 1;
@@ -769,6 +787,7 @@ html, body {
   transition: background 0.15s;
 }
 .fm-toolbar button:hover { background: var(--bg); }
+.fm-toolbar button:disabled { opacity: .4; cursor: default; background: var(--surface2); }
 .fm-search {
   background: var(--bg);
   border: 1px solid var(--border);

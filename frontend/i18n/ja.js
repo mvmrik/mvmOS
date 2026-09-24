@@ -58,6 +58,8 @@ window._i18n = {
   'win_public_page':              '公開ページ',
   'win_pin_size':                 'このデバイスでサイズと位置を固定',
   'win_unpin_size':               '固定を解除',
+  'win_always_on_top':            '常に手前に表示',
+  'win_not_on_top':               '常に手前に表示を解除',
 
   // ── Context menu (desktop) ────────────────────────────────────────────────
   'ctx_paste':                    '貼り付け',
@@ -481,6 +483,11 @@ window._i18n = {
   'fm_empty_folder':              '空のフォルダ',
   'fm_duration':                  '再生時間',
   'fm_move_to_trash_failed':      'ゴミ箱に移動できませんでした',
+  'fm_back':                      '← 戻る',
+  'fm_delete_failed':             '削除できませんでした',
+  'fm_rename_failed':             '名前を変更できませんでした',
+  'fm_paste_failed':              '貼り付けできませんでした',
+  'fm_permission_hint':           'Linux ユーザーには、その項目と、それを含むフォルダーへの書き込み権限が必要です。所有者のグループに所属しているだけでは不十分で、そのグループにも書き込み権限が必要です（例: フォルダーに chmod -R g+w）。モード 755 のフォルダーでは、グループは読み取りはできますが削除はできません。',
   'fm_download_failed':           'ダウンロードに失敗しました',
   'fm_network_error':             'ネットワークエラー',
   'fm_cannot_read':               'ディレクトリを読み込めません',

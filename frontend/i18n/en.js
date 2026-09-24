@@ -58,6 +58,8 @@ window._i18n = {
   'win_public_page':              'Public page',
   'win_pin_size':                 'Pin size & position on this device',
   'win_unpin_size':               'Unpin size & position',
+  'win_always_on_top':            'Always on top',
+  'win_not_on_top':               'Stop keeping on top',
 
   // ── Context menu (desktop) ────────────────────────────────────────────────
   'ctx_paste':                    'Paste',
@@ -481,6 +483,11 @@ window._i18n = {
   'fm_empty_folder':              'Empty folder',
   'fm_duration':                  'Duration',
   'fm_move_to_trash_failed':      'Could not move to trash',
+  'fm_back':                      '← Back',
+  'fm_delete_failed':             'Could not delete',
+  'fm_rename_failed':             'Could not rename',
+  'fm_paste_failed':              'Could not paste',
+  'fm_permission_hint':           'Your Linux user needs write permission on the item and on the folder that contains it. Being in the owner’s group is enough only when that group also has write permission (for example chmod -R g+w on the folder); folders with mode 755 let the group read but not delete.',
   'fm_download_failed':           'Download failed',
   'fm_network_error':             'Network error',
   'fm_cannot_read':               'Cannot read directory',

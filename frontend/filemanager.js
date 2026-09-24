@@ -43,11 +43,14 @@ const FileManager = (() => {
       this.selected = null;
       this.selectedSet = new Set(); // multi-select
       this._lastClickedName = null;
+      this._history = [];     // folders visited before the current one, for Back
+      this._visited = false;
       window.addEventListener('fm-prefs-changed', () => this.navigate(this.currentPath));
 
       body.innerHTML = `
         <div class="fm-container">
           <div class="fm-toolbar">
+            <button class="fm-back" disabled>${t('fm_back')}</button>
             <button class="fm-up">${t('fm_up')}</button>
             <span class="fm-breadcrumb"></span>
             <input class="fm-search" type="text" placeholder="${t('fm_search_ph')}" autocomplete="off">
@@ -179,6 +182,8 @@ const FileManager = (() => {
       this.trashEmptyBtn  = body.querySelector('.fm-trash-empty');
 
       body.querySelector('.fm-up').addEventListener('click', () => this.goUp());
+      this.backBtn = body.querySelector('.fm-back');
+      this.backBtn.addEventListener('click', () => this.goBack());
       this.mkdirBtn.addEventListener('click', () => this.mkdirPrompt());
       this.trashRestoreAllBtn.addEventListener('click', () => this.trashRestoreAll());
       this.trashEmptyBtn.addEventListener('click', () => this.trashEmpty());
@@ -416,9 +421,16 @@ const FileManager = (() => {
       this.trashEmptyBtn.style.display = on ? '' : 'none';
     }
 
-    async navigate(path) {
+    async navigate(path, opts = {}) {
       if (this._navigating) return;
       this._navigating = true;
+      // Reloading the same folder is not a step Back should return to.
+      if (this._visited && !opts.fromHistory && path !== this.currentPath) {
+        this._history.push(this.currentPath);
+        if (this._history.length > 100) this._history.shift();
+      }
+      this._visited = true;
+      if (this.backBtn) this.backBtn.disabled = !this._history.length;
       this.currentPath = path;
       this._currentPath = path;
       this.selected = null;
@@ -882,15 +894,13 @@ const FileManager = (() => {
       const cb = window._fmClipboard;
       if (!cb) return;
       const paths = cb.paths || [cb.path];
+      const errors = [];
       for (const src of paths) {
-        await fetch('/api/files/copy', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ src, dst_dir: this.currentPath, move: cb.cut }),
-        });
+        errors.push(await fileRequest('/api/files/copy', 'POST', { src, dst_dir: this.currentPath, move: cb.cut }));
       }
       if (cb.cut) window._fmClipboard = null;
-      this.navigate(this.currentPath);
+      await this.navigate(this.currentPath);
+      showErrors(t('fm_paste_failed'), errors);
     }
 
     async autoCleanChunks() {
@@ -929,28 +939,17 @@ const FileManager = (() => {
       } else {
         choice = 'permanent';
       }
+      const errors = [];
       if (choice === 'trash') {
         const paths = names.map(n => this.joinPath(this.currentPath, n));
-        const r = await fetch('/api/files/trash/move', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ paths }),
-        });
-        if (!r.ok) {
-          const err = await r.json().catch(() => ({}));
-          this.showError(err.detail || t('fm_move_to_trash_failed'));
-          return;
-        }
+        errors.push(await fileRequest('/api/files/trash/move', 'POST', { paths }));
       } else {
         for (const name of names) {
-          await fetch('/api/files/delete', {
-            method: 'DELETE',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ path: this.joinPath(this.currentPath, name) }),
-          });
+          errors.push(await fileRequest('/api/files/delete', 'DELETE', { path: this.joinPath(this.currentPath, name) }));
         }
       }
-      this.navigate(this.currentPath);
+      await this.navigate(this.currentPath);
+      showErrors(choice === 'trash' ? t('fm_move_to_trash_failed') : t('fm_delete_failed'), errors);
     }
 
     _deleteDialog(count) {
@@ -976,22 +975,16 @@ const FileManager = (() => {
     async renamePrompt(name) {
       const newName = prompt(`Rename "${name}" to:`, name);
       if (!newName || newName === name) return;
-      await fetch('/api/files/rename', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path: this.joinPath(this.currentPath, name), new_name: newName }),
-      });
-      this.navigate(this.currentPath);
+      const err = await fileRequest('/api/files/rename', 'POST', { path: this.joinPath(this.currentPath, name), new_name: newName });
+      await this.navigate(this.currentPath);
+      showErrors(t('fm_rename_failed'), [err]);
     }
 
     async deleteEntry(name) {
       if (!confirm(`Delete "${name}"?`)) return;
-      await fetch('/api/files/delete', {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path: this.joinPath(this.currentPath, name) }),
-      });
-      this.navigate(this.currentPath);
+      const err = await fileRequest('/api/files/delete', 'DELETE', { path: this.joinPath(this.currentPath, name) });
+      await this.navigate(this.currentPath);
+      showErrors(t('fm_delete_failed'), [err]);
     }
 
     async download(names) {
@@ -1128,6 +1121,11 @@ const FileManager = (() => {
         });
       };
       uploadNext();
+    }
+
+    goBack() {
+      if (this._navigating || !this._history.length) return;
+      this.navigate(this._history.pop(), { fromHistory: true });
     }
 
     goUp() {
@@ -1275,6 +1273,45 @@ const FileManager = (() => {
     }
   }
 
+  // Runs one file request and returns null on success or the backend's own
+  // reason on failure, so callers can report every item that did not work.
+  async function fileRequest(url, method, body) {
+    try {
+      const r = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      if (r.ok) return null;
+      const err = await r.json().catch(() => ({}));
+      return err.detail || ('HTTP ' + r.status);
+    } catch (e) {
+      return t('fm_network_error');
+    }
+  }
+
+  function _escHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+
+  // Shows what failed and why. A permission error gets the explanation that
+  // being in the owner's group is not enough on its own.
+  function showErrors(title, errors) {
+    errors = (errors || []).filter(Boolean);
+    if (!errors.length) return;
+    const denied = errors.some(e => /permission denied|operation not permitted/i.test(e));
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;';
+    overlay.innerHTML = `
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:24px;min-width:280px;max-width:520px;box-shadow:var(--shadow)">
+        <div style="font-size:1rem;margin-bottom:12px;color:#e05555">${_escHtml(title)}</div>
+        <div style="font-family:monospace;font-size:.78rem;background:var(--surface2);border-radius:6px;padding:8px 10px;max-height:180px;overflow:auto;white-space:pre-wrap;word-break:break-all">${errors.map(_escHtml).join('\n')}</div>
+        ${denied ? `<div style="font-size:.82rem;color:var(--text-dim);margin-top:12px;line-height:1.45">${_escHtml(t('fm_permission_hint'))}</div>` : ''}
+        <div style="display:flex;justify-content:flex-end;margin-top:16px">
+          <button class="fm-err-ok" style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:6px 16px;color:var(--text);cursor:pointer">OK</button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+    overlay.querySelector('.fm-err-ok').addEventListener('click', () => overlay.remove());
+    overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+  }
+
   function deleteDialog(count) {
     return new Promise(resolve => {
       const overlay = document.createElement('div');
@@ -1295,5 +1332,5 @@ const FileManager = (() => {
     });
   }
 
-  return { openWindow, deleteDialog };
+  return { openWindow, deleteDialog, fileRequest, showErrors };
 })();

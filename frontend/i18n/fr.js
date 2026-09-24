@@ -58,6 +58,8 @@ window._i18n = {
   'win_public_page':              'Page publique',
   'win_pin_size':                 'Épingler la taille et la position sur cet appareil',
   'win_unpin_size':               'Désépingler',
+  'win_always_on_top':            'Toujours au premier plan',
+  'win_not_on_top':               'Ne plus garder au premier plan',
 
   // ── Context menu (desktop) ────────────────────────────────────────────────
   'ctx_paste':                    'Coller',
@@ -481,6 +483,11 @@ window._i18n = {
   'fm_empty_folder':              'Dossier vide',
   'fm_duration':                  'Durée',
   'fm_move_to_trash_failed':      'Impossible de déplacer vers la corbeille',
+  'fm_back':                      '← Retour',
+  'fm_delete_failed':             'Suppression impossible',
+  'fm_rename_failed':             'Renommage impossible',
+  'fm_paste_failed':              'Collage impossible',
+  'fm_permission_hint':           'Votre utilisateur Linux doit avoir le droit d’écriture sur l’élément et sur le dossier qui le contient. Faire partie du groupe du propriétaire ne suffit que si ce groupe a aussi le droit d’écriture (par exemple chmod -R g+w sur le dossier) ; les dossiers en mode 755 permettent au groupe de lire, mais pas de supprimer.',
   'fm_download_failed':           'Échec du téléchargement',
   'fm_network_error':             'Erreur réseau',
   'fm_cannot_read':               'Impossible de lire le dossier',

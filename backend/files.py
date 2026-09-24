@@ -25,6 +25,15 @@ def run_as(user: str, cmd: list, input_data: str = None):
     return r
 
 
+def _cmd_error(r) -> str:
+    """The command's own reason (e.g. "rm: cannot remove '/x': Permission
+    denied"), so the user sees why an action failed instead of a generic
+    message."""
+    err = r.stderr if isinstance(r.stderr, str) else (r.stderr or b"").decode(errors="replace")
+    lines = [l.strip() for l in err.splitlines() if l.strip()]
+    return lines[0][:500] if lines else "Permission denied"
+
+
 def mkdir_as(path: str, user: str):
     run_as(user, ["mkdir", "-p", path])
 
@@ -322,7 +331,7 @@ def copy_file(body: CopyRequest, session=Depends(get_current_session)):
     cmd = ["mv" if body.move else "cp", "-r", src, dst]
     r = run_as(eu, cmd)
     if r.returncode != 0:
-        raise HTTPException(status_code=403, detail="Permission denied")
+        raise HTTPException(status_code=403, detail=_cmd_error(r))
     return {"ok": True}
 
 @router.post("/rename")
@@ -332,7 +341,7 @@ def rename(body: RenameRequest, session=Depends(get_current_session)):
     dst = safe_path(os.path.join(os.path.dirname(body.path), body.new_name))
     r = run_as(eu, ["mv", src, dst])
     if r.returncode != 0:
-        raise HTTPException(status_code=403, detail="Permission denied")
+        raise HTTPException(status_code=403, detail=_cmd_error(r))
     return {"ok": True}
 
 
@@ -346,7 +355,7 @@ def delete(body: DeleteRequest, session=Depends(get_current_session)):
     real = safe_path(body.path)
     r = run_as(eu, ["rm", "-rf", real])
     if r.returncode != 0:
-        raise HTTPException(status_code=403, detail="Permission denied")
+        raise HTTPException(status_code=403, detail=_cmd_error(r))
     return {"ok": True}
 
 
@@ -604,7 +613,7 @@ def trash_move(body: TrashMoveRequest, session=Depends(get_current_session)):
     for path in body.paths:
         real = safe_path(path, home_for(eu))
         if run_as(eu, ["test", "-e", real]).returncode != 0:
-            errors.append(path)
+            errors.append(f"{path}: not found")
             continue
         name = os.path.basename(real)
         # avoid collisions
@@ -618,15 +627,17 @@ def trash_move(body: TrashMoveRequest, session=Depends(get_current_session)):
         cmd = (prefix + ["runuser", "-u", eu, "--", "mv", real, os.path.join(trash_files, dest_name)]) if eu != "root" else ["mv", real, os.path.join(trash_files, dest_name)]
         r = subprocess.run(cmd, capture_output=True)
         if r.returncode != 0:
-            errors.append(path)
+            errors.append(_cmd_error(r))
             continue
         # write trashinfo
         info = _json.dumps({"path": real, "date": datetime.now().isoformat(), "name": name})
         info_path = os.path.join(trash_info, dest_name + ".trashinfo")
         write_cmd = (prefix + ["runuser", "-u", eu, "--", "bash", "-c", f"cat > {info_path}"]) if eu != "root" else ["bash", "-c", f"cat > {info_path}"]
         subprocess.run(write_cmd, input=info.encode(), capture_output=True)
+    # A 2xx status here would read as success to every caller (fetch's
+    # r.ok), so a failed move must be a real error status.
     if errors:
-        raise HTTPException(status_code=207, detail=f"Some items could not be moved: {errors}")
+        raise HTTPException(status_code=403, detail="\n".join(errors))
     return JSONResponse({"ok": True})
 
 
