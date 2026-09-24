@@ -1461,6 +1461,8 @@ window._i18n = {
   "tc_delete_confirm": "删除“{name}”？",
   "tc_error_save": "无法保存该命令。",
   "tc_run_failed": "终端未能及时启动。",
+  "term_reconnecting": "连接已断开。正在重新连接…",
+  "term_reconnected": "已重新连接。这是一个新的 shell 会话。",
   "tc_shortcut_change": "更改快捷键",
   "tc_shortcut_press": "请按下新的快捷键…（按 Esc 取消）",
   "tc_shortcut_need": "请至少使用 Ctrl、Alt、Shift、Meta 中的两个，或使用功能键。",

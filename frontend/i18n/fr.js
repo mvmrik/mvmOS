@@ -1461,6 +1461,8 @@ window._i18n = {
   "tc_delete_confirm": "Supprimer « {name} » ?",
   "tc_error_save": "La commande n’a pas pu être enregistrée.",
   "tc_run_failed": "Le terminal n’a pas démarré à temps.",
+  "term_reconnecting": "Connexion perdue. Reconnexion…",
+  "term_reconnected": "Reconnecté. Ceci est une nouvelle session shell.",
   "tc_shortcut_change": "Changer le raccourci",
   "tc_shortcut_press": "Appuyez sur le nouveau raccourci… (Échap annule)",
   "tc_shortcut_need": "Utilisez au moins deux touches parmi Ctrl, Alt, Maj et Meta, ou une touche de fonction.",

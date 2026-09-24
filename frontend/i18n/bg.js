@@ -1461,6 +1461,8 @@ window._i18n = {
   "tc_delete_confirm": "Да се изтрие ли „{name}“?",
   "tc_error_save": "Командата не можа да се запази.",
   "tc_run_failed": "Терминалът не стартира навреме.",
+  "term_reconnecting": "Връзката прекъсна. Свързване отново…",
+  "term_reconnected": "Връзката е възстановена. Това е нова сесия на shell-а.",
   "tc_shortcut_change": "Смени комбинацията",
   "tc_shortcut_press": "Натисни новата комбинация… (Esc отказва)",
   "tc_shortcut_need": "Използвай поне два от Ctrl, Alt, Shift и Meta или функционален клавиш.",

@@ -14,6 +14,7 @@ Terminal opens a real interactive Linux shell in the mvmOS desktop. It is not a 
 - Opens a login shell as the Linux user currently signed in to mvmOS.
 - Uses that user’s real home directory and Linux permissions.
 - Supports ANSI colours, interactive programs, and terminal resizing.
+- Reconnects automatically after a network change, sleep, or server restart. A reconnected window starts a new shell session, so any command that was running in the previous session does not continue.
 - Keeps Linux as the permission boundary; commands are not separately sandboxed by mvmOS.
 
 ## Saved commands and the quick prompt

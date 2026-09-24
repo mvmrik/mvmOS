@@ -50,6 +50,62 @@ const Terminal = (() => {
     return b;
   }
 
+  // ── Shell connection ──────────────────────────────────────────────────────
+  // The connection to a shell can drop at any moment — the computer sleeps,
+  // the network changes, the server restarts — and would stay dead until the
+  // window is reopened. It reconnects on its own with a growing pause, and at
+  // once when the window is typed in, the tab comes back or the network
+  // returns. The shell behind a reconnect is always a new one.
+  function connectShell(h) {
+    const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+    let ws = null, timer = null, retry = 0, everOpened = false, closed = false;
+
+    function connect() {
+      clearTimeout(timer);
+      timer = null;
+      ws = new WebSocket(`${proto}://${location.host}/ws/terminal`);
+      ws.binaryType = 'arraybuffer';
+      ws.onopen = () => {
+        retry = 0;
+        h.onOpen(everOpened);
+        everOpened = true;
+      };
+      ws.onmessage = e => h.onMessage(e.data);
+      ws.onclose = () => {
+        if (closed) return;
+        if (retry === 0) h.onLost();
+        timer = setTimeout(connect, Math.min(30000, 1000 * 2 ** retry++));
+      };
+    }
+
+    function wake() {
+      if (closed || !ws) return;
+      if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) return;
+      connect();
+    }
+    const onVisible = () => { if (!document.hidden) wake(); };
+    window.addEventListener('online', wake);
+    document.addEventListener('visibilitychange', onVisible);
+    connect();
+
+    return {
+      isOpen: () => ws.readyState === WebSocket.OPEN,
+      wake,
+      send(data) {
+        if (ws.readyState === WebSocket.OPEN) ws.send(data);
+        else wake();
+      },
+      close() {
+        closed = true;
+        clearTimeout(timer);
+        window.removeEventListener('online', wake);
+        document.removeEventListener('visibilitychange', onVisible);
+        ws.onclose = ws.onmessage = null;
+        ws.close();
+      },
+    };
+  }
+
   // ── ANSI → HTML (basic colors for mobile terminal) ───────────────────────
   const ANSI_COLORS = {
     30:'#555',31:'#ff5555',32:'#50fa7b',33:'#f1fa8c',
@@ -93,7 +149,7 @@ const Terminal = (() => {
     termCount++;
     const id = 'terminal-' + termCount;
     const title = termCount === 1 ? t('app_terminal') : `${t('app_terminal')} (${termCount})`;
-    let ws;
+    let conn;
 
     Desktop.createWindow({
       id, pinKey: 'terminal', title,
@@ -204,23 +260,38 @@ const Terminal = (() => {
           output.scrollTop = output.scrollHeight;
         }
 
-        const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-        ws = new WebSocket(`${proto}://${location.host}/ws/terminal`);
-        ws.binaryType = 'arraybuffer';
         // estimate cols based on container width and font size (≈7.8px per char at 13px monospace)
         const estCols = Math.max(40, Math.floor(body.clientWidth / 7.8));
 
-        ws.onopen = () => {
-          ws.send(JSON.stringify({ type: 'resize', rows: 24, cols: estCols }));
-          // set PROMPT_COMMAND to emit OSC 7 (current dir) after every prompt
-          setTimeout(() => {
-            ws.send(new TextEncoder().encode(`export PROMPT_COMMAND='printf "\\033]7;%s\\007" "$PWD"'\n`));
-            setTimeout(() => { _ready = true; }, 600);
-          }, 400);
-        };
-        ws.onmessage = e => {
-          const raw = e.data instanceof ArrayBuffer
-            ? new TextDecoder().decode(new Uint8Array(e.data)) : e.data;
+        function notice(key, color) {
+          const line = document.createElement('div');
+          line.style.color = color;
+          line.textContent = '[' + t(key) + ']';
+          output.appendChild(line);
+          output.scrollTop = output.scrollHeight;
+        }
+
+        conn = connectShell({
+          onOpen(again) {
+            if (again) notice('term_reconnected', '#50fa7b');
+            conn.send(JSON.stringify({ type: 'resize', rows: 24, cols: estCols }));
+            // set PROMPT_COMMAND to emit OSC 7 (current dir) after every prompt
+            setTimeout(() => {
+              conn.send(new TextEncoder().encode(`export PROMPT_COMMAND='printf "\\033]7;%s\\007" "$PWD"'\n`));
+              setTimeout(() => { _ready = true; }, 600);
+            }, 400);
+          },
+          onMessage: onData,
+          onLost() {
+            _ready = false;
+            setRunning(false);
+            notice('term_reconnecting', '#f1fa8c');
+          },
+        });
+
+        function onData(data) {
+          const raw = data instanceof ArrayBuffer
+            ? new TextDecoder().decode(new Uint8Array(data)) : data;
           // intercept OSC 7 pwd before stripping
           const m = raw.match(/\x1b\]7;([^\x07]*)\x07/);
           if (m) input.placeholder = m[1].replace(/^file:\/\/[^/]*/, '') || input.placeholder;
@@ -228,9 +299,7 @@ const Terminal = (() => {
           _buf += raw;
           clearTimeout(_flushTimer);
           _flushTimer = setTimeout(flushOutput, 80);
-        };
-        ws.onclose = () => { output.innerHTML += '<span style="color:#ff5555">\n[Connection closed]</span>'; };
-        ws.onerror = () => { output.innerHTML = '<span style="color:#ff5555">[WebSocket error]</span>'; };
+        }
 
         function setRunning(v) {
           stopBtn.style.display = v ? '' : 'none';
@@ -238,33 +307,34 @@ const Terminal = (() => {
 
         function sendCmd() {
           const cmd = input.value.trim();
+          conn.wake();
           if (!cmd || !_ready) return;
           input.value = '';
           _buf = '';
           clearTimeout(_flushTimer);
           output.textContent = '';
-          if (ws.readyState !== WebSocket.OPEN) return;
+          if (!conn.isOpen()) return;
           setRunning(true);
-          ws.send(new TextEncoder().encode(cmd + '\n'));
+          conn.send(new TextEncoder().encode(cmd + '\n'));
         }
 
         sendBtn.addEventListener('click', () => { sendCmd(); input.focus(); });
         stopBtn.addEventListener('click', () => {
-          if (ws.readyState === WebSocket.OPEN) ws.send(new TextEncoder().encode('\x03'));
+          if (conn.isOpen()) conn.send(new TextEncoder().encode('\x03'));
           input.focus();
         });
         input.addEventListener('keydown', e => { if (e.key === 'Enter') sendCmd(); });
 
         const session = {
           id, body,
-          ready: () => _ready && ws.readyState === WebSocket.OPEN,
+          ready: () => _ready && conn.isOpen(),
           send(text) { input.value = text; sendCmd(); },
         };
         addSession(session);
         input.addEventListener('focus', () => useSession(session));
         body.addEventListener('mousedown', () => useSession(session));
       },
-      onClose() { if (ws) { ws.onclose = ws.onerror = ws.onmessage = null; ws.close(); } },
+      onClose() { if (conn) conn.close(); },
     });
   }
 
@@ -273,7 +343,7 @@ const Terminal = (() => {
     termCount++;
     const id = 'terminal-' + termCount;
     const title = termCount === 1 ? t('app_terminal') : `${t('app_terminal')} (${termCount})`;
-    let term, fitAddon, ws;
+    let term, fitAddon, conn;
 
     Desktop.createWindow({
       id, pinKey: 'terminal', title,
@@ -318,29 +388,27 @@ const Terminal = (() => {
         term.open(container);
         fitAddon.fit();
 
-        const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-        ws = new WebSocket(`${proto}://${location.host}/ws/terminal`);
-        ws.binaryType = 'arraybuffer';
-
         // Typed a moment after the shell starts, its first input is not lost.
         let opened = false;
-        ws.onopen = () => {
-          sendResize();
-          setTimeout(() => { opened = true; }, 300);
-        };
-        ws.onmessage = e => {
-          term.write(e.data instanceof ArrayBuffer ? new Uint8Array(e.data) : e.data);
-        };
-        ws.onclose = () => term.write('\r\n\x1b[31m[Connection closed]\x1b[0m\r\n');
-        ws.onerror = () => term.write('\r\n\x1b[31m[WebSocket error]\x1b[0m\r\n');
-        term.onData(data => {
-          if (ws.readyState === WebSocket.OPEN)
-            ws.send(new TextEncoder().encode(data));
+        conn = connectShell({
+          onOpen(again) {
+            if (again) term.write('\r\n\x1b[32m[' + t('term_reconnected') + ']\x1b[0m\r\n');
+            sendResize();
+            setTimeout(() => { opened = true; }, 300);
+          },
+          onMessage(data) {
+            term.write(data instanceof ArrayBuffer ? new Uint8Array(data) : data);
+          },
+          onLost() {
+            opened = false;
+            term.write('\r\n\x1b[33m[' + t('term_reconnecting') + ']\x1b[0m\r\n');
+          },
         });
+        term.onData(data => conn.send(new TextEncoder().encode(data)));
 
         function sendResize() {
-          if (ws.readyState === WebSocket.OPEN)
-            ws.send(JSON.stringify({ type: 'resize', rows: term.rows, cols: term.cols }));
+          if (conn.isOpen())
+            conn.send(JSON.stringify({ type: 'resize', rows: term.rows, cols: term.cols }));
         }
 
         const ro = new ResizeObserver(() => {
@@ -352,9 +420,9 @@ const Terminal = (() => {
 
         const session = {
           id, body,
-          ready: () => opened && ws.readyState === WebSocket.OPEN,
+          ready: () => opened && conn.isOpen(),
           send(text) {
-            ws.send(new TextEncoder().encode(text + '\n'));
+            conn.send(new TextEncoder().encode(text + '\n'));
             term.focus();
           },
         };
@@ -366,7 +434,7 @@ const Terminal = (() => {
         if (fitAddon) try { fitAddon.fit(); } catch (_) {}
       },
       onClose() {
-        if (ws) { ws.onclose = ws.onerror = ws.onmessage = null; ws.close(); }
+        if (conn) conn.close();
         if (term) try { term.dispose(); } catch (_) {}
       },
     });

@@ -1461,6 +1461,8 @@ window._i18n = {
   "tc_delete_confirm": "Delete “{name}”?",
   "tc_error_save": "The command could not be saved.",
   "tc_run_failed": "The terminal did not start in time.",
+  "term_reconnecting": "Connection lost. Reconnecting…",
+  "term_reconnected": "Reconnected. This is a new shell session.",
   "tc_shortcut_change": "Change the shortcut",
   "tc_shortcut_press": "Press the new shortcut… (Esc cancels)",
   "tc_shortcut_need": "Use at least two of Ctrl, Alt, Shift and Meta, or a function key.",

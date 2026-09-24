@@ -1461,6 +1461,8 @@ window._i18n = {
   "tc_delete_confirm": "「{name}」を削除しますか？",
   "tc_error_save": "コマンドを保存できませんでした。",
   "tc_run_failed": "ターミナルが時間内に起動しませんでした。",
+  "term_reconnecting": "接続が切れました。再接続しています…",
+  "term_reconnected": "再接続しました。新しいシェルセッションです。",
   "tc_shortcut_change": "ショートカットを変更",
   "tc_shortcut_press": "新しいショートカットを押してください…（Esc で取り消し）",
   "tc_shortcut_need": "Ctrl、Alt、Shift、Meta のうち2つ以上、またはファンクションキーを使ってください。",

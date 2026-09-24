@@ -1461,6 +1461,8 @@ window._i18n = {
   "tc_delete_confirm": "Excluir “{name}”?",
   "tc_error_save": "Não foi possível salvar o comando.",
   "tc_run_failed": "O terminal não iniciou a tempo.",
+  "term_reconnecting": "Conexão perdida. Reconectando…",
+  "term_reconnected": "Reconectado. Esta é uma nova sessão de shell.",
   "tc_shortcut_change": "Alterar o atalho",
   "tc_shortcut_press": "Pressione o novo atalho… (Esc cancela)",
   "tc_shortcut_need": "Use pelo menos duas das teclas Ctrl, Alt, Shift e Meta, ou uma tecla de função.",

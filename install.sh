@@ -178,9 +178,18 @@ echo "    journalctl -u $SERVICE_NAME -f"
 echo ""
 
 # ── Cleanup source directory ──────────────────────────────────────────────────
-SCRIPT_REAL=$(realpath "$0")
-SCRIPT_PARENT=$(dirname "$SCRIPT_REAL")
-if [[ "$SCRIPT_PARENT" != "$INSTALL_DIR" && "$SCRIPT_PARENT" != "/" ]]; then
-    cd "$INSTALL_DIR"
-    rm -rf "$SCRIPT_PARENT"
+# Only a folder that is an extracted mvmOS release is removed. The script can
+# also be run on its own — downloaded into a home directory, or piped through
+# `bash <(curl …)` where $0 is /dev/fd/N — and then its parent is the user's
+# folder or not a folder at all, which must never be deleted.
+if [[ -f "$0" ]]; then
+    SCRIPT_PARENT=$(dirname "$(realpath "$0")")
+    if [[ "$SCRIPT_PARENT" != "$INSTALL_DIR" && "$SCRIPT_PARENT" != "/" \
+          && "$SCRIPT_PARENT" != "/root" && "$SCRIPT_PARENT" != "${HOME:-/root}" \
+          && ! "$SCRIPT_PARENT" =~ ^/home/[^/]+/?$ \
+          && -f "$SCRIPT_PARENT/install.sh" && -f "$SCRIPT_PARENT/version.txt" \
+          && -f "$SCRIPT_PARENT/backend/main.py" ]]; then
+        cd "$INSTALL_DIR"
+        rm -rf "$SCRIPT_PARENT"
+    fi
 fi

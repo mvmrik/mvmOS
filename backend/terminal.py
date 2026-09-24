@@ -67,6 +67,8 @@ async def terminal_ws(websocket: WebSocket, session: str | None = Cookie(default
     try:
         while True:
             msg = await websocket.receive()
+            if msg["type"] == "websocket.disconnect":
+                break
             if "bytes" in msg:
                 proc.write(msg["bytes"])
             elif "text" in msg:

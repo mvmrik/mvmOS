@@ -1461,6 +1461,8 @@ window._i18n = {
   "tc_delete_confirm": "„{name}“ löschen?",
   "tc_error_save": "Der Befehl konnte nicht gespeichert werden.",
   "tc_run_failed": "Das Terminal wurde nicht rechtzeitig gestartet.",
+  "term_reconnecting": "Verbindung unterbrochen. Neu verbinden…",
+  "term_reconnected": "Wieder verbunden. Dies ist eine neue Shell-Sitzung.",
   "tc_shortcut_change": "Tastenkürzel ändern",
   "tc_shortcut_press": "Neues Tastenkürzel drücken … (Esc bricht ab)",
   "tc_shortcut_need": "Verwende mindestens zwei der Tasten Strg, Alt, Umschalt und Meta oder eine Funktionstaste.",
