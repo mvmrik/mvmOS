@@ -566,18 +566,14 @@ const Desktop = (() => {
           const paths = toDelete.map(en => en.path);
           const choice = await FileManager.deleteDialog(paths.length);
           if (!choice) return;
-          const errors = [];
-          if (choice === 'trash') {
-            errors.push(await FileManager.fileRequest('/api/files/trash/move', 'POST', { paths }));
-          } else {
-            for (const p of paths) {
-              errors.push(await FileManager.fileRequest('/api/files/delete', 'DELETE', { path: p }));
-            }
-          }
+          const failures = await FileManager.deletePaths(paths, choice);
           _desktopSelected.clear();
           await loadDesktopFiles();
           renderIcons();
-          FileManager.showErrors(t(choice === 'trash' ? 'fm_move_to_trash_failed' : 'fm_delete_failed'), errors);
+          FileManager.showErrors(t(choice === 'trash' ? 'fm_move_to_trash_failed' : 'fm_delete_failed'), failures, {
+            trash: choice === 'trash',
+            onRetried: async () => { await loadDesktopFiles(); renderIcons(); },
+          });
         } else {
           removeFromDesktop(id);
         }

@@ -6,10 +6,10 @@ import pwd
 import grp
 import subprocess
 from datetime import datetime
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Request
 from fastapi.responses import JSONResponse, FileResponse, StreamingResponse
 from pydantic import BaseModel
-from .auth import get_current_session
+from .auth import get_current_session, acting_user
 
 router = APIRouter(prefix="/api/files", tags=["files"])
 
@@ -161,29 +161,28 @@ def get_places(session=Depends(get_current_session)):
 
 
 @router.get("")
-def list_dir(path: str = "/", as_root: bool = False, session=Depends(get_current_session)):
-    eu = session["effective_user"]
+def list_dir(request: Request, path: str = "/", as_root: bool = False, session=Depends(get_current_session)):
+    eu = acting_user(session, request)
     real = safe_path(path, home_for(eu))
-    # only an actual root session may browse as root — otherwise stay as the user
-    check_user = "root" if (as_root and eu == "root") else eu
-    if run_as(check_user, ["test", "-d", real]).returncode != 0:
+    if run_as(eu, ["test", "-d", real]).returncode != 0:
         raise HTTPException(status_code=404, detail="Not a directory")
     try:
-        entries = readdir_as_user(real, check_user)
+        entries = readdir_as_user(real, eu)
     except PermissionError:
         raise HTTPException(status_code=403, detail="Permission denied")
-    return JSONResponse({"path": path, "entries": entries, "as_root": as_root})
+    return JSONResponse({"path": path, "entries": entries, "as_root": eu == "root"})
 
 
 @router.post("/upload")
 async def upload_file(
+    request: Request,
     path: str = Form("/"),
     file: UploadFile = File(...),
     session=Depends(get_current_session),
 ):
     if not file.filename:
         raise HTTPException(status_code=400, detail="Empty filename")
-    eu = session["effective_user"]
+    eu = acting_user(session, request)
     dest = safe_path(os.path.join(path, os.path.basename(file.filename)))
     import tempfile
     data = await file.read()
@@ -213,6 +212,7 @@ _CHUNK_TMP_DIR = "/tmp/mvmos-uploads"
 
 @router.post("/upload-chunk")
 async def upload_chunk(
+    request: Request,
     upload_id: str = Form(...),
     chunk_index: int = Form(...),
     total_chunks: int = Form(...),
@@ -223,7 +223,7 @@ async def upload_chunk(
     session=Depends(get_current_session),
 ):
     import re, time
-    eu = session["effective_user"]
+    eu = acting_user(session, request)
     if not filename or os.path.basename(filename) != filename:
         raise HTTPException(400, "Invalid filename")
     safe_id = re.sub(r"[^a-zA-Z0-9_-]", "", upload_id)
@@ -323,8 +323,8 @@ class CopyRequest(BaseModel):
     move: bool = False
 
 @router.post("/copy")
-def copy_file(body: CopyRequest, session=Depends(get_current_session)):
-    eu = session["effective_user"]
+def copy_file(body: CopyRequest, request: Request, session=Depends(get_current_session)):
+    eu = acting_user(session, request)
     src = safe_path(body.src)
     dst_dir = safe_path(body.dst_dir)
     dst = os.path.join(dst_dir, os.path.basename(src))
@@ -335,8 +335,8 @@ def copy_file(body: CopyRequest, session=Depends(get_current_session)):
     return {"ok": True}
 
 @router.post("/rename")
-def rename(body: RenameRequest, session=Depends(get_current_session)):
-    eu = session["effective_user"]
+def rename(body: RenameRequest, request: Request, session=Depends(get_current_session)):
+    eu = acting_user(session, request)
     src = safe_path(body.path)
     dst = safe_path(os.path.join(os.path.dirname(body.path), body.new_name))
     r = run_as(eu, ["mv", src, dst])
@@ -350,8 +350,8 @@ class DeleteRequest(BaseModel):
 
 
 @router.delete("/delete")
-def delete(body: DeleteRequest, session=Depends(get_current_session)):
-    eu = session["effective_user"]
+def delete(body: DeleteRequest, request: Request, session=Depends(get_current_session)):
+    eu = acting_user(session, request)
     real = safe_path(body.path)
     r = run_as(eu, ["rm", "-rf", real])
     if r.returncode != 0:
@@ -364,8 +364,8 @@ class MkdirRequest(BaseModel):
 
 
 @router.post("/mkdir")
-def mkdir(body: MkdirRequest, session=Depends(get_current_session)):
-    eu = session["effective_user"]
+def mkdir(body: MkdirRequest, request: Request, session=Depends(get_current_session)):
+    eu = acting_user(session, request)
     real = safe_path(body.path)
     r = run_as(eu, ["mkdir", "-p", real])
     if r.returncode != 0:
@@ -379,8 +379,8 @@ class ChmodRequest(BaseModel):
 
 
 @router.post("/chmod")
-def chmod(body: ChmodRequest, session=Depends(get_current_session)):
-    eu = session["effective_user"]
+def chmod(body: ChmodRequest, request: Request, session=Depends(get_current_session)):
+    eu = acting_user(session, request)
     if eu != "root":
         raise HTTPException(status_code=403, detail="Permission denied")
     real = safe_path(body.path)
@@ -401,8 +401,8 @@ class WriteRequest(BaseModel):
     content: str
 
 @router.post("/write")
-def write_file(body: WriteRequest, session=Depends(get_current_session)):
-    eu = session["effective_user"]
+def write_file(body: WriteRequest, request: Request, session=Depends(get_current_session)):
+    eu = acting_user(session, request)
     real = safe_path(body.path)
     if run_as(eu, ["test", "-d", real]).returncode == 0:
         raise HTTPException(status_code=400, detail="Path is a directory")
@@ -412,8 +412,8 @@ def write_file(body: WriteRequest, session=Depends(get_current_session)):
     return {"ok": True}
 
 @router.get("/search")
-def search_files(path: str, q: str, session=Depends(get_current_session)):
-    eu = session["effective_user"]
+def search_files(path: str, q: str, request: Request, session=Depends(get_current_session)):
+    eu = acting_user(session, request)
     real = safe_path(path, home_for(eu))
     if run_as(eu, ["test", "-d", real]).returncode != 0:
         raise HTTPException(status_code=400, detail="Not a directory")
@@ -443,8 +443,8 @@ def search_files(path: str, q: str, session=Depends(get_current_session)):
     return JSONResponse({"results": results})
 
 @router.get("/dirsize")
-def dir_size(path: str, session=Depends(get_current_session)):
-    eu = session["effective_user"]
+def dir_size(path: str, request: Request, session=Depends(get_current_session)):
+    eu = acting_user(session, request)
     real = safe_path(path, home_for(eu))
     if run_as(eu, ["test", "-d", real]).returncode != 0:
         raise HTTPException(status_code=400, detail="Not a directory")
@@ -456,9 +456,9 @@ def dir_size(path: str, session=Depends(get_current_session)):
     return {"size": total}
 
 @router.get("/raw")
-def raw_file(path: str, session=Depends(get_current_session)):
+def raw_file(path: str, request: Request, session=Depends(get_current_session)):
     import mimetypes
-    eu = session["effective_user"]
+    eu = acting_user(session, request)
     real = safe_path(path, home_for(eu))
     if run_as(eu, ["test", "-f", real]).returncode != 0:
         raise HTTPException(status_code=404, detail="Not found")
@@ -510,9 +510,9 @@ class DownloadZipRequest(BaseModel):
 
 @router.post("/download-zip")
 @router.post("/download-zip/")
-def download_zip(body: DownloadZipRequest, session=Depends(get_current_session)):
+def download_zip(body: DownloadZipRequest, request: Request, session=Depends(get_current_session)):
     import io, zipfile, mimetypes
-    eu = session["effective_user"]
+    eu = acting_user(session, request)
     home = home_for(eu)
     reals = [safe_path(p, home) for p in body.paths]
 
@@ -845,8 +845,8 @@ def desktop_delete_entry(path: str, session=Depends(get_current_session)):
     return JSONResponse({"ok": True})
 
 @router.post("/chown")
-def chown(body: ChownRequest, session=Depends(get_current_session)):
-    eu = session["effective_user"]
+def chown(body: ChownRequest, request: Request, session=Depends(get_current_session)):
+    eu = acting_user(session, request)
     real = safe_path(body.path)
     spec = body.owner + ((":" + body.group) if body.group else "")
     r = run_as(eu, ["chown", spec, real])
@@ -860,9 +860,9 @@ class CompressRequest(BaseModel):
     dest: str
 
 @router.post("/compress")
-def compress_to_zip(body: CompressRequest, session=Depends(get_current_session)):
+def compress_to_zip(body: CompressRequest, request: Request, session=Depends(get_current_session)):
     import zipfile, tempfile, io as _io
-    eu = session["effective_user"]
+    eu = acting_user(session, request)
     dest = safe_path(body.dest)
     prefix = [] if os.geteuid() == 0 else ["sudo"]
 
@@ -896,9 +896,9 @@ class ExtractRequest(BaseModel):
     path: str
 
 @router.post("/extract")
-def extract_archive(body: ExtractRequest, session=Depends(get_current_session)):
+def extract_archive(body: ExtractRequest, request: Request, session=Depends(get_current_session)):
     import zipfile, tarfile, tempfile, io as _io
-    eu = session["effective_user"]
+    eu = acting_user(session, request)
     real = safe_path(body.path)
     dest_dir = os.path.dirname(real)
     name = os.path.basename(real).lower()

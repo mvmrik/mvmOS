@@ -6,6 +6,7 @@ var CodeEditor = (() => {
   let _projectId = null;
   let _projectDir = null;
   let _dirty = false;
+  let _adminKey = null;  // set while editing as root from File Manager
   let _cmLoaded = false;
 
   const HINTS = [
@@ -413,12 +414,15 @@ var CodeEditor = (() => {
     return CODE_EXTS.includes(ext);
   }
 
-  async function openFile(filepath) {
+  // opts.adminKey: opened from a File Manager window in administrator mode;
+  // the editor then reads and saves as root.
+  async function openFile(filepath, opts = {}) {
     const filename = filepath.split('/').pop();
     // derive projectDir as parent directory
     const dir = filepath.substring(0, filepath.lastIndexOf('/'));
     const projectId = dir.split('/').pop();
-    if (_win && document.body.contains(_win) && _projectDir === dir) {
+    const adminKey = opts.adminKey || null;
+    if (_win && document.body.contains(_win) && _projectDir === dir && _adminKey === adminKey) {
       // editor already open for this dir — just switch file
       await _openFile(filepath, filename);
       return;
@@ -427,7 +431,7 @@ var CodeEditor = (() => {
       _win = null;
       _editor = null;
     }
-    await openWindow(projectId, dir);
+    await openWindow(projectId, dir, adminKey);
     // wait for editor to mount then open the file
     const _waitOpen = setInterval(() => {
       if (_editor) {
@@ -444,14 +448,16 @@ var CodeEditor = (() => {
     return 'text';
   }
 
+  function _url(u) { return FileManager.adminUrl(u, _adminKey); }
+
   async function _loadFile(filepath) {
-    const res = await fetch('/api/files/raw?path=' + encodeURIComponent(filepath));
+    const res = await fetch(_url('/api/files/raw?path=' + encodeURIComponent(filepath)));
     if (!res.ok) throw new Error('Cannot read file');
     return await res.text();
   }
 
   async function _saveFile(filepath, content) {
-    const res = await fetch('/api/files/write', {
+    const res = await fetch(_url('/api/files/write'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ path: filepath, content }),
@@ -477,13 +483,13 @@ var CodeEditor = (() => {
     if (!_win) return;
     const name = _currentFile ? _currentFile.split('/').pop() : '';
     const titleEl = _win.querySelector('.window-title');
-    if (titleEl) titleEl.textContent = '📝 ' + (_projectId || '') + (name ? ' — ' + name : '') + (_dirty ? ' ●' : '');
+    if (titleEl) titleEl.textContent = '📝 ' + (_projectId || '') + (name ? ' — ' + name : '') + (_adminKey ? ' (root)' : '') + (_dirty ? ' ●' : '');
   }
 
   async function _buildSidebar(sidebar) {
     sidebar.innerHTML = `<div class="ce-loading">${t('ce_loading')}</div>`;
     try {
-      const res = await fetch('/api/files?path=' + encodeURIComponent(_projectDir));
+      const res = await fetch(_url('/api/files?path=' + encodeURIComponent(_projectDir)));
       const data = await res.json();
       const files = (data.entries || data.files || data || []).filter(f => !f.name.startsWith('.') && f.name !== 'mvmos_project.json');
       sidebar.innerHTML = '';
@@ -510,7 +516,7 @@ var CodeEditor = (() => {
               const sub = document.createElement('div');
               sub.className = 'ce-dir-children';
               el.after(sub);
-              const r2 = await fetch('/api/files?path=' + encodeURIComponent(el.dataset.path));
+              const r2 = await fetch(_url('/api/files?path=' + encodeURIComponent(el.dataset.path)));
               const d2 = await r2.json();
               renderItems(d2.entries || d2.files || d2 || [], sub, el.dataset.path);
             });
@@ -557,9 +563,10 @@ var CodeEditor = (() => {
     container.appendChild(panel);
   }
 
-  async function openWindow(projectId, projectDir) {
+  async function openWindow(projectId, projectDir, adminKey = null) {
     _projectId = projectId;
     _projectDir = projectDir;
+    _adminKey = adminKey;
 
     if (_win) { Desktop.closeWindow('codeeditor-' + _projectId); _win = null; }
 

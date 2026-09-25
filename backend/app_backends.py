@@ -94,8 +94,18 @@ def install(app_id: str, source_code: str) -> None:
 
 
 def uninstall(app_id: str) -> None:
-    """Remove backend folder and unmount its routes immediately."""
+    """Remove backend folder and unmount its routes immediately. An app that
+    changed the system outside its own folders (a service, a user, a file in
+    /etc) defines on_uninstall() in backend.py to undo that first; a failure
+    there must not keep the app from being removed."""
     import shutil
+    mod = sys.modules.get(f"app_backend_{app_id}")
+    hook = getattr(mod, "on_uninstall", None) if mod is not None else None
+    if callable(hook):
+        try:
+            hook()
+        except Exception as e:
+            print(f"[app-backends] {app_id}: on_uninstall failed: {e}")
     app_dir = os.path.join(BACKENDS_DIR, app_id)
     if os.path.isdir(app_dir):
         shutil.rmtree(app_dir)

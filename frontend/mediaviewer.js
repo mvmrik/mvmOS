@@ -7,7 +7,9 @@ const ImageViewer = (() => {
     return IMAGE_EXTS.includes(name.split('.').pop().toLowerCase());
   }
 
-  function openWindow(path, siblings) {
+  // opts.adminKey: opened from a File Manager window in administrator mode.
+  function openWindow(path, siblings, opts = {}) {
+    const raw = p => FileManager.adminUrl(`/api/files/raw?path=${encodeURIComponent(p)}`, opts.adminKey);
     const name = path.split('/').pop();
     const imgs = (siblings || []).filter(s => isImage(s.name));
     let idx = imgs.findIndex(s => s.name === name);
@@ -44,7 +46,7 @@ const ImageViewer = (() => {
           idx = ((i % imgs.length) + imgs.length) % imgs.length;
           const entry = imgs[idx];
           const p = path.substring(0, path.lastIndexOf('/') + 1) + entry.name;
-          img.src = `/api/files/raw?path=${encodeURIComponent(p)}`;
+          img.src = raw(p);
           label.textContent = `${entry.name}  (${idx + 1}/${imgs.length})`;
           zoom = 1;
           img.style.transform = '';
@@ -62,7 +64,7 @@ const ImageViewer = (() => {
         }, true);
 
         if (idx === -1) {
-          img.src = `/api/files/raw?path=${encodeURIComponent(path)}`;
+          img.src = raw(path);
           label.textContent = name;
         } else {
           load(idx);
@@ -88,7 +90,7 @@ const VideoPlayer = (() => {
     return AUDIO_EXTS.includes(name.split('.').pop().toLowerCase());
   }
 
-  function openWindow(path) {
+  function openWindow(path, opts = {}) {
     const name = path.split('/').pop();
     const ext = name.split('.').pop().toLowerCase();
     const audio = AUDIO_EXTS.includes(ext);
@@ -104,7 +106,7 @@ const VideoPlayer = (() => {
         const tag = audio ? 'audio' : 'video';
         body.innerHTML = `
           <${tag} id="vp-media" style="${audio ? 'width:100%;padding:8px;box-sizing:border-box;' : 'flex:1;width:100%;height:100%;'} outline:none;" controls preload="metadata">
-            <source src="/api/files/raw?path=${encodeURIComponent(path)}">
+            <source src="${FileManager.adminUrl(`/api/files/raw?path=${encodeURIComponent(path)}`, opts.adminKey)}">
           </${tag}>
         `;
         body.querySelector('#vp-media').play().catch(() => {});
@@ -125,13 +127,14 @@ const TextEditor = (() => {
     return TEXT_EXTS.includes(ext);
   }
 
-  function openWindow(path) {
+  function openWindow(path, opts = {}) {
     const name = path.split('/').pop();
+    const url = u => FileManager.adminUrl(u, opts.adminKey);
     const id = 'texteditor-' + btoa(unescape(encodeURIComponent(path))).slice(0, 12);
     Desktop.createWindow({
       id,
       pinKey: 'texteditor',
-      title: '📝 ' + name,
+      title: '📝 ' + name + (opts.adminKey ? ' (root)' : ''),
       width: 720,
       height: 500,
       onMount(body) {
@@ -149,7 +152,7 @@ const TextEditor = (() => {
         const saveBtn = body.querySelector('#te-save');
 
         // load content
-        fetch(`/api/files/raw?path=${encodeURIComponent(path)}&_=${Date.now()}`)
+        fetch(url(`/api/files/raw?path=${encodeURIComponent(path)}&_=${Date.now()}`))
           .then(r => r.text())
           .then(text => { area.value = text; status.textContent = ''; })
           .catch(() => { status.textContent = t('mv_failed_to_load'); });
@@ -163,7 +166,7 @@ const TextEditor = (() => {
 
         async function save() {
           saveBtn.disabled = true;
-          const res = await fetch('/api/files/write', {
+          const res = await fetch(url('/api/files/write'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ path, content: area.value }),

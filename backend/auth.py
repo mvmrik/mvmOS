@@ -473,25 +473,106 @@ class VerifyRequest(BaseModel):
     username: Optional[str] = None
 
 
+def user_can_sudo(username: str) -> bool:
+    import grp
+    if username == "root":
+        return True
+    for group in ("sudo", "wheel"):
+        try:
+            if username in grp.getgrnam(group).gr_mem:
+                return True
+        except KeyError:
+            pass
+    return False
+
+
+def require_sudo_password(session: dict, password: str, request: Request):
+    """Lets a sudo-capable user run one action as root after typing their own
+    Linux password, the same way sudo would. The password is checked again on
+    the server for every action, so the action cannot be reached by skipping
+    the password dialog, and failures share the login rate limit."""
+    username = session["effective_user"]
+    if username == "root":
+        return
+    if not user_can_sudo(username):
+        raise HTTPException(status_code=403, detail="Your Linux user is not allowed to use sudo")
+    ip = request.headers.get("X-Real-IP") or request.client.host
+    wait = _check_rate_limit(ip)
+    if wait > 0:
+        mins = (wait + 59) // 60
+        raise HTTPException(status_code=429, detail=f"Too many attempts. Try again in {mins} minute{'s' if mins != 1 else ''}.")
+    if not password or not verify_linux_password(username, password):
+        _record_attempt(ip)
+        raise HTTPException(status_code=403, detail="Wrong password")
+    _clear_attempts(ip)
+
+
+# Administrator mode: after the user's own sudo password is confirmed, the
+# client gets a short-lived key that makes file actions run as root. The key
+# only works together with the session it was issued for and expires after
+# _ADMIN_IDLE seconds without use, like sudo's own timestamp.
+_ADMIN_IDLE = 15 * 60
+_admin_keys: dict[str, dict] = {}  # key -> {session, expires}
+
+
+def acting_user(session: dict, request: Request) -> str:
+    """The Linux user a file action runs as: root while the request carries a
+    valid administrator key, otherwise the session's own user. A key that has
+    expired is refused instead of silently falling back, so the user is asked
+    for the password again rather than seeing unexplained permission errors."""
+    key = request.headers.get("X-Admin-Key") or request.query_params.get("admin_key")
+    if not key:
+        return session["effective_user"]
+    now = time.time()
+    entry = _admin_keys.get(key)
+    if not entry or entry["session"] != session["token"] or entry["expires"] < now:
+        _admin_keys.pop(key, None)
+        raise HTTPException(status_code=403, detail="admin_expired")
+    entry["expires"] = now + _ADMIN_IDLE
+    return "root"
+
+
+class AdminRequest(BaseModel):
+    password: str = ""
+
+
+@router.post("/api/auth/admin")
+async def admin_start(body: AdminRequest, request: Request, session=Depends(get_current_session)):
+    require_sudo_password(session, body.password, request)
+    now = time.time()
+    for k in [k for k, v in _admin_keys.items() if v["expires"] < now]:
+        del _admin_keys[k]
+    key = secrets.token_urlsafe(32)
+    _admin_keys[key] = {"session": session["token"], "expires": now + _ADMIN_IDLE}
+    return JSONResponse({"key": key})
+
+
+@router.get("/api/auth/admin")
+async def admin_status(request: Request, session=Depends(get_current_session)):
+    """Seconds left before the administrator key expires. Only reads the
+    timer, so showing a countdown does not keep the key alive."""
+    key = request.headers.get("X-Admin-Key") or request.query_params.get("admin_key")
+    entry = _admin_keys.get(key or "")
+    if not entry or entry["session"] != session["token"]:
+        return JSONResponse({"remaining": 0})
+    return JSONResponse({"remaining": max(0, int(entry["expires"] - time.time()))})
+
+
+@router.delete("/api/auth/admin")
+async def admin_end(request: Request, session=Depends(get_current_session)):
+    key = request.headers.get("X-Admin-Key") or request.query_params.get("admin_key")
+    entry = _admin_keys.get(key or "")
+    if entry and entry["session"] == session["token"]:
+        del _admin_keys[key]
+    return JSONResponse({"ok": True})
+
+
 @router.get("/api/auth/can-sudo")
 async def can_sudo(session=Depends(get_current_session)):
-    import grp
     username = session["effective_user"]
     if username == "root":
         return JSONResponse({"ok": True, "is_root": True})
-    try:
-        sudo_group = grp.getgrnam("sudo")
-        if username in sudo_group.gr_mem:
-            return JSONResponse({"ok": True})
-    except KeyError:
-        pass
-    try:
-        wheel_group = grp.getgrnam("wheel")
-        if username in wheel_group.gr_mem:
-            return JSONResponse({"ok": True})
-    except KeyError:
-        pass
-    return JSONResponse({"ok": False})
+    return JSONResponse({"ok": user_can_sudo(username)})
 
 
 @router.post("/api/auth/verify")

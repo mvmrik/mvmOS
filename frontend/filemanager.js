@@ -8,20 +8,22 @@ const FileManager = (() => {
   // A folder name with spaces or shell characters must stay one argument.
   function shQuote(p) { return "'" + String(p).replace(/'/g, "'\\''") + "'"; }
 
-  function openWindow(startPath) {
+  // opts.adminKey opens the window in administrator mode: every action in it
+  // runs as root on the server until the key expires or the user leaves it.
+  function openWindow(startPath, opts = {}) {
     fmCount++;
     const id = 'filemanager-' + fmCount;
 
     const win = Desktop.createWindow({
       id,
       pinKey: 'filemanager',
-      title: `📁 ${t('app_filemanager')}`,
+      title: `📁 ${t('app_filemanager')}${opts.adminKey ? ' (root)' : ''}`,
       width: 720,
       height: 480,
       appSettings: 'filemanager',
       onMount(body) {
         (window.mvmOS?.i18nReady || Promise.resolve()).then(() => {
-          const fm = new FMInstance(body, win.footer);
+          const fm = new FMInstance(body, win.footer, opts.adminKey);
           if (startPath) {
             fm.navigate(startPath);
           } else {
@@ -36,8 +38,9 @@ const FileManager = (() => {
   }
 
   class FMInstance {
-    constructor(body, footer) {
+    constructor(body, footer, adminKey) {
       this.body = body;
+      this.adminKey = adminKey || null;
       this.footer = footer;
       this.currentPath = '/';
       this.selected = null;
@@ -136,7 +139,7 @@ const FileManager = (() => {
         const q = this.searchEl.value.trim();
         if (!q) return;
         this.footerStatus.textContent = t('fm_searching');
-        const res = await fetch(`/api/files/search?path=${encodeURIComponent(this.currentPath)}&q=${encodeURIComponent(q)}`);
+        const res = await this.api(`/api/files/search?path=${encodeURIComponent(this.currentPath)}&q=${encodeURIComponent(q)}`);
         if (!res.ok) { this.footerStatus.textContent = t('fm_search_failed'); return; }
         const data = await res.json();
         this.footerStatus.textContent = t('fm_results', {n: data.results.length, s: data.results.length !== 1 ? 's' : '', q});
@@ -248,7 +251,7 @@ const FileManager = (() => {
 
     async loadPlaces() {
       try {
-        const res = await fetch('/api/files/places');
+        const res = await this.api('/api/files/places');
         const data = await res.json();
         this.placesEl.innerHTML = '';
 
@@ -386,7 +389,7 @@ const FileManager = (() => {
             const cb = window._fmClipboard;
             const paths = cb.paths || [cb.path];
             for (const src of paths) {
-              await fetch('/api/files/copy', {
+              await this.api('/api/files/copy', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ src, dst_dir: path, move: cb.cut }),
@@ -454,7 +457,7 @@ const FileManager = (() => {
         this._setTrashMode(true);
         this.breadEl.innerHTML = `<span class="fm-bread-btn">🗑️ ${t('fm_trash')}</span>`;
         try {
-          const res = await fetch('/api/files/trash/list');
+          const res = await this.api('/api/files/trash/list');
           const items = await res.json();
           this.renderTrash(items);
         } catch { this.showError(t('fm_network_error')); }
@@ -484,11 +487,10 @@ const FileManager = (() => {
       });
 
       try {
-        const url = `/api/files?path=${encodeURIComponent(path)}` + (this._asRoot ? '&as_root=true' : '');
-        const res = await fetch(url);
+        const res = await this.api(`/api/files?path=${encodeURIComponent(path)}`);
         if (!res.ok) { this.showError(t('fm_cannot_read')); return; }
         const data = await res.json();
-        this._updateRootBadge(!!data.as_root);
+        this._updateRootBadge(!!this.adminKey);
         this.render(data.entries);
       } catch (e) {
         this.showError(t('fm_network_error'));
@@ -497,16 +499,52 @@ const FileManager = (() => {
       }
     }
 
-    async navigateAsRoot(path) {
-      this._asRoot = true;
-      await this.navigate(path);
-      // keep _asRoot=true so sub-navigation stays as root
+    // Every request of this window goes through here, so in administrator
+    // mode it carries the key. An expired key asks for the password again
+    // and repeats the request; declining closes administrator mode.
+    async api(url, opts) {
+      let res = await fetch(adminUrl(url, this.adminKey), opts);
+      if (this.adminKey && res.status === 403) {
+        const data = await res.clone().json().catch(() => ({}));
+        if (data.detail === 'admin_expired') {
+          const key = await requestAdminKey(t('fm_admin_expired'));
+          if (!key) { this.leaveAdmin(); return res; }
+          this.adminKey = key;
+          res = await fetch(adminUrl(url, key), opts);
+        }
+      }
+      if (this.adminKey && res.ok) this._adminExpires = Date.now() + ADMIN_IDLE_MS;
+      return res;
     }
 
-    navigateNormal(path) {
-      this._asRoot = false;
+    // Counts down the administrator time in the title bar badge. Every use of
+    // the key resets it on the server, including from editors opened from
+    // this window, so the local count is corrected from the server regularly.
+    _startRootTimer(badge) {
+      clearInterval(this._rootTimer);
+      const timeEl = badge.querySelector('.fm-root-time');
+      let tick = 0;
+      const sync = async () => {
+        if (!this.adminKey) return;
+        const d = await fetch(adminUrl('/api/auth/admin', this.adminKey)).then(r => r.json()).catch(() => null);
+        if (d) this._adminExpires = Date.now() + d.remaining * 1000;
+      };
+      const show = () => {
+        if (!badge.isConnected) { clearInterval(this._rootTimer); return; }
+        const s = Math.max(0, Math.round(((this._adminExpires || 0) - Date.now()) / 1000));
+        timeEl.textContent = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+        if (++tick % 15 === 0) sync();
+      };
+      this._adminExpires = this._adminExpires || Date.now() + ADMIN_IDLE_MS;
+      sync().then(show);
+      this._rootTimer = setInterval(show, 1000);
+    }
+
+    leaveAdmin() {
+      endAdmin(this.adminKey);
+      this.adminKey = null;
       this._updateRootBadge(false);
-      return this.navigate(path);
+      this.navigate(this.currentPath);
     }
 
     _updateRootBadge(isRoot) {
@@ -521,14 +559,13 @@ const FileManager = (() => {
         badge = document.createElement('span');
         badge.className = 'fm-root-badge';
         badge.title = t('fm_exit_root');
-        badge.innerHTML = '🔓 root ✕';
-        badge.addEventListener('click', () => {
-          this._asRoot = false;
-          this._updateRootBadge(false);
-          this.navigate(this.currentPath);
-        });
+        badge.innerHTML = '🔓 root <span class="fm-root-time"></span> ✕';
+        badge.addEventListener('click', () => this.leaveAdmin());
         titleEl.after(badge);
+        this._startRootTimer(badge);
       } else if (!isRoot && badge) {
+        clearInterval(this._rootTimer);
+        this._adminExpires = null;
         badge.remove();
       }
     }
@@ -583,7 +620,7 @@ const FileManager = (() => {
     }
 
     async trashRestore(names) {
-      await fetch('/api/files/trash/restore', {
+      await this.api('/api/files/trash/restore', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ names }),
@@ -592,7 +629,7 @@ const FileManager = (() => {
     }
 
     async trashRestoreAll() {
-      const res = await fetch('/api/files/trash/list');
+      const res = await this.api('/api/files/trash/list');
       const items = await res.json();
       if (items.length === 0) return;
       await this.trashRestore(items.map(i => i.name));
@@ -600,7 +637,7 @@ const FileManager = (() => {
 
     async trashEmpty() {
       if (!confirm(t('fm_trash_confirm_empty'))) return;
-      await fetch('/api/files/trash/empty', { method: 'DELETE' });
+      await this.api('/api/files/trash/empty', { method: 'DELETE' });
       this.navigate('__trash__');
     }
 
@@ -608,27 +645,27 @@ const FileManager = (() => {
       if (!confirm(t('fm_trash_confirm_perm').replace('{n}', names.length))) return;
       // use trash files path for permanent deletion
       for (const name of names) {
-        await fetch('/api/files/trash/restore', {
+        await this.api('/api/files/trash/restore', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ names: [] }), // noop
         });
       }
       // actually delete via /api/files/delete using trash path
-      const res2 = await fetch('/api/files/trash/list');
+      const res2 = await this.api('/api/files/trash/list');
       const all = await res2.json();
       // get home to build trash path
-      const placesRes = await fetch('/api/files/places');
+      const placesRes = await this.api('/api/files/places');
       const places = await placesRes.json();
       const trashFilesPath = `${places.home}/.Trash/files`;
       for (const name of names) {
-        await fetch('/api/files/delete', {
+        await this.api('/api/files/delete', {
           method: 'DELETE',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ path: `${trashFilesPath}/${name}` }),
         });
         // also remove trashinfo
-        await fetch('/api/files/delete', {
+        await this.api('/api/files/delete', {
           method: 'DELETE',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ path: `${places.home}/.Trash/info/${name}.trashinfo` }),
@@ -696,7 +733,7 @@ const FileManager = (() => {
         const size = entry.type === 'dir' ? '—' : this.formatSize(entry.size);
         const date = entry.modified ? entry.modified.slice(0, 16).replace('T', ' ') : '';
 
-        const isRoot = window._effectiveUser === 'root';
+        const isRoot = window._effectiveUser === 'root' || !!this.adminKey;
         const permsHtml = prefs.showPerms
           ? `<span class="fm-perms${isRoot ? ' fm-editable' : ''}" title="${isRoot ? t('fm_perms_title') : ''}">${entry.permissions || ''}</span>` : '';
         const ownerHtml = prefs.showOwner
@@ -757,23 +794,23 @@ const FileManager = (() => {
             if (e.target.classList.contains('fm-editable')) return;
             const fullPath = this.joinPath(this.currentPath, entry.name);
             if (entry.name.endsWith('.url')) {
-              fetch(`/api/files/raw?path=${encodeURIComponent(fullPath)}`)
+              this.api(`/api/files/raw?path=${encodeURIComponent(fullPath)}`)
                 .then(r => r.text())
                 .then(text => {
                   const match = text.match(/^URL=(.+)$/m);
                   if (match) window.open(match[1].trim(), '_blank');
                 });
             } else if (ImageViewer.isImage(entry.name)) {
-              ImageViewer.openWindow(fullPath, this._lastEntries);
+              ImageViewer.openWindow(fullPath, this._lastEntries, { adminKey: this.adminKey });
             } else if (VideoPlayer.isVideo(entry.name) || VideoPlayer.isAudio(entry.name)) {
-              VideoPlayer.openWindow(fullPath);
+              VideoPlayer.openWindow(fullPath, { adminKey: this.adminKey });
             } else if (/\.(zip|tar|tar\.gz|tgz|tar\.bz2|tar\.xz)$/i.test(entry.name)) {
-              fetch('/api/files/extract', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ path: fullPath }) })
+              this.api('/api/files/extract', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ path: fullPath }) })
                 .then(r => r.json()).then(res => { if (res.ok) this.navigate(this.currentPath); });
             } else if (CodeEditor.isCode(entry.name)) {
-              CodeEditor.openFile(fullPath);
+              CodeEditor.openFile(fullPath, { adminKey: this.adminKey });
             } else if (TextEditor.isText(entry.name)) {
-              TextEditor.openWindow(fullPath);
+              TextEditor.openWindow(fullPath, { adminKey: this.adminKey });
             }
           });
         }
@@ -783,7 +820,7 @@ const FileManager = (() => {
             e.stopPropagation();
             this.inlineEdit(e.target, entry.permissions, async val => {
               if (!/^[0-7]{3,4}$/.test(val)) return;
-              await fetch('/api/files/chmod', {
+              await this.api('/api/files/chmod', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ path: this.joinPath(this.currentPath, entry.name), mode: val }),
@@ -799,7 +836,7 @@ const FileManager = (() => {
             const current = entry.owner + (entry.group ? ':' + entry.group : '');
             this.inlineEdit(e.target, current, async val => {
               const [owner, group = ''] = val.split(':');
-              await fetch('/api/files/chown', {
+              await this.api('/api/files/chown', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ path: this.joinPath(this.currentPath, entry.name), owner, group }),
@@ -862,6 +899,8 @@ const FileManager = (() => {
         items.push({ label: `⬇️ Download${names.length > 1 ? ' ('+names.length+')' : ''}`, action: () => this.download(names) });
         items.push({ label: `🗜️ Compress to zip`, action: () => this.compressToZip(names) });
         if (names.length === 1) items.push({ label: 'ℹ️ Info', action: () => this.showInfo(this._lastEntries.find(e => e.name === name)) });
+        if (names.length === 1 && row.dataset.type === 'dir' && this._canOpenAsRoot())
+          items.push({ label: t('fm_open_as_root'), action: () => openAsRoot(this.joinPath(this.currentPath, name)) });
       } else {
         if (window._fmClipboard) {
           items.push({ label: '📋 Paste', action: () => this.paste() });
@@ -872,6 +911,8 @@ const FileManager = (() => {
         }});
         items.push({ label: '📁 New Folder', action: () => this.mkdirPrompt() });
         items.push({ label: '🔄 Refresh', action: () => this.navigate(this.currentPath) });
+        if (this._canOpenAsRoot() && this.currentPath !== '__trash__')
+          items.push({ label: t('fm_open_as_root'), action: () => openAsRoot(this.currentPath) });
       }
 
       items.forEach(item => {
@@ -890,21 +931,25 @@ const FileManager = (() => {
       setTimeout(() => document.addEventListener('click', dismiss), 0);
     }
 
+    _canOpenAsRoot() {
+      return !this.adminKey && window._effectiveUser !== 'root';
+    }
+
     async paste() {
       const cb = window._fmClipboard;
       if (!cb) return;
       const paths = cb.paths || [cb.path];
-      const errors = [];
+      const failures = [];
       for (const src of paths) {
-        errors.push(await fileRequest('/api/files/copy', 'POST', { src, dst_dir: this.currentPath, move: cb.cut }));
+        await collect(failures, '/api/files/copy', 'POST', { src, dst_dir: this.currentPath, move: cb.cut }, this);
       }
       if (cb.cut) window._fmClipboard = null;
       await this.navigate(this.currentPath);
-      showErrors(t('fm_paste_failed'), errors);
+      showErrors(t('fm_paste_failed'), failures, { onRetried: () => this.navigate(this.currentPath) });
     }
 
     async autoCleanChunks() {
-      fetch('/api/files/upload-chunk/cleanup', { method: 'POST' }).catch(() => {});
+      this.api('/api/files/upload-chunk/cleanup', { method: 'POST' }).catch(() => {});
     }
 
     async autoCleanTrash() {
@@ -912,19 +957,19 @@ const FileManager = (() => {
       const days = prefs.trashDays !== undefined ? prefs.trashDays : 30;
       if (!days) return;
       try {
-        const res = await fetch('/api/files/trash/list');
+        const res = await this.api('/api/files/trash/list');
         const items = await res.json();
         const cutoff = Date.now() - days * 86400000;
         const old = items.filter(i => i.date && new Date(i.date).getTime() < cutoff).map(i => i.name);
         if (!old.length) return;
         // permanently delete old items
-        const placesRes = await fetch('/api/files/places');
+        const placesRes = await this.api('/api/files/places');
         const places = await placesRes.json();
         const trashFiles = `${places.home}/.Trash/files`;
         const trashInfo  = `${places.home}/.Trash/info`;
         for (const name of old) {
-          await fetch('/api/files/delete', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: `${trashFiles}/${name}` }) });
-          await fetch('/api/files/delete', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: `${trashInfo}/${name}.trashinfo` }) });
+          await this.api('/api/files/delete', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: `${trashFiles}/${name}` }) });
+          await this.api('/api/files/delete', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: `${trashInfo}/${name}.trashinfo` }) });
         }
       } catch (_) {}
     }
@@ -933,23 +978,21 @@ const FileManager = (() => {
       const prefs = loadPrefs();
       const trashAsk = prefs.trashAsk !== false;
       let choice;
-      if (trashAsk) {
+      if (this.adminKey) {
+        // The Trash belongs to the user, so root's deletions are permanent.
+        if (!await mvmOS.confirm(t('fm_admin_delete_confirm', { n: names.length }))) return;
+        choice = 'permanent';
+      } else if (trashAsk) {
         choice = await this._deleteDialog(names.length);
         if (!choice) return;
       } else {
         choice = 'permanent';
       }
-      const errors = [];
-      if (choice === 'trash') {
-        const paths = names.map(n => this.joinPath(this.currentPath, n));
-        errors.push(await fileRequest('/api/files/trash/move', 'POST', { paths }));
-      } else {
-        for (const name of names) {
-          errors.push(await fileRequest('/api/files/delete', 'DELETE', { path: this.joinPath(this.currentPath, name) }));
-        }
-      }
+      const paths = names.map(n => this.joinPath(this.currentPath, n));
+      const failures = await deletePaths(paths, choice, this);
       await this.navigate(this.currentPath);
-      showErrors(choice === 'trash' ? t('fm_move_to_trash_failed') : t('fm_delete_failed'), errors);
+      showErrors(choice === 'trash' ? t('fm_move_to_trash_failed') : t('fm_delete_failed'), failures,
+        { trash: choice === 'trash', onRetried: () => this.navigate(this.currentPath) });
     }
 
     _deleteDialog(count) {
@@ -975,16 +1018,18 @@ const FileManager = (() => {
     async renamePrompt(name) {
       const newName = prompt(`Rename "${name}" to:`, name);
       if (!newName || newName === name) return;
-      const err = await fileRequest('/api/files/rename', 'POST', { path: this.joinPath(this.currentPath, name), new_name: newName });
+      const failures = [];
+      await collect(failures, '/api/files/rename', 'POST', { path: this.joinPath(this.currentPath, name), new_name: newName }, this);
       await this.navigate(this.currentPath);
-      showErrors(t('fm_rename_failed'), [err]);
+      showErrors(t('fm_rename_failed'), failures, { onRetried: () => this.navigate(this.currentPath) });
     }
 
     async deleteEntry(name) {
       if (!confirm(`Delete "${name}"?`)) return;
-      const err = await fileRequest('/api/files/delete', 'DELETE', { path: this.joinPath(this.currentPath, name) });
+      const failures = [];
+      await collect(failures, '/api/files/delete', 'DELETE', { path: this.joinPath(this.currentPath, name) }, this);
       await this.navigate(this.currentPath);
-      showErrors(t('fm_delete_failed'), [err]);
+      showErrors(t('fm_delete_failed'), failures, { onRetried: () => this.navigate(this.currentPath) });
     }
 
     async download(names) {
@@ -994,14 +1039,14 @@ const FileManager = (() => {
 
       if (isSingleFile) {
         const a = document.createElement('a');
-        a.href = `/api/files/raw?path=${encodeURIComponent(paths[0])}`;
+        a.href = adminUrl(`/api/files/raw?path=${encodeURIComponent(paths[0])}`, this.adminKey);
         a.download = names[0];
         a.click();
         return;
       }
 
       // multiple files or folders — zip
-      const res = await fetch('/api/files/download-zip', {
+      const res = await this.api('/api/files/download-zip', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ paths }),
@@ -1027,7 +1072,7 @@ const FileManager = (() => {
       const zipName = prompt('Archive name:', defaultName);
       if (!zipName) return;
       const destPath = this.joinPath(this.currentPath, zipName.endsWith('.zip') ? zipName : zipName + '.zip');
-      await fetch('/api/files/compress', {
+      await this.api('/api/files/compress', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ paths, dest: destPath }),
@@ -1038,7 +1083,7 @@ const FileManager = (() => {
     async mkdirPrompt() {
       const name = prompt('New folder name:');
       if (!name) return;
-      await fetch('/api/files/mkdir', {
+      await this.api('/api/files/mkdir', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ path: this.joinPath(this.currentPath, name) }),
@@ -1054,7 +1099,7 @@ const FileManager = (() => {
           await new Promise(resolve => entry.file(f => { collected.push({ file: f, destDir: parentDir }); resolve(); }));
         } else if (entry.isDirectory) {
           const dir = parentDir + '/' + entry.name;
-          await fetch('/api/files/mkdir', {
+          await this.api('/api/files/mkdir', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ path: dir }),
@@ -1096,7 +1141,7 @@ const FileManager = (() => {
         }
         mvmOS.upload.start({
           file,
-          chunkEndpoint: '/api/files/upload-chunk',
+          chunkEndpoint: adminUrl('/api/files/upload-chunk', this.adminKey),
           cancelEndpoint: '/api/files/upload-chunk',
           fields: { path: destDir },
           onDone: () => {
@@ -1185,7 +1230,7 @@ const FileManager = (() => {
             <td style="padding:7px 14px;color:var(--text-dim);width:100px;">${t('fm_info_resolution')}</td>
             <td style="padding:7px 14px;">${img.naturalWidth} × ${img.naturalHeight} px</td></tr>`;
         };
-        img.src = `/api/files/raw?path=${encodeURIComponent(fullPath)}`;
+        img.src = adminUrl(`/api/files/raw?path=${encodeURIComponent(fullPath)}`, this.adminKey);
       } else if (!isDir && (audExts.includes(ext) || vidExts.includes(ext))) {
         const media = vidExts.includes(ext) ? document.createElement('video') : document.createElement('audio');
         media.style.cssText = 'position:fixed;left:-9999px;visibility:hidden;';
@@ -1202,12 +1247,12 @@ const FileManager = (() => {
           media.remove();
         };
         media.onerror = () => media.remove();
-        media.src = `/api/files/raw?path=${encodeURIComponent(fullPath)}`;
+        media.src = adminUrl(`/api/files/raw?path=${encodeURIComponent(fullPath)}`, this.adminKey);
       }
 
       if (isDir) {
         const fullPath = this.joinPath(this.currentPath, entry.name);
-        fetch(`/api/files/dirsize?path=${encodeURIComponent(fullPath)}`)
+        this.api(`/api/files/dirsize?path=${encodeURIComponent(fullPath)}`)
           .then(r => r.json())
           .then(d => {
             const el = win.querySelector('#fm-info-size');
@@ -1227,7 +1272,7 @@ const FileManager = (() => {
       const fullPath = this.joinPath(this.currentPath, entry.name);
       this._previewClosed = false;
       this.previewEl.style.display = '';
-      this.previewImg.src = `/api/files/raw?path=${encodeURIComponent(fullPath)}`;
+      this.previewImg.src = adminUrl(`/api/files/raw?path=${encodeURIComponent(fullPath)}`, this.adminKey);
       this.previewName.textContent = entry.name;
       this.previewMeta.textContent = this.formatSize(entry.size);
       this.previewImg.onload = () => {
@@ -1275,9 +1320,11 @@ const FileManager = (() => {
 
   // Runs one file request and returns null on success or the backend's own
   // reason on failure, so callers can report every item that did not work.
-  async function fileRequest(url, method, body) {
+  // fm (optional) is the window making it, so administrator mode applies.
+  async function fileRequest(url, method, body, fm) {
     try {
-      const r = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      const opts = { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) };
+      const r = fm ? await fm.api(url, opts) : await fetch(url, opts);
       if (r.ok) return null;
       const err = await r.json().catch(() => ({}));
       return err.detail || ('HTTP ' + r.status);
@@ -1286,16 +1333,89 @@ const FileManager = (() => {
     }
   }
 
+  // Runs a request and, if it fails, remembers it together with how to repeat
+  // it, so the error dialog can offer to retry it as administrator.
+  async function collect(failures, url, method, body, fm) {
+    const error = await fileRequest(url, method, body, fm);
+    if (error) failures.push({ error, retry: { url, method, body } });
+  }
+
+  // Moves each path to the Trash or deletes it for good, one request per
+  // path so a retry repeats exactly the items that failed.
+  async function deletePaths(paths, choice, fm) {
+    const failures = [];
+    for (const path of paths) {
+      if (choice === 'trash') {
+        // Root cannot put an item into the user's Trash, so the administrator
+        // retry of a failed move deletes it permanently instead.
+        const error = await fileRequest('/api/files/trash/move', 'POST', { paths: [path] }, fm);
+        if (error) failures.push({ error, retry: { url: '/api/files/delete', method: 'DELETE', body: { path } } });
+      } else {
+        await collect(failures, '/api/files/delete', 'DELETE', { path }, fm);
+      }
+    }
+    return failures;
+  }
+
+  // ── Administrator mode ──────────────────────────────────────────────────
+  // After the user's own Linux password is confirmed (only for users in the
+  // sudo group), the server returns a short-lived key. Requests that carry
+  // it run as root; the server checks the key on every request.
+  function adminUrl(url, key) {
+    if (!key) return url;
+    return url + (url.includes('?') ? '&' : '?') + 'admin_key=' + encodeURIComponent(key);
+  }
+
+  // Same idle limit as _ADMIN_IDLE in backend/auth.py.
+  const ADMIN_IDLE_MS = 15 * 60 * 1000;
+
+  async function requestAdminKey(message) {
+    const sudo = await fetch('/api/auth/can-sudo').then(r => r.json()).catch(() => ({ ok: false }));
+    if (!sudo.ok) {
+      // Shows that this account has no administrator rights.
+      await mvmOS.requireRoot(t('fm_admin_title'));
+      return null;
+    }
+    const password = await mvmOS.confirmPassword(t('fm_admin_title'), message || t('fm_admin_message'));
+    if (password === null) return null;
+    const r = await fetch('/api/auth/admin', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password }),
+    }).catch(() => null);
+    if (!r || !r.ok) {
+      const err = r ? await r.json().catch(() => ({})) : {};
+      showErrors(t('fm_admin_title'), [err.detail || t('fm_network_error')]);
+      return null;
+    }
+    return (await r.json()).key;
+  }
+
+  function endAdmin(key) {
+    if (key) fetch(adminUrl('/api/auth/admin', key), { method: 'DELETE' }).catch(() => {});
+  }
+
+  async function openAsRoot(path) {
+    const key = await requestAdminKey();
+    if (key) openWindow(path, { adminKey: key });
+  }
+
   function _escHtml(s) {
     return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   }
 
   // Shows what failed and why. A permission error gets the explanation that
-  // being in the owner's group is not enough on its own.
-  function showErrors(title, errors) {
-    errors = (errors || []).filter(Boolean);
-    if (!errors.length) return;
+  // being in the owner's group is not enough on its own, and — for users who
+  // may use sudo — a button that repeats the failed items as administrator.
+  // Items are reasons, or { error, retry } from collect()/deletePaths().
+  // opts.trash: the retry deletes permanently; opts.onRetried: refresh after.
+  function showErrors(title, items, opts = {}) {
+    items = (items || []).filter(Boolean).map(i => typeof i === 'string' ? { error: i } : i);
+    if (!items.length) return;
+    const errors = items.map(i => i.error);
+    const retries = items.map(i => i.retry).filter(Boolean);
     const denied = errors.some(e => /permission denied|operation not permitted/i.test(e));
+    const canRetry = denied && retries.length && window._effectiveUser !== 'root';
     const overlay = document.createElement('div');
     overlay.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;';
     overlay.innerHTML = `
@@ -1303,12 +1423,26 @@ const FileManager = (() => {
         <div style="font-size:1rem;margin-bottom:12px;color:#e05555">${_escHtml(title)}</div>
         <div style="font-family:monospace;font-size:.78rem;background:var(--surface2);border-radius:6px;padding:8px 10px;max-height:180px;overflow:auto;white-space:pre-wrap;word-break:break-all">${errors.map(_escHtml).join('\n')}</div>
         ${denied ? `<div style="font-size:.82rem;color:var(--text-dim);margin-top:12px;line-height:1.45">${_escHtml(t('fm_permission_hint'))}</div>` : ''}
-        <div style="display:flex;justify-content:flex-end;margin-top:16px">
+        <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px">
+          ${canRetry ? `<button class="fm-err-admin" style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:6px 16px;color:#e05555;cursor:pointer">🔓 ${_escHtml(t(opts.trash ? 'fm_admin_retry_delete' : 'fm_admin_retry'))}</button>` : ''}
           <button class="fm-err-ok" style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:6px 16px;color:var(--text);cursor:pointer">OK</button>
         </div>
       </div>`;
     document.body.appendChild(overlay);
     overlay.querySelector('.fm-err-ok').addEventListener('click', () => overlay.remove());
+    overlay.querySelector('.fm-err-admin')?.addEventListener('click', async () => {
+      overlay.remove();
+      const key = await requestAdminKey(opts.trash ? t('fm_admin_message_delete') : t('fm_admin_message'));
+      if (!key) return;
+      const remaining = [];
+      for (const job of retries) {
+        const error = await fileRequest(adminUrl(job.url, key), job.method, job.body);
+        if (error) remaining.push(error);
+      }
+      endAdmin(key);
+      await opts.onRetried?.();
+      showErrors(title, remaining);
+    });
     overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
   }
 
@@ -1332,5 +1466,5 @@ const FileManager = (() => {
     });
   }
 
-  return { openWindow, deleteDialog, fileRequest, showErrors };
+  return { openWindow, deleteDialog, fileRequest, deletePaths, showErrors, adminUrl };
 })();
