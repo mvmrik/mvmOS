@@ -40,6 +40,25 @@
   var frameHandlers = {};
   var readyHandlers = [];
   var frameQuery = null;
+  var framePath = null;
+
+  // Only a page on the same mvmOS server may be put in the frame, and only a
+  // public one: a remembered or requested path that is anything else falls
+  // back to the app's own public page.
+  function publicPath(value) {
+    if (typeof value !== 'string' || !/^\/(?:api\/)?pub\//.test(value) || /^\/\//.test(value)) return null;
+    return value;
+  }
+  function frameUrl(path) {
+    var base = serverOrigin + (publicPath(path) || config.publicUrl);
+    if (config.surface.public_chrome && !frameQuery) return base;
+    // ext=1 tells the server this page is a popup's whole interface, so it is
+    // served without the Apps Hub header/footer chrome. The same URL opened in
+    // a normal tab still gets it. A popup browsed from page to page keeps the
+    // chrome instead, since that is how the user moves between apps.
+    var query = config.surface.public_chrome ? frameQuery : 'ext=1' + (frameQuery ? '&' + frameQuery : '');
+    return base + (base.indexOf('?') >= 0 ? '&' : '?') + query;
+  }
 
   function applyWidth(value) {
     var width = Math.min(800, Math.max(300, Number(value) || config.surface.width));
@@ -110,6 +129,12 @@
     postToFrame: postToFrame,
     // Extra query string for the hosted page's URL, decided before it loads.
     setFrameQuery: function (value) { frameQuery = value; },
+    // Which public page to open first instead of the app's own — a path, or a
+    // promise of one, e.g. the page the user was on last time. Anything that
+    // is not a public page of this server is ignored.
+    setFramePath: function (value) { framePath = value; },
+    // Move the hosted frame to another public page of this server.
+    navigateFrame: function (path) { if (serverOrigin) frame.src = frameUrl(path); },
     // Fired once the hosted page has announced that it is listening.
     onFrameReady: function (fn) { readyHandlers.push(fn); },
     // Messages the hosted page sends up, keyed by their action name.
@@ -214,24 +239,25 @@
   var frameLoaded = false;
   frame.addEventListener('load', function () { frameLoaded = true; });
 
-  // App scripts run after this one and may still call setFrameQuery(), so the
-  // src is set on the next task rather than the moment storage answers: by then
-  // every app script has executed and the query string is final. This is a turn
-  // of the event loop, not a wait on anything.
+  // App scripts are separate <script> tags after this one and may still call
+  // setFrameQuery() or setFramePath(), so the src waits for DOMContentLoaded:
+  // it fires only once every one of those scripts has run. A zero timeout is
+  // not enough — the browser may run it before it has even fetched the next
+  // script, and the popup then opens on the default page.
+  var scriptsRun = document.readyState === 'loading'
+    ? new Promise(function (resolve) { document.addEventListener('DOMContentLoaded', resolve, {once: true}); })
+    : Promise.resolve();
   var serverReady = Promise.all([
     getStorage({server_url: config.initialServer}),
-    new Promise(function (resolve) { setTimeout(resolve, 0); })
+    scriptsRun.then(function () {
+      return Promise.resolve(framePath).catch(function () { return null; });
+    })
   ]).then(function (values) {
     var parsed = new URL(String(values[0].server_url || '').trim());
     if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error();
     serverOrigin = parsed.origin;
     document.getElementById('server').textContent = new URL(serverOrigin).host;
-    // ext=1 tells the server this page is a popup's whole interface, so it is
-    // served without the Apps Hub header/footer chrome. The same URL opened in
-    // a normal tab still gets it.
-    var query = 'ext=1' + (frameQuery ? '&' + frameQuery : '');
-    frame.src = serverOrigin + config.publicUrl +
-      (config.publicUrl.indexOf('?') >= 0 ? '&' : '?') + query;
+    frame.src = frameUrl(values[1]);
   });
 
   serverReady.catch(function () {

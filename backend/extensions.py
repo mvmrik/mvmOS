@@ -35,6 +35,21 @@ _COMMAND_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,49}$")
 # any name an app might choose for its own background script.
 _SERVICE_WORKER = "mvm-service-worker.js"
 _TEMPLATES = os.path.join(os.path.dirname(__file__), "extension_templates")
+# Core's own extensions. Apps Hub is a system app with no apps/<id> folder, so
+# its extension.json and scripts live here instead, beside the shell templates,
+# and the manifest fields an app would carry are given in code.
+_CORE_EXTENSIONS = {
+    "apphub": {
+        "dir": os.path.join(os.path.dirname(__file__), "apphub_extension"),
+        "manifest": {
+            "name": "mvmOS Apps",
+            "description": "Your mvmOS public apps in the browser toolbar, "
+                           "each able to see which site you are on.",
+            "icon": "🧩",
+            "public_url": "/pub/apphub/",
+        },
+    },
+}
 
 def _script_path(app_dir: str, name: str) -> str:
     """Resolve an extension script from a current or legacy installed app."""
@@ -119,10 +134,14 @@ def _commands(values):
 def load_extension_metadata(app_id: str) -> dict | None:
     if not _ID_RE.fullmatch(app_id):
         return None
-    app_dir = os.path.join(APPS_DIR, app_id)
+    core = _CORE_EXTENSIONS.get(app_id)
+    app_dir = core["dir"] if core else os.path.join(APPS_DIR, app_id)
     try:
-        with open(os.path.join(app_dir, "manifest.json")) as file:
-            manifest = json.load(file)
+        if core:
+            manifest = core["manifest"]
+        else:
+            with open(os.path.join(app_dir, "manifest.json")) as file:
+                manifest = json.load(file)
         with open(os.path.join(app_dir, "extension.json")) as file:
             extension = json.load(file)
     except (OSError, ValueError):
@@ -152,6 +171,11 @@ def load_extension_metadata(app_id: str) -> dict | None:
         width = min(800, max(300, int(surface.get("width", 640))))
     except (TypeError, ValueError):
         return None
+    # A popup that is a single app's whole interface hides the Apps Hub
+    # header and footer (see the ext=1 note in popup.js). One that the user
+    # browses through from page to page keeps them, because the header is
+    # how they get from one app to the next.
+    public_chrome = surface.get("public_chrome") is True
     settings = extension.get("settings") or []
     distribution = extension.get("distribution") or {}
     icon_file = extension.get("icon")
@@ -187,6 +211,7 @@ def load_extension_metadata(app_id: str) -> dict | None:
 
     return {
         "app_id": app_id,
+        "dir": app_dir,
         "name": manifest.get("name", app_id),
         "description": manifest.get("description", ""),
         "icon": manifest.get("icon", "🧩"),
@@ -201,7 +226,7 @@ def load_extension_metadata(app_id: str) -> dict | None:
         "popup_scripts": popup_scripts,
         "commands": commands,
         "min_browser_version": {k: str(v) for k, v in min_browser.items()},
-        "surface": {"width": width},
+        "surface": {"width": width, "public_chrome": public_chrome},
         "settings": settings,
         "distribution": {
             "chrome_store_url": distribution.get("chrome_store_url"),
@@ -297,7 +322,7 @@ def _package(metadata: dict, browser: str, initial_server: str) -> bytes:
         "settings": metadata["settings"],
         "browser": browser,
     }
-    app_dir = os.path.join(APPS_DIR, metadata["app_id"])
+    app_dir = metadata["dir"]
     popup_scripts = _flat_names(metadata["popup_scripts"])
     files = {
         "manifest.json": json.dumps(_manifest(metadata, browser), indent=2),
@@ -334,7 +359,7 @@ def _package(metadata: dict, browser: str, initial_server: str) -> bytes:
         )
     icon_file = metadata.get("icon_file")
     if icon_file:
-        icon_path = os.path.join(APPS_DIR, metadata["app_id"], icon_file)
+        icon_path = os.path.join(app_dir, icon_file)
     else:
         icon_path = os.path.join(os.path.dirname(__file__), "..", "frontend", "favicon-512.png")
     try:
@@ -357,7 +382,7 @@ async def info(app_id: str, _session=Depends(get_current_session)):
     metadata = load_extension_metadata(app_id)
     if metadata is None:
         raise HTTPException(404, detail="extension_not_found")
-    return metadata
+    return {k: v for k, v in metadata.items() if k != "dir"}
 
 
 @router.get("/{app_id}/download")

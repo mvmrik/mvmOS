@@ -437,6 +437,20 @@ async def get_manifest(store_id: int = 0, session=Depends(get_current_session)):
 
 # ── Installed plugins ─────────────────────────────────────────────────────────
 
+def _browser_extension(app_id: str):
+    try:
+        from .extensions import load_extension_metadata
+        ext = load_extension_metadata(app_id)
+    except Exception:
+        return None
+    return {
+        "name": ext["name"],
+        "version": ext["version"],
+        "targets": ext["targets"],
+        "distribution": ext["distribution"],
+    } if ext else None
+
+
 @router.get("")
 async def list_plugins(session=Depends(get_current_session)):
     with get_conn() as conn:
@@ -464,16 +478,7 @@ async def list_plugins(session=Depends(get_current_session)):
             # /pub/mvmsitebuilder/<slug>, so the bare public_url is meaningless) —
             # same flag backend/apphub.py's public-apps listing already honors.
             item["public_url"] = mf.get("public_url") if mf.get("public_directory") is not False else None
-            try:
-                from .extensions import load_extension_metadata
-                ext = load_extension_metadata(r["id"])
-                item["browser_extension"] = {
-                    "version": ext["version"],
-                    "targets": ext["targets"],
-                    "distribution": ext["distribution"],
-                } if ext else None
-            except Exception:
-                item["browser_extension"] = None
+            item["browser_extension"] = _browser_extension(r["id"])
         except Exception:
             item["settings"] = []
             item["replaces_widget"] = None
@@ -482,7 +487,9 @@ async def list_plugins(session=Depends(get_current_session)):
             # manifest-driven), so it needs a hardcoded public_url or its
             # desktop window never gets the shared footer's public-page link.
             item["public_url"] = "/pub/apphub/" if r["id"] == "apphub" else None
-            item["browser_extension"] = None
+            # Apps Hub's extension (mvmOS Apps) is defined in core, so it is
+            # found without a manifest — see _CORE_EXTENSIONS in extensions.py.
+            item["browser_extension"] = _browser_extension(r["id"])
         result.append(item)
     return JSONResponse(result)
 

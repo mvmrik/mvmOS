@@ -722,7 +722,7 @@ const Desktop = (() => {
         button.title = t('win_browser_extension');
         button.textContent = currentBrowser.icon;
         button.onclick = () => window.Extensions.open(
-          plugin?.id || id, plugin?.name || title, plugin?.icon || icon || '🧩', extension
+          plugin?.id || id, extension.name || plugin?.name || title, plugin?.icon || icon || '🧩', extension
         );
         footerActions.appendChild(button);
       }

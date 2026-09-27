@@ -63,6 +63,8 @@ Apps use the central credit service to charge or grant balances. Charges are ato
 
 Some installed apps can provide a companion browser extension. mvmOS generates the shared extension shell from the app’s declared metadata and can target Chrome and Firefox. The extension connects to the user’s chosen self-hosted mvmOS server; it is not a browser extension operated by a central mvmOS cloud.
 
+Apps Hub has its own extension, mvmOS Apps, offered from the extension button in the Apps Hub window. Its popup shows the Apps Hub public page of your server, with the usual header, so you can move from one public app to another inside the popup, and it reopens on the page you were on last time; the home button returns to Apps Hub. A public app shown in it can learn which site the current browser tab is on and, when you ask it to, read that page as you see it. It can also ask to read up to twenty other pages of the same site, one after another in that tab, as you see them when signed in there. Before that, the popup lists the pages and asks you, and you can allow it once or for that app on that site from then on. Hattrick Calculator uses this to import your team straight from Hattrick. Outside the extension, public pages behave as before.
+
 Extensions request only the permissions declared by the app. Review the app’s extension description, browser permissions, host permissions, and supported browser versions before installing it.
 
 ## Operating Apps Hub safely

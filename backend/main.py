@@ -439,6 +439,34 @@ async def block_apps_public_middleware(request: Request, call_next):
 
 
 @app.middleware("http")
+async def extension_bridge_middleware(request: Request, call_next):
+    """Add frontend/extension-bridge.js to every public HTML page, so any page
+    shown inside the mvmOS Apps browser extension can learn which site the
+    user is on. Game pages under /api/pub/ get it as well, since that is where
+    a game actually runs. Outside the extension the script does nothing."""
+    response = await call_next(request)
+    path = request.url.path
+    if (not (path.startswith("/pub/") or path.startswith("/api/pub/"))
+            or not response.headers.get("content-type", "").startswith("text/html")):
+        return response
+    body = b""
+    async for chunk in response.body_iterator:
+        body += chunk if isinstance(chunk, bytes) else chunk.encode()
+    html = body.decode("utf-8", errors="ignore")
+    bridge_path = os.path.join(os.path.dirname(__file__), "..", "frontend", "extension-bridge.js")
+    try:
+        version = int(os.path.getmtime(bridge_path))
+    except OSError:
+        version = 0
+    snippet = f'<script src="/extension-bridge.js?v={version}"></script>'
+    html = html.replace("</head>", snippet + "</head>", 1) if "</head>" in html else snippet + html
+    headers = dict(response.headers)
+    for h in ("content-length", "etag", "last-modified", "accept-ranges"):
+        headers.pop(h, None)
+    return Response(content=html, status_code=response.status_code, headers=headers, media_type="text/html")
+
+
+@app.middleware("http")
 async def layout_inject_middleware(request: Request, call_next):
     """Auto-inject the shared header/footer chrome (backend/apphub_pub/layout.js)
     into every /pub/<app>/ HTML page. Apps never include this themselves — it's

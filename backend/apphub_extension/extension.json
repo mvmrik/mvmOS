@@ -1,0 +1,10 @@
+{
+  "schema": 1,
+  "enabled": true,
+  "version": "1.0.0",
+  "targets": ["chrome", "firefox"],
+  "surface": {"type": "popup", "width": 760, "public_chrome": true},
+  "permissions": ["activeTab", "scripting", "storage"],
+  "popup_scripts": "extension/popup.js",
+  "distribution": {"chrome_store_url": null, "firefox_store_url": null}
+}
