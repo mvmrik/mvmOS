@@ -793,25 +793,7 @@ const FileManager = (() => {
           row.addEventListener('dblclick', e => {
             if (e.target.classList.contains('fm-editable')) return;
             const fullPath = this.joinPath(this.currentPath, entry.name);
-            if (entry.name.endsWith('.url')) {
-              this.api(`/api/files/raw?path=${encodeURIComponent(fullPath)}`)
-                .then(r => r.text())
-                .then(text => {
-                  const match = text.match(/^URL=(.+)$/m);
-                  if (match) window.open(match[1].trim(), '_blank');
-                });
-            } else if (ImageViewer.isImage(entry.name)) {
-              ImageViewer.openWindow(fullPath, this._lastEntries, { adminKey: this.adminKey });
-            } else if (VideoPlayer.isVideo(entry.name) || VideoPlayer.isAudio(entry.name)) {
-              VideoPlayer.openWindow(fullPath, { adminKey: this.adminKey });
-            } else if (/\.(zip|tar|tar\.gz|tgz|tar\.bz2|tar\.xz)$/i.test(entry.name)) {
-              this.api('/api/files/extract', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ path: fullPath }) })
-                .then(r => r.json()).then(res => { if (res.ok) this.navigate(this.currentPath); });
-            } else if (CodeEditor.isCode(entry.name)) {
-              CodeEditor.openFile(fullPath, { adminKey: this.adminKey });
-            } else if (TextEditor.isText(entry.name)) {
-              TextEditor.openWindow(fullPath, { adminKey: this.adminKey });
-            }
+            FileAssoc.open(fullPath, this._assocCtx());
           });
         }
 
@@ -892,6 +874,8 @@ const FileManager = (() => {
       if (row) {
         const name = row.dataset.name;
         const names = this.selectedSet.size > 1 ? [...this.selectedSet] : [name];
+        if (names.length === 1 && row.dataset.type !== 'dir')
+          items.push({ label: t('fa_open_with_menu'), action: () => FileAssoc.openWith(this.joinPath(this.currentPath, name), this._assocCtx()) });
         if (names.length === 1) items.push({ label: '✏️ Rename', action: () => this.renamePrompt(name) });
         items.push({ label: `📋 Copy${names.length > 1 ? ' ('+names.length+')' : ''}`, action: () => { window._fmClipboard = { paths: names.map(n => this.joinPath(this.currentPath, n)), cut: false }; } });
         items.push({ label: `✂️ Cut${names.length > 1 ? ' ('+names.length+')' : ''}`,  action: () => { window._fmClipboard = { paths: names.map(n => this.joinPath(this.currentPath, n)), cut: true  }; } });
@@ -929,6 +913,17 @@ const FileManager = (() => {
       document.body.appendChild(menu);
       const dismiss = e => { menu.remove(); document.removeEventListener('click', dismiss); };
       setTimeout(() => document.addEventListener('click', dismiss), 0);
+    }
+
+    // How FileAssoc opens a file from this window: as root in an
+    // administrator window, with the folder's images to page through.
+    _assocCtx() {
+      return {
+        adminKey: this.adminKey,
+        siblings: this._lastEntries,
+        fetch: (u, o) => this.api(u, o),
+        onChange: () => this.navigate(this.currentPath),
+      };
     }
 
     _canOpenAsRoot() {

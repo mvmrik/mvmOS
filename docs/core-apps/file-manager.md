@@ -15,9 +15,18 @@ File Manager is the desktop file browser for the signed-in user’s permitted fi
 - Create, rename, move, copy, and delete files and folders.
 - Upload large files in chunks.
 - Search by filename and edit text files in the browser.
+- Open each kind of file with the app you choose, and pick another app for a single file with Open with.
 - Change Unix permissions and inspect real folder disk usage.
 - Open a folder as root in its own administrator window, if your Linux user may use sudo.
 - Choose files or folders for apps that open the mvmOS picker.
+
+## Opening files and default apps
+
+Double-clicking a file in File Manager or on the desktop opens it with the default app for its type. Out of the box images open in the image viewer, video and audio in the media player, source code in the code editor, plain text in the text editor, `.url` shortcuts in the browser, and archives are extracted in place. Store apps can add file types of their own, so a document saved from mvmOffice opens in mvmOffice.
+
+Right-click a file and choose Open with to pick another app for that one file. The code editor and the text editor are always offered, whatever the file is. Tick Always use this app to make the choice the new default for every file with that extension. A file type that no app claims shows the same choice when you double-click it.
+
+Settings has its own Default apps section. It first shows every app with the file types it opens, your own choices highlighted, and then the list of file types to change. File types that share the same app and the same choices share a row, and changing a row changes all of them. Type an extension in the search field, or click it under its app, to change just that one; an extension no app knows yet, such as `pdf`, can be given an app the same way. Restore defaults removes all your choices. If the app you chose is uninstalled, its file types go back to their default app.
 
 ## When an action fails
 

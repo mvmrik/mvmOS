@@ -228,6 +228,7 @@ const Settings = (() => {
           <div class="settings-tab ${activeTab==='wallpaper'?'active':''}" data-tab="wallpaper">${t('settings_wallpaper')}</div>
           <div class="settings-tab ${activeTab==='regional'?'active':''}" data-tab="regional">${t('settings_regional')}</div>
           <div class="settings-tab ${activeTab==='filemanager'?'active':''}" data-tab="filemanager">${t('settings_filemanager')}</div>
+          <div class="settings-tab ${activeTab==='defaultapps'?'active':''}" data-tab="defaultapps">🗂️ ${t('fa_default_apps')}</div>
           <div class="settings-tab ${activeTab==='users'?'active':''}" data-tab="users">${t('settings_users')}</div>
           <div class="settings-tab ${activeTab==='updates'?'active':''}" data-tab="updates">${t('settings_updates')}</div>
           <div class="settings-tab ${activeTab==='startmenu'?'active':''}" data-tab="startmenu">${t('settings_startmenu')}</div>
@@ -551,6 +552,22 @@ const Settings = (() => {
                   <option value="60" ${(fm.trashDays||30)==60 ?'selected':''}>${t('fm_trash_auto_60')}</option>
                 </select>
               </div>
+            </div>
+
+          </div>
+
+          <!-- Default apps panel -->
+          <div class="settings-panel ${activeTab==='defaultapps'?'active':''}" id="sp-defaultapps">
+            <div class="settings-section">
+              <div class="settings-section-title">${t('fa_by_app')}</div>
+              <div style="font-size:.82rem;color:var(--text-dim);line-height:1.45;margin-bottom:12px">${t('fa_default_apps_desc')}</div>
+              <div id="s-fa-apps"><div style="font-size:.82rem;color:var(--text-dim)">${t('tstore_loading')}</div></div>
+            </div>
+            <div class="settings-section">
+              <div class="settings-section-title">${t('fa_all_types')}</div>
+              <input class="s-input" id="s-fa-search" type="text" autocomplete="off" spellcheck="false" placeholder="${t('fa_search_ph')}" style="width:100%;max-width:none;box-sizing:border-box;margin-bottom:10px">
+              <div id="s-fa-list"></div>
+              <div style="margin-top:12px"><button class="s-btn-sm" id="s-fa-reset" hidden>${t('fa_reset')}</button></div>
             </div>
           </div>
 
@@ -1319,6 +1336,79 @@ const Settings = (() => {
     body.querySelector('#s-fm-trash-days').addEventListener('change', e => {
       saveFMPrefs({ ...loadFMPrefs(), trashDays: parseInt(e.target.value) });
     });
+    renderFileAssoc(body);
+  }
+
+  // Default apps: first which app opens what, then the types to change.
+  // Without a search, types with the same choices and the same app share one
+  // row and a change applies to the row; a search shows each matching type on
+  // its own row, and an extension nothing claims yet can be given an app.
+  async function renderFileAssoc(body) {
+    const apps = body.querySelector('#s-fa-apps');
+    const list = body.querySelector('#s-fa-list');
+    const search = body.querySelector('#s-fa-search');
+    const reset = body.querySelector('#s-fa-reset');
+    if (!list || typeof FileAssoc === 'undefined') return;
+    const esc = v => String(v).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    const table = await FileAssoc.table();
+
+    const byApp = [];
+    for (const r of table) {
+      const h = r.candidates.find(c => c.id === r.current);
+      if (!h) continue;
+      let a = byApp.find(x => x.id === h.id);
+      if (!a) byApp.push(a = { ...h, types: [] });
+      a.types.push(r);
+    }
+    apps.innerHTML = byApp.map(a => `
+      <div style="display:flex;gap:12px;align-items:flex-start;padding:10px 12px;border:1px solid var(--border);border-radius:8px;margin-bottom:8px;background:var(--surface2)">
+        <div style="font-size:1.4rem;line-height:1">${esc(a.icon)}</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:600;font-size:.88rem;margin-bottom:6px">${esc(a.name)}</div>
+          <div style="display:flex;flex-wrap:wrap;gap:5px">${a.types.map(r => `
+            <button class="s-btn-sm" data-fa-ext="${esc(r.ext)}" title="${esc(r.chosen ? t('fa_your_choice') : '')}"
+              style="padding:2px 8px;font-size:.78rem;${r.chosen ? 'border-color:var(--accent);color:var(--accent)' : ''}">.${esc(r.ext)}</button>`).join('')}
+          </div>
+        </div>
+      </div>`).join('');
+    apps.querySelectorAll('[data-fa-ext]').forEach(b => b.addEventListener('click', () => {
+      search.value = b.dataset.faExt;
+      drawList();
+      search.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    }));
+
+    async function drawList() {
+      const q = search.value.trim().toLowerCase().replace(/^\.+/, '');
+      let rows;
+      if (q) {
+        rows = table.filter(r => r.ext.includes(q)).map(r => ({ ...r, exts: [r.ext] }));
+        if (/^[a-z0-9][a-z0-9.+_-]{0,15}$/.test(q) && !rows.some(r => r.ext === q))
+          rows.unshift({ ...(await FileAssoc.row(q)), exts: [q] });
+      } else {
+        rows = [];
+        for (const r of table) {
+          const key = r.current + '|' + r.candidates.map(c => c.id).join(',') + '|' + r.default;
+          const row = rows.find(x => x.key === key);
+          if (row) row.exts.push(r.ext); else rows.push({ key, exts: [r.ext], ...r });
+        }
+      }
+      list.innerHTML = rows.map((r, i) => `
+        <div class="settings-row" style="gap:12px;align-items:flex-start">
+          <label style="flex:1;min-width:0;line-height:1.5;word-break:break-word">${r.exts.map(e => '.' + esc(e)).join(' ')}</label>
+          <select class="s-select" data-fa-row="${i}" style="width:250px;max-width:55%;flex-shrink:0">
+            ${r.current ? '' : `<option value="" selected>${esc(t('fa_none'))}</option>`}
+            ${r.candidates.map(c => `<option value="${esc(c.id)}" ${c.id === r.current ? 'selected' : ''}>${esc(c.icon)} ${esc(c.id === r.default ? t('fa_default_suffix', { name: c.name }) : c.name)}</option>`).join('')}
+          </select>
+        </div>`).join('');
+      list.querySelectorAll('select[data-fa-row]').forEach(sel => sel.addEventListener('change', async () => {
+        await FileAssoc.setDefault(rows[+sel.dataset.faRow].exts, sel.value);
+        renderFileAssoc(body);
+      }));
+    }
+    await drawList();
+    search.oninput = drawList;
+    reset.hidden = !table.some(r => r.chosen);
+    reset.onclick = async () => { await FileAssoc.resetAll(); search.value = ''; renderFileAssoc(body); };
   }
 
   function _bkSchedLabel(key) {

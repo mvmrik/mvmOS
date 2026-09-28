@@ -442,13 +442,7 @@ const Desktop = (() => {
         if (fsEntry.type === 'url')  { window.open(fsEntry.url, '_blank'); return; }
         if (fsEntry.type === 'dir')  { FileManager.openWindow(fsEntry.path); return; }
         if (fsEntry.type === 'app')  { openApp(fsEntry.app_id); return; }
-        if (fsEntry.type === 'file') {
-          if (ImageViewer.isImage(fsEntry.name))  { ImageViewer.openWindow(fsEntry.path, _desktopEntries); return; }
-          if (VideoPlayer.isVideo(fsEntry.name) || VideoPlayer.isAudio(fsEntry.name)) { VideoPlayer.openWindow(fsEntry.path); return; }
-          if (/\.(zip|tar|tar\.gz|tgz|tar\.bz2|tar\.xz)$/i.test(fsEntry.name)) { fetch('/api/files/extract', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ path: fsEntry.path }) }); return; }
-          if (CodeEditor.isCode(fsEntry.name)) { CodeEditor.openFile(fsEntry.path); return; }
-          if (TextEditor.isText(fsEntry.name)) { TextEditor.openWindow(fsEntry.path); return; }
-        }
+        if (fsEntry.type === 'file') { FileAssoc.open(fsEntry.path, { siblings: _desktopEntries }); return; }
         return;
       }
       if (url) { window.open(url, '_blank'); return; }
@@ -506,6 +500,7 @@ const Desktop = (() => {
       const multi = _desktopSelected.size > 1;
       const items = [];
       if (fsEntry && (fsEntry.type === 'file' || fsEntry.type === 'dir' || fsEntry.type === 'url')) {
+        if (!multi && fsEntry.type === 'file') items.push({ label: t('fa_open_with_menu'), action: 'openwith' });
         if (!multi) items.push({ label: `✏️ ${t('ctx_rename')}`, action: 'rename' });
         items.push({ label: `📋 Copy${multi ? ' ('+_desktopSelected.size+')' : ''}`, action: 'copy' });
         items.push({ label: `✂️ Cut${multi ? ' ('+_desktopSelected.size+')' : ''}`,  action: 'cut'  });
@@ -521,6 +516,10 @@ const Desktop = (() => {
         items.push({ label: `🗑️ ${t('ctx_remove_from_desktop')}`, action: 'remove', danger: true });
       }
       const ctx = showIconCtx(e.clientX, e.clientY, items);
+      ctx.querySelector('[data-action="openwith"]')?.addEventListener('click', () => {
+        hideIconCtx();
+        FileAssoc.openWith(fsEntry.path, { siblings: _desktopEntries });
+      });
       ctx.querySelector('[data-action="rename"]')?.addEventListener('click', async () => {
         hideIconCtx();
         const newName = prompt('Rename to:', fsEntry.name);

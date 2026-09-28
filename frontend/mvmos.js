@@ -255,6 +255,15 @@ var mvmOS = (() => {
         if (typeof AppHub !== 'undefined') AppHub.requireLogin(() => _launch(...args));
         else _launch(...args);
       };
+      // openFile(path) is how FileAssoc hands the app a file (see
+      // fileassoc.js); it needs the same login as launching the app.
+      if (typeof def.openFile === 'function') {
+        const _openFile = def.openFile;
+        def.openFile = (...args) => {
+          if (typeof AppHub !== 'undefined') AppHub.requireLogin(() => _openFile(...args));
+          else _openFile(...args);
+        };
+      }
     }
     _apps[def.id] = def;
     _ensureAppsMenuItem();

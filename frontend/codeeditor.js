@@ -694,5 +694,5 @@ var CodeEditor = (() => {
   `;
   document.head.appendChild(style);
 
-  return { openWindow, openFile, isCode };
+  return { openWindow, openFile, isCode, exts: CODE_EXTS };
 })();

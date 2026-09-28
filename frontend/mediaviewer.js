@@ -74,7 +74,7 @@ const ImageViewer = (() => {
     if (win) win.querySelector('.window-body').parentElement.focus?.();
   }
 
-  return { openWindow, isImage };
+  return { openWindow, isImage, exts: IMAGE_EXTS };
 })();
 
 
@@ -114,7 +114,7 @@ const VideoPlayer = (() => {
     });
   }
 
-  return { openWindow, isVideo, isAudio };
+  return { openWindow, isVideo, isAudio, exts: [...VIDEO_EXTS, ...AUDIO_EXTS] };
 })();
 
 
@@ -190,5 +190,5 @@ const TextEditor = (() => {
     });
   }
 
-  return { openWindow, isText };
+  return { openWindow, isText, exts: TEXT_EXTS };
 })();

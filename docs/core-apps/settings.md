@@ -13,6 +13,7 @@ Settings collects system-level configuration in one desktop window. Apps that re
 
 - Display, wallpaper, and screensaver preferences.
 - Regional format and language.
+- Default apps, which decide the app that opens each file type from File Manager and the desktop, including types added by Store apps.
 - Start Menu configuration.
 - Backups, SSH access, and local user accounts.
 - System information and Core updates.
