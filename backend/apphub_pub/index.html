@@ -256,6 +256,7 @@ function showDashboard(activeTab) {
       <button class="tab${activeTab==='apps'?' active':''}" data-t="apps">${t('ah_pub_tab_apps')}</button>
       <button class="tab${activeTab==='store'?' active':''}" data-t="store">${t('ah_pub_tab_store')}</button>
       <button class="tab${activeTab==='favourites'?' active':''}" data-t="favourites">${t('ah_pub_tab_favourites')}</button>
+      ${_me.api ? `<button class="tab${activeTab==='api'?' active':''}" data-t="api">${t('extapi_pub_title')}</button>` : ''}
     </div>
     <div id="d-body" style="flex:1;overflow-y:auto"></div>`;
 
@@ -287,10 +288,14 @@ function renderTab(t) {
   // is not hidden behind a lock — it is not a place you can get to at all, so
   // even ?tab=credits typed by hand just lands on the app list.
   if (t === 'credits' && !(_me && _me.credits)) t = 'apps';
+  // Same for the External API: without it, or with no app open to it, there
+  // is no tab to reach.
+  if (t === 'api' && !(_me && _me.api)) t = 'apps';
   if (t === 'apps')       renderApps(c);
   if (t === 'store')      renderStore(c);
   if (t === 'favourites') renderFavourites(c);
   if (t === 'credits')    renderCredits(c);
+  if (t === 'api')        renderApi(c);
   if (t === 'profile')    renderProfile(c);
   if (t === 'settings')   renderSettings(c);
 }
@@ -987,6 +992,25 @@ function renderSettings(c) {
   renderLangButtons();
   renderDateFormatButtons();
   renderTimeFormatButtons();
+}
+
+// ── API tab ─────────────────────────────────────────────────────
+
+function renderApi(c) {
+  c.innerHTML = `
+    <div class="section" style="max-width:1200px">
+      <div class="card" style="padding:16px"><div id="api-tokens"></div></div>
+    </div>`;
+  _mountApiTokens(c.querySelector('#api-tokens'));
+}
+
+function _mountApiTokens(box) {
+  const mount = () => ExtApiTokens.mount(box, { base: '/api/pub/extapi', headers: () => ({ 'X-Pub-Token': _token }) });
+  if (window.ExtApiTokens) return mount();
+  const s = document.createElement('script');
+  s.src = '/pub/apphub/extapi-tokens.js?v=1.9.0.4';
+  s.onload = mount;
+  document.head.appendChild(s);
 }
 
 // ── Credits tab ─────────────────────────────────────────────────

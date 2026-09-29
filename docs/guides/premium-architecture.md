@@ -17,6 +17,8 @@ When enabled, a license is intended to validate a limited number of self-hosted 
 
 Premium Core modules are distributed separately from the ordinary Core code. An installation without a valid entitlement does not receive the Premium module; the normal Core code keeps only the integration point. Store apps follow the same principle for their own Premium features.
 
+Apps Hub Credits and External APIs are Core Premium modules. The External APIs module keeps all token storage, token validation, rate limiting and the external request gateway outside the Core repository. Core can still describe an app's API surface and invoke it internally, but cannot expose it outside mvmOS without the separately downloaded module.
+
 ## No change for existing users
 
 Free functionality remains available without a Premium key. The website terms and privacy information are kept current with however Premium actually works at any given time.

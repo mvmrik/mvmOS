@@ -161,7 +161,13 @@ async def _refresh(state: dict) -> dict:
     try:
         result = await asyncio.to_thread(_check, key, _device_id(state), state.get("token", ""))
     except (urllib.error.URLError, TimeoutError, ValueError, OSError):
-        # Unreachable: keep the last known badge rather than flipping to free.
+        # Unreachable: keep the last known badge rather than flipping to free,
+        # but never past the date it was paid until. Blocking mvmos.org must
+        # not keep premium alive for ever; an owner who renewed while offline
+        # gets it back at the first check that goes through.
+        if state.get("status") == "premium" and _expired(state):
+            state.update({"status": "free", "reason": "expired"})
+            return {"valid": False, "reason": "expired"}
         return {"valid": None, "reason": "unreachable"}
     state["checked_at"] = datetime.now(timezone.utc).isoformat()
     state["reason"] = "" if result.get("valid") else (result.get("reason") or "")
@@ -215,7 +221,8 @@ async def heartbeat_loop() -> None:
                     # licence's code sitting around still working off a stale
                     # local cache — same cleanup as removing the key outright.
                     # _refresh() leaves status untouched when mvmos.org was
-                    # simply unreachable, so this never fires on a network blip.
+                    # simply unreachable, so a network blip never fires this;
+                    # only a paid period that has run out does, reachable or not.
                     clear_all_premium()
             else:
                 clear_all_premium()
@@ -230,6 +237,22 @@ async def heartbeat_loop() -> None:
         except Exception:
             pass
         await asyncio.sleep(HEARTBEAT_SECONDS)
+
+
+def _expired(state: dict) -> bool:
+    """Whether the paid period last reported by mvmos.org is over. Every
+    successful check-in rewrites expires_at, so a renewal moves it on within
+    one heartbeat; a key without an end date never expires here."""
+    stamp = state.get("expires_at")
+    if not stamp:
+        return False
+    try:
+        until = datetime.fromisoformat(str(stamp).replace("Z", "+00:00").replace(" ", "T"))
+    except ValueError:
+        return False
+    if until.tzinfo is None:
+        until = until.replace(tzinfo=timezone.utc)
+    return datetime.now(timezone.utc) >= until
 
 
 def _is_stale(state: dict) -> bool:
@@ -292,7 +315,7 @@ def load_premium_backend(app_id: str):
     return None
 
 
-CORE_PREMIUM_MODULES = ("apphub",)
+CORE_PREMIUM_MODULES = ("apphub", "extapi")
 
 _core_modules = {}
 
@@ -435,7 +458,8 @@ def is_premium() -> bool:
     Refreshed by the heartbeat loop and by the Subscription tab, so this is
     at most HEARTBEAT_SECONDS stale.
     """
-    return _load().get("status") == "premium"
+    state = _load()
+    return state.get("status") == "premium" and not _expired(state)
 
 
 def _public(state: dict) -> dict:
@@ -685,7 +709,7 @@ async def _check_app_content(app_id: str) -> dict:
 # Display name per core premium module — short, curated list (see
 # CORE_PREMIUM_MODULES above), unlike store apps there is no `plugins` row
 # to read a name from.
-_CORE_PREMIUM_NAMES = {"apphub": "Apps Hub"}
+_CORE_PREMIUM_NAMES = {"apphub": "Apps Hub", "extapi": "External APIs"}
 # Key prefix for a core module's entry in the same status dict as store
 # apps — apphub the core module and a hypothetical "apphub"-named store app
 # are different things and must not collide.

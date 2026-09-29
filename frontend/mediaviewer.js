@@ -8,13 +8,17 @@ const ImageViewer = (() => {
   }
 
   // opts.adminKey: opened from a File Manager window in administrator mode.
+  // opts.src: an image that is not a file on disk (a Clipboard item, say);
+  // path is then only its name.
   function openWindow(path, siblings, opts = {}) {
-    const raw = p => FileManager.adminUrl(`/api/files/raw?path=${encodeURIComponent(p)}`, opts.adminKey);
+    const raw = p => opts.src || FileManager.adminUrl(`/api/files/raw?path=${encodeURIComponent(p)}`, opts.adminKey);
     const name = path.split('/').pop();
     const imgs = (siblings || []).filter(s => isImage(s.name));
     let idx = imgs.findIndex(s => s.name === name);
 
-    const id = 'imageviewer-' + btoa(unescape(encodeURIComponent(path))).slice(0, 12);
+    const id = 'imageviewer-' + (opts.src
+      ? btoa(opts.src).slice(-12)
+      : btoa(unescape(encodeURIComponent(path))).slice(0, 12));
     const win = Desktop.createWindow({
       id,
       pinKey: 'imageviewer',
@@ -40,7 +44,23 @@ const ImageViewer = (() => {
         const label   = body.querySelector('#iv-label');
         const btnPrev = body.querySelector('#iv-prev');
         const btnNext = body.querySelector('#iv-next');
-        let zoom = 1;
+        const stage   = body.querySelector('#iv-stage');
+        let zoom = 1, tx = 0, ty = 0;
+        const apply = () => {
+          if (zoom <= 1) tx = ty = 0;
+          img.style.transform = zoom === 1 ? '' : `translate(${tx}px, ${ty}px) scale(${zoom})`;
+          stage.style.cursor = zoom > 1 ? 'grab' : '';
+          stage.style.touchAction = zoom > 1 ? 'none' : '';
+        };
+        // cx/cy: the point to keep still, from the stage centre; the buttons
+        // zoom around the centre, the wheel around the pointer.
+        const zoomTo = (z, cx = 0, cy = 0) => {
+          z = Math.min(Math.max(z, 0.1), 8);
+          tx = cx - (cx - tx) * z / zoom;
+          ty = cy - (cy - ty) * z / zoom;
+          zoom = z;
+          apply();
+        };
 
         function load(i) {
           idx = ((i % imgs.length) + imgs.length) % imgs.length;
@@ -49,14 +69,40 @@ const ImageViewer = (() => {
           img.src = raw(p);
           label.textContent = `${entry.name}  (${idx + 1}/${imgs.length})`;
           zoom = 1;
-          img.style.transform = '';
+          apply();
         }
 
         btnPrev.addEventListener('click', () => load(idx - 1));
         btnNext.addEventListener('click', () => load(idx + 1));
-        body.querySelector('#iv-zoom-in').addEventListener('click', () => { zoom = Math.min(zoom * 1.25, 8); img.style.transform = `scale(${zoom})`; });
-        body.querySelector('#iv-zoom-out').addEventListener('click', () => { zoom = Math.max(zoom / 1.25, 0.1); img.style.transform = `scale(${zoom})`; });
-        body.querySelector('#iv-zoom-fit').addEventListener('click', () => { zoom = 1; img.style.transform = ''; });
+        body.querySelector('#iv-zoom-in').addEventListener('click', () => zoomTo(zoom * 1.25));
+        body.querySelector('#iv-zoom-out').addEventListener('click', () => zoomTo(zoom / 1.25));
+        body.querySelector('#iv-zoom-fit').addEventListener('click', () => { zoom = 1; apply(); });
+
+        stage.addEventListener('wheel', e => {
+          e.preventDefault();
+          const r = stage.getBoundingClientRect();
+          zoomTo(zoom * Math.exp(-e.deltaY * (e.deltaMode === 1 ? 0.05 : 0.0015)),
+            e.clientX - r.left - r.width / 2, e.clientY - r.top - r.height / 2);
+        }, { passive: false });
+        stage.addEventListener('dblclick', () => { zoom = 1; apply(); });
+
+        // A zoomed image is dragged around with the mouse or a finger.
+        stage.addEventListener('pointerdown', e => {
+          if (zoom <= 1 || e.button !== 0) return;
+          const sx = e.clientX - tx, sy = e.clientY - ty;
+          stage.setPointerCapture(e.pointerId);
+          stage.style.cursor = 'grabbing';
+          const move = ev => { tx = ev.clientX - sx; ty = ev.clientY - sy; apply(); };
+          const up = () => {
+            stage.removeEventListener('pointermove', move);
+            stage.removeEventListener('pointerup', up);
+            stage.removeEventListener('pointercancel', up);
+            apply();
+          };
+          stage.addEventListener('pointermove', move);
+          stage.addEventListener('pointerup', up);
+          stage.addEventListener('pointercancel', up);
+        });
 
         body.addEventListener('keydown', e => {
           if (e.key === 'ArrowLeft')  load(idx - 1);
@@ -66,6 +112,7 @@ const ImageViewer = (() => {
         if (idx === -1) {
           img.src = raw(path);
           label.textContent = name;
+          btnPrev.style.display = btnNext.style.display = 'none';
         } else {
           load(idx);
         }

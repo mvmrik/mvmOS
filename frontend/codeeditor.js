@@ -676,7 +676,7 @@ var CodeEditor = (() => {
   const style = document.createElement('style');
   style.textContent = `
     .ce-sidebar { font-size:.82rem; }
-    .ce-file, .ce-dir { padding:4px 12px; cursor:pointer; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .ce-file, .ce-dir { flex-shrink:0; padding:4px 12px; cursor:pointer; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
     .ce-file:hover, .ce-dir:hover { background:var(--surface); }
     .ce-file.active { background:var(--accent); color:#fff; }
     .ce-dir-children { padding-left:12px; }

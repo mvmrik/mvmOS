@@ -258,13 +258,15 @@ async def add_text(body: TextBody,
                    session=Depends(get_current_session_optional),
                    x_pub_token: str = Header(default=None),
                    x_mvm_surface: str = Header(default=None)):
-    ids = _resolve(session, x_pub_token, x_mvm_surface)
-    text = body.text
+    audience, owner = _target(_resolve(session, x_pub_token, x_mvm_surface))
+    return JSONResponse(_add_text(audience, owner, body.text))
+
+
+def _add_text(audience: str, owner: str, text: str) -> dict:
     if not text.strip():
         raise HTTPException(400, "clip_error_empty")
     if len(text) > MAX_TEXT_CHARS:
         raise HTTPException(413, "clip_error_text_long")
-    audience, owner = _target(ids)
     purge_expired()
     size = len(text.encode("utf-8"))
     with get_conn() as conn:
@@ -276,7 +278,7 @@ async def add_text(body: TextBody,
         )
         conn.commit()
         row = conn.execute("SELECT * FROM clipboard_items WHERE id = ?", (cur.lastrowid,)).fetchone()
-    return JSONResponse(_public_row(row))
+    return _public_row(row)
 
 
 @router.post("/api/file")
@@ -286,12 +288,15 @@ async def add_file(request: Request,
                    session=Depends(get_current_session_optional),
                    x_pub_token: str = Header(default=None),
                    x_mvm_surface: str = Header(default=None)):
-    ids = _resolve(session, x_pub_token, x_mvm_surface)
-    audience, owner = _target(ids)
+    audience, owner = _target(_resolve(session, x_pub_token, x_mvm_surface))
     try:
         announced = int(request.headers.get("content-length") or 0)
     except ValueError:
         announced = 0
+    return JSONResponse(await _add_file(file, audience, owner, announced))
+
+
+async def _add_file(file: UploadFile, audience: str, owner: str, announced: int = 0) -> dict:
     if announced > MAX_FILE_BYTES + 1024 * 1024:
         raise HTTPException(413, "clip_error_file_big")
     purge_expired()
@@ -332,7 +337,7 @@ async def add_file(request: Request,
         except OSError:
             pass
         raise
-    return JSONResponse(_public_row(row))
+    return _public_row(row)
 
 
 @router.get("/api/items/{item_id}/file")

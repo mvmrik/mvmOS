@@ -385,9 +385,10 @@ const ClipboardApp = (() => {
           const btn = e.target.closest('[data-act]');
           const row = e.target.closest('.clip-item');
           if (!btn || !row) {
-            if (e.target.matches('.clip-thumb img')) {
-              const url = _thumbs.get(Number(e.target.closest('.clip-item').dataset.id));
-              if (url) window.open(url, '_blank');
+            const item = row && e.target.closest('.clip-thumb') && _items.find(i => i.id === Number(row.dataset.id));
+            if (item && _isInlineImage(item)) {
+              const url = await _thumbUrl(item);
+              if (url) ImageViewer.openWindow(item.name || 'image', null, { src: url });
             }
             return;
           }

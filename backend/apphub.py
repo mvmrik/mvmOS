@@ -1023,7 +1023,13 @@ async def me_pub(x_pub_token: Optional[str] = Header(default=None)):
         # nothing to notice.
         "credits": credits_available(),
         "invitations": invitations_enabled(),
+        "api": _extapi_public(),
     })
+
+
+def _extapi_public() -> bool:
+    from .extapi import public_available
+    return public_available()
 
 
 class MeUpdateBody(BaseModel):
@@ -1679,6 +1685,13 @@ async def _apphub_icon_192():
 @public_page_router.get("/icon-512.png")
 async def _apphub_icon_512():
     return FileResponse(os.path.join(_PUB_DIR, "icon-512.png"), media_type="image/png")
+
+
+@public_page_router.get("/extapi-tokens.js")
+async def _apphub_extapi_tokens_js():
+    # Shared with the desktop's Settings, which loads it from here too.
+    return FileResponse(os.path.join(_PUB_DIR, "extapi-tokens.js"),
+                        media_type="application/javascript")
 
 
 @public_page_router.get("/layout.js")

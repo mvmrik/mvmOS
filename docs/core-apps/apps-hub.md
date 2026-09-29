@@ -41,6 +41,8 @@ Apps Hub is also the switchboard for server-side app-to-app calls. An app may ex
 
 Enable an app API only when there is a concrete integration to support. It is a server-side trust decision: public-page access and app-to-app API access are separate controls.
 
+With the External APIs Premium module, an administrator can separately open selected Store app APIs to scripts and programs outside mvmOS. A public app must be enabled in Apps Hub before it can be opened this way. Public profiles then see an API tab and make their own tokens, each limited to the functions selected for it; on installations without the module, the tab is absent entirely.
+
 ## Credits for public users
 
 Credits are an optional Apps Hub Premium module for an installation. When the Credits module exists, each public profile has a balance and a visible transaction history. The feature is absent entirely on an installation without that module; public users do not see a purchase prompt.

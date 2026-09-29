@@ -183,18 +183,38 @@ const Settings = (() => {
     return `${v.day}/${v.month}/${v.year}`;
   }
 
+  // Settings open on a home view of broad categories; each tab belongs to
+  // exactly one of them. New tabs join an existing category rather than
+  // growing the list, so the home view stays short.
+  const CATEGORIES = [
+    { id: 'personalization', icon: '🎨', tabs: ['display', 'wallpaper', 'screensaver', 'startmenu'] },
+    { id: 'apps',            icon: '🗂️', tabs: ['filemanager', 'defaultapps'] },
+    { id: 'accounts',        icon: '👥', tabs: ['users', 'sshaccess'] },
+    { id: 'connections',     icon: '🔌', tabs: ['extapi'] },
+    { id: 'system',          icon: '⚙️', tabs: ['regional', 'system', 'updates', 'backup'] },
+    { id: 'mvmos',           icon: '💎', tabs: ['subscription', 'about'] },
+  ];
+  const categoryOf = tab => CATEGORIES.find(c => c.tabs.includes(tab)) || CATEGORIES[0];
+
+  // Search reads the labels straight from the panels, so it follows every
+  // new setting on its own. Panels drawn only when opened are searchable
+  // through these existing labels until they have been drawn once.
+  const SEARCH_KEYS = {
+    users: ['users_title', 'users_add_title', 'users_username', 'users_password', 'users_groups', 'users_shell'],
+    updates: ['um_title', 'um_update_all', 'um_linux_packages'],
+    startmenu: ['sm_recent', 'sm_frequent', 'sm_hidden', 'sm_opacity', 'sm_custom', 'sm_add_app', 'sm_autofocus_search', 'sm_show_last'],
+    backup: ['backup_title', 'backup_auto_title', 'backup_list_title', 'backup_schedule', 'backup_location', 'backup_keep', 'backup_create'],
+    sshaccess: ['ssh_access_keys', 'ssh_access_enable', 'ssh_access_add', 'ssh_access_days'],
+    extapi: ['extapi_core_apps', 'extapi_store_apps', 'extapi_my_tokens', 'extapi_token_new'],
+  };
+
   function switchTab(tab) {
     const body = document.querySelector('.window[data-win-id="settings"] .window-body');
-    if (!body) return;
-    body.querySelectorAll('.settings-tab').forEach(t => t.classList.remove('active'));
-    body.querySelectorAll('.settings-panel').forEach(p => p.classList.remove('active'));
-    const tabEl = body.querySelector(`.settings-tab[data-tab="${tab}"]`);
-    const panEl = body.querySelector(`#sp-${tab}`);
-    if (tabEl) tabEl.classList.add('active');
-    if (panEl) panEl.classList.add('active');
+    body?.querySelector('.settings-root')?._openTab?.(tab);
   }
 
   function render(body, s, activeTab, premium) {
+    const startHome = !activeTab;
     activeTab = activeTab || 'display';
     const d = loadDisplay();
     const fm = loadFMPrefs();
@@ -219,9 +239,16 @@ const Settings = (() => {
     body.style.overflow = 'hidden';
     body.style.padding = '0';
     body.innerHTML = `
+      <div class="settings-root" data-view="${startHome ? 'home' : 'cat'}">
+      <div class="settings-top">
+        <button class="settings-back" type="button">← ${t('settings_back')}</button>
+        <div class="settings-crumb"></div>
+        <input type="search" class="settings-search" placeholder="${t('settings_search_ph')}" autocomplete="off">
+      </div>
+      <div class="settings-home"></div>
       <div class="settings-wrap as-wrap">
 
-        <nav class="settings-tabs as-sidebar">
+        <nav class="settings-tabs settings-nav">
           <div class="settings-tab ${activeTab==='subscription'?'active':''}" data-tab="subscription">${t('settings_subscription')}</div>
           <div class="settings-tab ${activeTab==='display'?'active':''}" data-tab="display">${t('settings_display')}</div>
           <div class="settings-tab ${activeTab==='screensaver'?'active':''}" data-tab="screensaver">${t('settings_screensaver')}</div>
@@ -234,8 +261,9 @@ const Settings = (() => {
           <div class="settings-tab ${activeTab==='startmenu'?'active':''}" data-tab="startmenu">${t('settings_startmenu')}</div>
           <div class="settings-tab ${activeTab==='system'?'active':''}" data-tab="system">${t('settings_system')}<span class="settings-tab-dot" id="s-system-dot" hidden></span></div>
           <div class="settings-tab ${activeTab==='sshaccess'?'active':''}" data-tab="sshaccess">🔐 ${t('settings_ssh_access')}</div>
+          <div class="settings-tab ${activeTab==='extapi'?'active':''}" data-tab="extapi">🔌 ${t('extapi_title')}</div>
           <div class="settings-tab ${activeTab==='backup'?'active':''}" data-tab="backup">${t('settings_backup')}</div>
-          <div class="settings-tab ${activeTab==='about'?'active':''}" data-tab="about" style="margin-top:auto">${t('settings_about')}</div>
+          <div class="settings-tab ${activeTab==='about'?'active':''}" data-tab="about">${t('settings_about')}</div>
         </nav>
 
         <div class="settings-panels as-main">
@@ -617,6 +645,9 @@ const Settings = (() => {
           <!-- SSH access panel -->
           <div class="settings-panel ${activeTab==='sshaccess'?'active':''}" id="sp-sshaccess"></div>
 
+          <!-- External APIs panel -->
+          <div class="settings-panel ${activeTab==='extapi'?'active':''}" id="sp-extapi"></div>
+
           <!-- Screen Saver panel -->
           <div class="settings-panel ${activeTab==='screensaver'?'active':''}" id="sp-screensaver">
             <div class="settings-section">
@@ -660,6 +691,7 @@ const Settings = (() => {
 
         </div>
       </div>
+      </div>
     `;
 
     updateTimePreviews();
@@ -682,6 +714,7 @@ const Settings = (() => {
         if (tab.dataset.tab === 'system') renderSystem(body);
         if (tab.dataset.tab === 'backup') renderBackup(body);
         if (tab.dataset.tab === 'sshaccess') renderSshAccess(body);
+        if (tab.dataset.tab === 'extapi') renderExtApi(body);
         if (tab.dataset.tab === 'subscription') {
           renderPremiumDevices();
           if (!premium.pending_invoice) refreshQuote();
@@ -698,6 +731,126 @@ const Settings = (() => {
     if (activeTab === 'wallpaper') initWallpaper(body);
     if (activeTab === 'system') renderSystem(body);
     if (activeTab === 'backup') renderBackup(body);
+
+    // ── Categories, back and search ─────────────────────────────────────
+    const root = body.querySelector('.settings-root');
+    const home = root.querySelector('.settings-home');
+    const crumb = root.querySelector('.settings-crumb');
+    const search = root.querySelector('.settings-search');
+    const tabEl = tab => root.querySelector(`.settings-tab[data-tab="${tab}"]`);
+    const tabName = tab => tabEl(tab)?.textContent.trim() || tab;
+    const catName = c => t(`settings_cat_${c.id}`);
+    let lastCat = categoryOf(activeTab);
+
+    const showCategory = cat => {
+      lastCat = cat;
+      root.dataset.view = 'cat';
+      crumb.textContent = `${cat.icon} ${catName(cat)}`;
+      root.querySelectorAll('.settings-tab').forEach(el => { el.hidden = !cat.tabs.includes(el.dataset.tab); });
+      root.querySelector('.settings-nav').hidden = cat.tabs.length < 2;
+    };
+    const openTab = tab => {
+      if (!tabEl(tab)) return;
+      search.value = '';
+      showCategory(categoryOf(tab));
+      if (!tabEl(tab).classList.contains('active')) tabEl(tab).click();
+    };
+    root._openTab = openTab;
+
+    const drawHome = () => {
+      crumb.textContent = '';
+      home.innerHTML = `<div class="settings-cats">${CATEGORIES.map(c => {
+        const dot = c.tabs.some(tab => tabEl(tab)?.querySelector('.settings-tab-dot:not([hidden])'));
+        return `<button class="settings-cat" type="button" data-cat="${c.id}">
+          <span class="settings-cat-icon">${c.icon}</span>
+          <span class="settings-cat-text">
+            <span class="settings-cat-name">${esc(catName(c))}<span class="settings-tab-dot"${dot ? '' : ' hidden'}></span></span>
+            <span class="settings-cat-items">${c.tabs.map(tab => esc(tabName(tab).replace(/^\P{L}+/u, ''))).join(' · ')}</span>
+          </span>
+        </button>`;
+      }).join('')}</div>`;
+      home.querySelectorAll('.settings-cat').forEach(btn => btn.addEventListener('click', () => {
+        const cat = CATEGORIES.find(c => c.id === btn.dataset.cat);
+        const current = cat.tabs.find(tab => tabEl(tab).classList.contains('active'));
+        openTab(current || cat.tabs[0]);
+      }));
+    };
+    const showHome = () => {
+      root.dataset.view = 'home';
+      search.value = '';
+      drawHome();
+    };
+
+    // One entry per distinct label; a label found in the drawn panel keeps
+    // its element so the result can scroll to it.
+    const searchIndex = () => {
+      const out = [];
+      CATEGORIES.forEach(cat => cat.tabs.forEach(tab => {
+        const seen = new Set();
+        const add = (text, el) => {
+          text = (text || '').replace(/\s+/g, ' ').trim();
+          if (!text || seen.has(text.toLowerCase())) return;
+          seen.add(text.toLowerCase());
+          out.push({ cat, tab, text, el });
+        };
+        add(tabName(tab), null);
+        const panel = root.querySelector(`#sp-${tab}`);
+        panel?.querySelectorAll('.settings-section-title, .settings-row > label:first-child, .settings-row > div:first-child > div:first-child')
+          .forEach(el => add(el.firstChild?.nodeType === 3 ? el.firstChild.textContent : el.textContent, el));
+        (SEARCH_KEYS[tab] || []).forEach(k => add(t(k), null));
+      }));
+      return out;
+    };
+    const drawResults = q => {
+      crumb.textContent = '';
+      const words = q.toLowerCase().split(/\s+/).filter(Boolean);
+      const hits = searchIndex().filter(r => {
+        const hay = `${r.text} ${tabName(r.tab)} ${catName(r.cat)}`.toLowerCase();
+        return words.every(w => hay.includes(w));
+      }).slice(0, 60);
+      if (!hits.length) {
+        home.innerHTML = `<div class="settings-search-empty">${esc(t('settings_search_none'))}</div>`;
+        return;
+      }
+      home.innerHTML = `<div class="settings-results">${hits.map((r, i) => `
+        <button class="settings-result" type="button" data-i="${i}">
+          <span class="settings-result-text">${esc(r.text)}</span>
+          <span class="settings-result-path">${r.cat.icon} ${esc(catName(r.cat))} › ${esc(tabName(r.tab))}</span>
+        </button>`).join('')}</div>`;
+      home.querySelectorAll('.settings-result').forEach(btn => btn.addEventListener('click', () => {
+        const r = hits[+btn.dataset.i];
+        openTab(r.tab);
+        // A panel drawn on opening has its labels only after it loads.
+        const locate = tries => {
+          const panel = root.querySelector(`#sp-${r.tab}`);
+          const el = r.el?.isConnected ? r.el : [...(panel?.querySelectorAll('.settings-section-title, label, div') || [])]
+            .find(n => n.children.length < 3 && n.textContent.replace(/\s+/g, ' ').trim().startsWith(r.text));
+          if (el) {
+            el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+            el.classList.remove('settings-flash');
+            void el.offsetWidth;
+            el.classList.add('settings-flash');
+          } else if (tries > 0) setTimeout(() => locate(tries - 1), 250);
+        };
+        if (r.text !== tabName(r.tab)) locate(8);
+      }));
+    };
+
+    search.addEventListener('input', () => {
+      const q = search.value.trim();
+      if (!q) { showHome(); return; }
+      root.dataset.view = 'search';
+      drawResults(q);
+    });
+    search.addEventListener('keydown', e => {
+      if (e.key === 'Escape' && search.value) { e.stopPropagation(); showHome(); }
+      if (e.key === 'Enter') home.querySelector('.settings-result')?.click();
+    });
+    root.querySelector('.settings-back').addEventListener('click', showHome);
+
+    if (startHome) showHome();
+    else showCategory(lastCat);
+    _paintWizardDots(body);
 
     // ── Subscription ────────────────────────────────────────────────────
     const premStatus = () => body.querySelector('#prem-status');
@@ -1240,6 +1393,7 @@ const Settings = (() => {
     });
 
     if (activeTab === 'sshaccess') renderSshAccess(body);
+    if (activeTab === 'extapi') renderExtApi(body);
 
     // Display — auto-save on slider change
     const iconSlider = body.querySelector('#s-icon-size');
@@ -2646,6 +2800,94 @@ const Settings = (() => {
     }));
   }
 
+  // The token list and editor are shared with the Apps Hub public page, which
+  // is where public profiles make theirs, so both load the same file.
+  function _loadExtApiTokens() {
+    if (window.ExtApiTokens) return Promise.resolve();
+    return new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = '/pub/apphub/extapi-tokens.js?v=1.9.0.4';
+      s.onload = resolve; s.onerror = reject;
+      document.head.appendChild(s);
+    });
+  }
+
+  async function renderExtApi(body) {
+    const panel = body.querySelector('#sp-extapi');
+    if (!panel) return;
+    const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    panel.innerHTML = `<div style="color:var(--text-dim);font-size:.85rem">${t('loading')}</div>`;
+    let state;
+    try { state = await fetch('/api/extapi/admin').then(r => { if (!r.ok) throw 0; return r.json(); }); }
+    catch (_) { panel.innerHTML = `<div style="color:#e05555">${t('extapi_error_generic')}</div>`; return; }
+
+    const appRow = (kind, a) => {
+      const note = kind === 'store' && !a.public
+        ? `<div style="font-size:.76rem;color:#e0a040;margin-top:2px">${t('extapi_store_not_public')}</div>` : '';
+      return `
+        <div class="settings-row" style="gap:12px">
+          <div style="flex:1;min-width:0">
+            <div style="font-weight:500">${esc(a.icon)} ${esc(a.name)}</div>
+            <div style="font-size:.76rem;color:var(--text-dim);margin-top:2px">${t('extapi_functions_count', { n: a.functions.length })}</div>
+            ${note}
+          </div>
+          <label class="toggle" data-extapi-toggle><input type="checkbox" data-kind="${kind}" data-id="${esc(a.id)}" ${a.enabled ? 'checked' : ''} ${state.owner ? '' : 'disabled'}><span class="toggle-slider"></span></label>
+        </div>`;
+    };
+    const list = (kind, apps) => apps.length ? apps.map(a => appRow(kind, a)).join('')
+      : `<div style="font-size:.82rem;color:var(--text-dim)">${t('extapi_no_api_apps')}</div>`;
+
+    panel.innerHTML = `
+      <div class="settings-section">
+        <div class="settings-section-title">${t('extapi_title')}</div>
+        <div style="font-size:.82rem;color:var(--text-dim);line-height:1.5">${t('extapi_desc')}</div>
+        ${state.owner ? '' : `<div style="font-size:.82rem;color:#e0a040;margin-top:10px">${t('extapi_error_not_owner')}</div>`}
+      </div>
+      <div class="settings-section">
+        <div class="settings-section-title">${t('extapi_core_apps')}</div>
+        <div style="font-size:.8rem;color:var(--text-dim);line-height:1.5;margin-bottom:6px">${t('extapi_core_apps_desc')}</div>
+        ${list('core', state.core)}
+      </div>
+      <div class="settings-section">
+        <div class="settings-section-title">${t('extapi_store_apps')}</div>
+        <div style="font-size:.8rem;color:var(--text-dim);line-height:1.5;margin-bottom:6px">${t('extapi_store_apps_desc')}</div>
+        ${list('store', state.store)}
+      </div>
+      ${state.owner ? `
+      <div class="settings-section" id="extapi-tokens-section">
+        <div class="settings-section-title">${t('extapi_my_tokens')}</div>
+        <div id="extapi-tokens"></div>
+      </div>` : ''}`;
+
+    panel.querySelectorAll('[data-extapi-toggle]').forEach(label => {
+      const input = label.querySelector('input');
+      if (!state.available) {
+        window.mvmOS?.premiumGate(label, t('extapi_premium'));
+        return;
+      }
+      input.addEventListener('change', async () => {
+        const res = await fetch(`/api/extapi/admin/${input.dataset.kind}/${encodeURIComponent(input.dataset.id)}`, {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ enabled: input.checked }),
+        }).catch(() => null);
+        if (!res?.ok) { input.checked = !input.checked; alert(t('extapi_error_generic')); return; }
+        tokens?.refresh();
+      });
+    });
+
+    let tokens = null;
+    const box = panel.querySelector('#extapi-tokens');
+    if (!box) return;
+    if (!state.available) {
+      box.innerHTML = `<button class="s-btn s-btn-primary">${t('extapi_token_new')}</button>`;
+      window.mvmOS?.premiumGate(box.firstElementChild, t('extapi_premium'));
+      return;
+    }
+    try { await _loadExtApiTokens(); }
+    catch (_) { box.innerHTML = `<div style="color:#e05555">${t('extapi_error_generic')}</div>`; return; }
+    tokens = ExtApiTokens.mount(box, { base: '/api/extapi', noAppsKey: 'extapi_no_apps_core' });
+  }
+
   function renderSystem(body) {
     const panel = body.querySelector('#sp-system');
     if (!panel) return;
@@ -2694,6 +2936,8 @@ const Settings = (() => {
     const pending = !!window.Wizard?.isPending?.();
     const tabDot = body.querySelector('#s-system-dot');
     if (tabDot) tabDot.hidden = !pending;
+    const catDot = body.querySelector('.settings-cat[data-cat="system"] .settings-tab-dot');
+    if (catDot) catDot.hidden = !pending;
     const rowDot = body.querySelector('#s-wizard-dot');
     if (rowDot) rowDot.hidden = !pending;
     const desc = body.querySelector('#s-wizard-desc');

@@ -77,6 +77,7 @@ from .apphub import router as apphub_router, public_page_router as apphub_public
 from .notifications import router as notifications_router
 from .clipboard import router as clipboard_router, purge_on_startup as _purge_clipboard
 from .platform_api import router as platform_router
+from .extapi import admin_router as extapi_admin_router, pub_router as extapi_pub_router, gateway_router as extapi_gateway_router
 from .extensions import router as extensions_router
 from .wizard import router as wizard_router
 from .notfound import render_404_html
@@ -117,6 +118,9 @@ app.include_router(apphub_public_router, prefix="/pub/apphub")
 app.include_router(notifications_router)
 app.include_router(clipboard_router, prefix="/pub/clipboard")
 app.include_router(platform_router)
+app.include_router(extapi_admin_router)
+app.include_router(extapi_pub_router)
+app.include_router(extapi_gateway_router)
 app.include_router(extensions_router)
 app.include_router(wizard_router)
 

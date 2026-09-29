@@ -15,7 +15,7 @@ Terminal opens a real interactive Linux shell in the mvmOS desktop. It is not a 
 - Uses that user’s real home directory and Linux permissions.
 - Supports ANSI colours, interactive programs, and terminal resizing.
 - Reconnects automatically after a network change, sleep, or server restart. A reconnected window starts a new shell session, so any command that was running in the previous session does not continue.
-- Lets apps open a terminal in a chosen folder with its own session. When `tmux` is installed on the server, such a session keeps running on the server while the connection is gone, so a reconnect or a reloaded page returns to the same shell and whatever was running in it, and the session ends only when the app closes that terminal. Git Manager uses this for its repository terminals. Without `tmux`, a reconnect starts a new shell in the same folder.
+- Lets apps open a terminal in a chosen folder with its own session. The shell starts in that folder even when it must switch to another Linux user first. When `tmux` is installed on the server, such a session keeps running on the server while the connection is gone, so a reconnect or a reloaded page returns to the same shell and whatever was running in it, and the session ends only when the app closes that terminal. Git Manager uses this for its repository terminals. Without `tmux`, a reconnect starts a new shell in the same folder.
 - Keeps Linux as the permission boundary; commands are not separately sandboxed by mvmOS.
 
 ## Saved commands and the quick prompt

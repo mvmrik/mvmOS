@@ -68,10 +68,10 @@ async def terminal_ws(websocket: WebSocket, session: str | None = Cookie(default
 
     if tmux_session:
         cmd = _as_user(eu, _tmux_argv(eu, "new-session", "-A", "-s", tmux_session, "-c", cwd), needs_sudo)
-    elif needs_sudo:
-        cmd = ["sudo", "runuser", "-l", eu]
-    elif eu and eu != "root":
-        cmd = ["runuser", "-l", eu]
+    elif needs_sudo or (eu and eu != "root"):
+        # A login shell (runuser -l) always starts in the user's home, so the
+        # folder asked for has to be entered explicitly before the shell starts.
+        cmd = _as_user(eu, ["/bin/bash", "-c", f"cd {shlex.quote(cwd)} && exec bash -i"], needs_sudo)
     else:
         cmd = ["/bin/bash", "--login"]
 
