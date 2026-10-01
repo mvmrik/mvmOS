@@ -434,7 +434,7 @@ const AppHub = (() => {
       }, {});
       if (!apps.length) { c.innerHTML = `<div style="padding:20px;color:var(--text-dim);font-size:.85rem;text-align:center">${t('ah_no_public_apps')}</div>`; return; }
       const categoryKey = 'apphub_apps_category';
-      const categories = [...new Set(apps.map(a => a.category || 'Utilities'))].sort((a, b) => a.localeCompare(b));
+      const categories = [...new Set(apps.map(a => a.category || 'Utilities'))].sort((a, b) => mvmOS.categoryName(a).localeCompare(mvmOS.categoryName(b)));
       let selectedCategory = localStorage.getItem(categoryKey) || 'all';
       if (selectedCategory !== 'all' && !categories.includes(selectedCategory)) selectedCategory = 'all';
 
@@ -446,7 +446,7 @@ const AppHub = (() => {
           <label for="ah-apps-category" style="font-size:.78rem;color:var(--text-dim)">${t('ah_apps_category')}</label>
           <select id="ah-apps-category" class="s-inp" style="width:auto;padding:5px 8px;font-size:.8rem">
             <option value="all">${t('ah_apps_all_categories')}</option>
-            ${categories.map(category => `<option value="${esc(category)}"${category===selectedCategory?' selected':''}>${esc(category)}</option>`).join('')}
+            ${categories.map(category => `<option value="${esc(category)}"${category===selectedCategory?' selected':''}>${esc(mvmOS.categoryName(category))}</option>`).join('')}
           </select>
         </div>
         <div id="ah-apps-list"></div>`;
@@ -457,7 +457,7 @@ const AppHub = (() => {
           <div style="display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid var(--border)">
             <span style="font-size:1.4rem">${esc(a.icon)}</span>
             <div style="flex:1;min-width:0">
-              <div style="font-size:.88rem;font-weight:500">${esc(a.name)}</div>
+              <div style="font-size:.88rem;font-weight:500">${esc(mvmOS.appName(a))}</div>
               ${a.public_name ? `<div style="font-size:.76rem;color:var(--text-dim)">${esc(a.public_name)}</div>` : ''}
               <div style="font-size:.72rem;color:var(--text-dim)">/pub/${esc(a.id)}/</div>
             </div>
@@ -578,7 +578,7 @@ const AppHub = (() => {
           <div style="display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid var(--border)">
             <span style="font-size:1.4rem">${esc(a.icon)}</span>
             <div style="flex:1;min-width:0">
-              <div style="font-size:.88rem;font-weight:500">${esc(a.name)}</div>
+              <div style="font-size:.88rem;font-weight:500">${esc(mvmOS.appName(a))}</div>
               <div style="font-size:.72rem;color:var(--text-dim)">${esc(a.id)}/api.py</div>
             </div>
             ${(a.actions || []).length ? `<button class="ah-api-actions-toggle s-btn s-btn-sm" data-app="${esc(a.id)}" aria-expanded="false" style="cursor:pointer;white-space:nowrap">🧩 ${t('ah_app_api_actions_button')} (${a.actions.length})</button>` : ''}
@@ -789,7 +789,7 @@ const AppHub = (() => {
         <details open style="border:1px solid var(--border);border-radius:10px;background:var(--surface1);overflow:hidden">
           <summary style="list-style:none;cursor:pointer;display:flex;align-items:center;gap:11px;padding:13px 14px;background:var(--surface2);user-select:none">
             <span style="font-size:1.35rem">${esc(app.app_icon)}</span>
-            <span style="flex:1"><span style="display:block;font-weight:700;font-size:.9rem">${esc(app.app_name)}</span><span style="display:block;margin-top:2px;font-size:.75rem;color:var(--text-dim)">${app.services.length} ${t('ah_credit_services_options')}</span></span>
+            <span style="flex:1"><span style="display:block;font-weight:700;font-size:.9rem">${esc(mvmOS.appName({ name: app.app_name, name_i18n: app.app_name_i18n }))}</span><span style="display:block;margin-top:2px;font-size:.75rem;color:var(--text-dim)">${app.services.length} ${t('ah_credit_services_options')}</span></span>
             <span style="font-size:.85rem;color:var(--text-dim)">⌄</span>
           </summary>
           <div style="padding:0 14px">

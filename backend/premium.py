@@ -315,7 +315,7 @@ def load_premium_backend(app_id: str):
     return None
 
 
-CORE_PREMIUM_MODULES = ("apphub", "extapi")
+CORE_PREMIUM_MODULES = ("apphub", "extapi", "automations")
 
 _core_modules = {}
 
@@ -709,7 +709,7 @@ async def _check_app_content(app_id: str) -> dict:
 # Display name per core premium module — short, curated list (see
 # CORE_PREMIUM_MODULES above), unlike store apps there is no `plugins` row
 # to read a name from.
-_CORE_PREMIUM_NAMES = {"apphub": "Apps Hub", "extapi": "External APIs"}
+_CORE_PREMIUM_NAMES = {"apphub": "Apps Hub", "extapi": "External APIs", "automations": "Automations"}
 # Key prefix for a core module's entry in the same status dict as store
 # apps — apphub the core module and a hypothetical "apphub"-named store app
 # are different things and must not collide.

@@ -27,6 +27,7 @@ SYSTEM_APPS = [
     {"id": "notifications",  "name": "Notifications",    "icon": "🔔", "category": "Communication"},
     {"id": "cron-manager",    "name": "Cron Manager",     "icon": "⏰", "category": "System & Administration"},
     {"id": "clipboard",       "name": "Clipboard",        "icon": "📋", "category": "Utilities"},
+    {"id": "automations",     "name": "Automations",      "icon": "⚡", "category": "Utilities"},
 ]
 
 
@@ -225,6 +226,44 @@ def init_db():
                 expires_at TEXT
             );
             CREATE INDEX IF NOT EXISTS idx_clipboard_owner ON clipboard_items(audience, owner, id DESC);
+
+            -- Automations: rules of an Apps Hub profile (user_id), their
+            -- journal, the once-a-day claims, and the owner's switch for rules
+            -- between apps (one row, user_id '*').
+            CREATE TABLE IF NOT EXISTS automations (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id TEXT NOT NULL,
+                name TEXT NOT NULL,
+                enabled INTEGER NOT NULL DEFAULT 1,
+                app TEXT NOT NULL,
+                event TEXT,
+                schedule TEXT,
+                rule TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                last_run TEXT,
+                last_status TEXT
+            );
+            CREATE INDEX IF NOT EXISTS idx_automations_user ON automations(user_id, id);
+            CREATE INDEX IF NOT EXISTS idx_automations_event ON automations(enabled, app, event);
+            CREATE INDEX IF NOT EXISTS idx_automations_schedule ON automations(enabled, schedule);
+            CREATE TABLE IF NOT EXISTS automation_runs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                automation_id INTEGER NOT NULL,
+                ran_at TEXT NOT NULL,
+                status TEXT NOT NULL,
+                detail TEXT
+            );
+            CREATE INDEX IF NOT EXISTS idx_automation_runs ON automation_runs(automation_id, id);
+            CREATE TABLE IF NOT EXISTS automation_once (
+                automation_id INTEGER NOT NULL,
+                claim TEXT NOT NULL,
+                PRIMARY KEY (automation_id, claim)
+            );
+            CREATE TABLE IF NOT EXISTS automation_settings (
+                user_id TEXT PRIMARY KEY,
+                cross INTEGER NOT NULL DEFAULT 0
+            );
 
             -- Terminal: commands a person saved to run with one click. Owner is
             -- the Linux user the desktop session works as.

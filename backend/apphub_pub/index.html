@@ -291,11 +291,13 @@ function renderTab(t) {
   // Same for the External API: without it, or with no app open to it, there
   // is no tab to reach.
   if (t === 'api' && !(_me && _me.api)) t = 'apps';
+  if (t === 'invitations' && !(_me && _me.invitations)) t = 'apps';
   if (t === 'apps')       renderApps(c);
   if (t === 'store')      renderStore(c);
   if (t === 'favourites') renderFavourites(c);
   if (t === 'credits')    renderCredits(c);
   if (t === 'api')        renderApi(c);
+  if (t === 'invitations') renderInvitations(c);
   if (t === 'profile')    renderProfile(c);
   if (t === 'settings')   renderSettings(c);
 }
@@ -393,6 +395,11 @@ function _getCategoryPref(categories) {
 }
 function _setCategoryPref(v) { _setPref('apps_category', v); }
 
+// Names and categories in the viewer's language; an owner's own public name
+// arrives without translations and stays as written.
+const _appName = a => (window.mvmOS?.appName ? mvmOS.appName(a) : a.name);
+const _catName = c => (window.mvmOS?.categoryName ? mvmOS.categoryName(c) : c);
+
 function _sortApps(apps, mode) {
   const sorted = apps.slice();
   if (mode === 'recent') {
@@ -400,7 +407,7 @@ function _sortApps(apps, mode) {
   } else if (mode === 'frequent') {
     sorted.sort((a, b) => (b.open_count || 0) - (a.open_count || 0));
   } else {
-    sorted.sort((a, b) => a.name.localeCompare(b.name));
+    sorted.sort((a, b) => _appName(a).localeCompare(_appName(b)));
   }
   return sorted;
 }
@@ -456,14 +463,14 @@ async function renderApps(c) {
     return;
   }
 
-  const categories = [...new Set(apps.map(a => a.category || 'Utilities'))].sort((a, b) => a.localeCompare(b));
+  const categories = [...new Set(apps.map(a => a.category || 'Utilities'))].sort((a, b) => _catName(a).localeCompare(_catName(b)));
   const categoryMode = _getCategoryPref(categories);
   const sortMode = _getSortPref();
   c.innerHTML = `
     <div style="display:flex;align-items:center;justify-content:flex-end;gap:8px;padding:12px 16px 0;flex-wrap:wrap">
       <select class="inp" id="apps-category" aria-label="${esc(t('ah_apps_category'))}" title="${esc(t('ah_apps_category'))}" style="width:auto;padding:5px 10px;font-size:.8rem">
         <option value="all">${t('ah_apps_all_categories')}</option>
-        ${categories.map(category => `<option value="${esc(category)}"${categoryMode===category?' selected':''}>${esc(category)}</option>`).join('')}
+        ${categories.map(category => `<option value="${esc(category)}"${categoryMode===category?' selected':''}>${esc(_catName(category))}</option>`).join('')}
       </select>
       <select class="inp" id="apps-sort" aria-label="${esc(t('ah_pub_sort_by'))}" title="${esc(t('ah_pub_sort_by'))}" style="width:auto;padding:5px 10px;font-size:.8rem">
         <option value="alpha"${sortMode==='alpha'?' selected':''}>${t('ah_pub_sort_alpha')}</option>
@@ -480,7 +487,7 @@ async function renderApps(c) {
     c.querySelector('#apps-grid').innerHTML = sorted.map(a => `
       <a class="app-card" href="${esc(a.public_url)}" data-id="${esc(a.id)}">
         <div class="app-icon">${esc(a.icon)}${badges[a.id] ? '<span class="app-badge"></span>' : ''}</div>
-        <div class="app-name">${esc(a.name)}</div>
+        <div class="app-name">${esc(_appName(a))}</div>
         <div class="app-desc">${esc(t('ah_pub_usage_summary', {count: a.open_count || 0, last: _relativeTime(a.last_opened_at)}))}</div>
       </a>`).join('');
     c.querySelectorAll('.app-card').forEach(el => {
@@ -542,7 +549,7 @@ async function renderStore(c) {
   }
 
   const categoryOf = a => a.category || 'Utilities';
-  const categories = [...new Set(apps.map(categoryOf))].sort((a, b) => a.localeCompare(b));
+  const categories = [...new Set(apps.map(categoryOf))].sort((a, b) => _catName(a).localeCompare(_catName(b)));
   if (_storeView && _storeView !== 'installed' && !categories.includes(_storeView)) _storeView = null;
 
   const drawCategories = () => {
@@ -560,7 +567,7 @@ async function renderStore(c) {
       return `
         <div class="app-card" data-cat="${esc(category)}">
           <div class="app-icon">📂</div>
-          <div class="app-name">${esc(category)}</div>
+          <div class="app-name">${esc(_catName(category))}</div>
           <div class="app-desc">${esc(t('ah_pub_store_cat_summary', {total: inCategory.length, added}))}</div>
         </div>`;
     }).join('');
@@ -576,12 +583,12 @@ async function renderStore(c) {
     // the row vanish under the cursor and an accidental click unfixable.
     const rows = (installedView ? apps.filter(a => a.installed)
                                 : apps.filter(a => categoryOf(a) === _storeView))
-                 .sort((a, b) => a.name.localeCompare(b.name));
+                 .sort((a, b) => _appName(a).localeCompare(_appName(b)));
     c.innerHTML = `
       <div style="padding:12px 16px 0">
         <button class="st-btn" id="store-back">${t('ah_pub_store_back')}</button>
       </div>
-      <div style="padding:12px 16px;font-weight:600">${esc(installedView ? t('ah_pub_store_installed_title') : _storeView)}</div>
+      <div style="padding:12px 16px;font-weight:600">${esc(installedView ? t('ah_pub_store_installed_title') : _catName(_storeView))}</div>
       <div class="err" id="store-err" style="padding:0 16px"></div>
       <div style="display:flex;flex-direction:column;gap:10px;padding:0 16px 16px" id="store-list"></div>`;
     c.querySelector('#store-back').onclick = () => { _storeView = null; drawCategories(); };
@@ -591,8 +598,8 @@ async function renderStore(c) {
       <div class="st-row">
         <div class="app-icon">${esc(a.icon)}</div>
         <div class="st-info">
-          <div class="app-name">${esc(a.name)}</div>
-          <div class="app-desc">${esc(installedView ? categoryOf(a) : (a.description || ''))}</div>
+          <div class="app-name">${esc(_appName(a))}</div>
+          <div class="app-desc">${esc(installedView ? _catName(categoryOf(a)) : (a.description || ''))}</div>
         </div>
         <button class="st-btn${a.installed ? '' : ' add'}" data-app="${esc(a.id)}">
           ${a.installed ? t('ah_pub_store_remove') : t('ah_pub_store_add')}
@@ -1011,6 +1018,95 @@ function _mountApiTokens(box) {
   s.src = '/pub/apphub/extapi-tokens.js?v=1.9.0.4';
   s.onload = mount;
   document.head.appendChild(s);
+}
+
+// ── Invitations tab ─────────────────────────────────────────────
+
+async function renderInvitations(c, created) {
+  c.innerHTML = `
+    <div class="section" style="max-width:640px;display:flex;flex-direction:column;gap:14px">
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+        <div style="flex:1;min-width:200px;font-size:.8rem;color:var(--fg2)">${esc(t('ah_invitations_page_hint'))}</div>
+        <button class="btn btn-primary" id="inv-new">＋ ${esc(t('ah_invitation_new'))}</button>
+      </div>
+      <div id="inv-err" style="color:var(--red);font-size:.85rem" hidden></div>
+      <div id="inv-list" style="display:flex;flex-direction:column;gap:8px">
+        <div style="padding:20px;text-align:center;color:var(--fg2);font-size:.85rem">…</div>
+      </div>
+    </div>`;
+  const err = c.querySelector('#inv-err');
+  const showErr = msg => { err.textContent = msg; err.hidden = !msg; };
+
+  c.querySelector('#inv-new').onclick = async e => {
+    e.target.disabled = true; showErr('');
+    try {
+      const r = await fetch(BASE + '/invitations', {method:'POST', headers:{'X-Pub-Token':_token}});
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        // Say which refusal it was: one message for every failure made a
+        // switched-off setting or a server error look like the 20 limit.
+        showErr(d.detail === 'invitation_limit' ? t('ah_invitation_limit')
+          : d.detail === 'invitations_disabled' ? t('ah_invitations_disabled')
+          : t('ah_invitation_failed') + ' (' + r.status + ')');
+        e.target.disabled = false;
+        return;
+      }
+      renderInvitations(c, d.url);
+    } catch (_) { showErr(t('ah_invitation_failed')); e.target.disabled = false; }
+  };
+
+  let rows = null;
+  try {
+    const r = await fetch(BASE + '/invitations', {headers:{'X-Pub-Token':_token}});
+    if (r.ok) rows = await r.json();
+  } catch (_) {}
+  const list = c.querySelector('#inv-list');
+  if (!rows) { list.innerHTML = ''; showErr(t('ah_invitations_load_failed')); return; }
+  if (!rows.length) {
+    list.innerHTML = `<div style="padding:20px;text-align:center;color:var(--fg2);font-size:.85rem">${esc(t('ah_invitations_empty'))}</div>`;
+    return;
+  }
+  const full = url => new URL(url, location.origin).href;
+  list.innerHTML = rows.map(inv => {
+    const who = inv.used_by ? (inv.used_by.display_name || inv.used_by.username) : '';
+    const status = inv.used_at
+      ? (who ? t('ah_invitation_accepted_by', {name: who, date: _fmtTime(inv.used_at)}) : t('ah_invitation_accepted', {date: _fmtTime(inv.used_at)}))
+      : t('ah_invitation_waiting', {date: _fmtTime(inv.expires_at)});
+    const fresh = created && inv.url === created;
+    return `
+    <div class="card" data-id="${esc(inv.id)}" data-used="${inv.used_at ? 1 : ''}" style="padding:12px 14px;display:flex;flex-direction:column;gap:8px${fresh ? ';border-color:var(--accent)' : ''}">
+      <div style="display:flex;align-items:center;gap:10px">
+        <span style="font-size:1.1rem">${inv.used_at ? '✅' : '✉'}</span>
+        <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px">
+          <div style="font-size:.85rem;font-weight:600;color:${inv.used_at ? 'var(--green)' : 'var(--fg)'}">${esc(status)}</div>
+          <div style="font-size:.72rem;color:var(--fg2)">${esc(t('ah_invitation_created', {date: _fmtTime(inv.created_at)}))}</div>
+        </div>
+        <button class="btn btn-secondary inv-del" style="padding:6px 12px;font-size:.8rem" title="${esc(t('ah_invitation_delete'))}">🗑</button>
+      </div>
+      ${inv.url ? `
+      <div style="display:flex;gap:6px">
+        <input readonly value="${esc(full(inv.url))}" style="flex:1;min-width:0;font-size:.78rem;padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--fg)">
+        <button class="btn btn-secondary inv-copy" style="padding:6px 12px;font-size:.8rem;white-space:nowrap">${esc(t('ah_invitation_copy_link'))}</button>
+      </div>` : !inv.used_at ? `<div style="font-size:.72rem;color:var(--fg2)">${esc(t('ah_invitation_link_unavailable'))}</div>` : ''}
+    </div>`;
+  }).join('');
+
+  list.querySelectorAll('.inv-copy').forEach(btn => btn.onclick = async () => {
+    const input = btn.previousElementSibling;
+    try { await navigator.clipboard.writeText(input.value); }
+    catch (_) { input.select(); document.execCommand('copy'); }
+    btn.textContent = t('ah_invitation_copied');
+    setTimeout(() => { btn.textContent = t('ah_invitation_copy_link'); }, 1500);
+  });
+  list.querySelectorAll('.inv-del').forEach(btn => btn.onclick = async () => {
+    const card = btn.closest('.card');
+    if (!confirm(t(card.dataset.used ? 'ah_invitation_delete_used_confirm' : 'ah_invitation_delete_confirm'))) return;
+    btn.disabled = true;
+    const r = await fetch(BASE + '/invitations/' + encodeURIComponent(card.dataset.id),
+      {method:'DELETE', headers:{'X-Pub-Token':_token}}).catch(() => null);
+    if (r && (r.ok || r.status === 404)) renderInvitations(c);
+    else { btn.disabled = false; showErr(t('ah_invitation_delete_failed')); }
+  });
 }
 
 // ── Credits tab ─────────────────────────────────────────────────

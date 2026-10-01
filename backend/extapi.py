@@ -46,7 +46,7 @@ APPS_DIR = os.path.join(os.path.dirname(__file__), "..", "apps")
 # Core apps with an API: id -> how it is shown. The module is
 # backend/core_apis/<id>.py.
 CORE_APIS = {
-    "clipboard": {"name": "Clipboard", "icon": "📋"},
+    "clipboard": {"name": "Clipboard", "name_key": "app_clipboard", "icon": "📋"},
 }
 
 # Parameters that name the calling app. From outside the caller is always the
@@ -146,7 +146,7 @@ def catalog(kind: str) -> list:
     if kind == "core":
         for app_id, meta in CORE_APIS.items():
             fns = _functions(_module("core", app_id))
-            result.append({"id": app_id, "name": meta["name"], "icon": meta["icon"],
+            result.append({"id": app_id, "name": meta["name"], "name_key": meta.get("name_key"), "icon": meta["icon"],
                            "functions": [_describe(n, f) for n, f in sorted(fns.items())]})
     elif kind == "store":
         hub = _hub()
@@ -155,7 +155,8 @@ def catalog(kind: str) -> list:
             if not fns:
                 continue
             m = _manifest(app_id)
-            result.append({"id": app_id, "name": m.get("name") or app_id, "icon": m.get("icon") or "📦",
+            result.append({"id": app_id, "name": m.get("name") or app_id, "name_i18n": m.get("name_i18n"),
+                           "icon": m.get("icon") or "📦",
                            "public": hub.is_app_public(app_id),
                            "functions": [_describe(n, f) for n, f in sorted(fns.items())]})
     return sorted(result, key=lambda a: a["name"].lower())
@@ -184,6 +185,12 @@ async def invoke(kind: str, app_id: str, name: str, user_id: str, params: Option
             result = fn(user_id, **kwargs)
             if inspect.isawaitable(result):
                 result = await result
+        # A change made through the API is an event for Automations, named
+        # by the function, just as a change on the app's screen is.
+        if not name.startswith(_READ_PREFIXES):
+            auto = sys.modules.get("backend.automations")
+            if auto:
+                auto.notice(app_id, name, user_id=user_id, data=params)
         return result
     result = fn(user_id, **kwargs)
     if inspect.isawaitable(result):

@@ -57,9 +57,11 @@ _DB_PATH = os.path.join(os.path.dirname(__file__), "apphub_data", "data.db")
 
 # Display name/icon for core system apps that have no manifest.json.
 _CORE_APP_META = {
-    "apphub":    {"name": "Apps Hub",  "icon": "🧩"},
-    "clipboard": {"name": "Clipboard", "icon": "📋", "category": "Utilities",
+    "apphub":    {"name": "Apps Hub",  "name_key": "app_apphub", "icon": "🧩"},
+    "clipboard": {"name": "Clipboard", "name_key": "app_clipboard", "icon": "📋", "category": "Utilities",
                   "description": "Move text, photos and files between your devices."},
+    "automations": {"name": "Automations", "name_key": "app_automations", "icon": "⚡", "category": "Utilities",
+                    "description": "Let your apps do things on their own when something happens."},
 }
 
 # Public-page appearance prefs: a fixed set of ready-made color pairs and text
@@ -202,6 +204,10 @@ def _init_db():
             conn.execute("ALTER TABLE public_users ADD COLUMN time_format TEXT NOT NULL DEFAULT ''")
         if "currency" not in cols:
             conn.execute("ALTER TABLE public_users ADD COLUMN currency TEXT NOT NULL DEFAULT ''")
+        # The link itself, so its creator can copy it again from their list of
+        # invitations. Invitations made before this have only the hash.
+        if "token" not in {r[1] for r in conn.execute("PRAGMA table_info(invitations)")}:
+            conn.execute("ALTER TABLE invitations ADD COLUMN token TEXT")
         conn.commit()
 
 
@@ -323,7 +329,7 @@ def _detect_public_apps() -> list:
     page is core-wired (backend/apphub_pub/), so include it explicitly. The
     clipboard's public page is core-wired the same way (backend/clipboard_pub/)."""
     here = os.path.dirname(__file__)
-    result = ["apphub", "clipboard"]
+    result = ["apphub", "clipboard", "automations"]
 
     # New layout: api.py counts only when it actually serves a public page.
     # An app with desktop_router alone (no public router) is not public.
@@ -845,7 +851,7 @@ def credit_service_catalog() -> list:
             feature_id = str(feature.get("id") or "")
             if not app_id or not app_name or not feature_id or not feature_id.replace("_", "").replace("-", "").isalnum():
                 continue
-            items.append({"app_id": app_id, "app_name": app_name,
+            items.append({"app_id": app_id, "app_name": app_name, "app_name_i18n": manifest.get("name_i18n"),
                 "app_icon": str(manifest.get("icon") or "🧩"), "feature_id": feature_id,
                 "name": str(feature.get("name") or feature_id.replace("_", " ").title()),
                 "description": str(feature.get("description") or ""), "unit": str(feature.get("unit") or "use")})
@@ -991,10 +997,50 @@ async def create_invitation_pub(x_pub_token: Optional[str] = Header(default=None
                              (user["id"],)).fetchone()[0]
         if count >= 20:
             raise HTTPException(429, detail="invitation_limit")
-        conn.execute("INSERT INTO invitations(token_hash,created_by,created_at,expires_at) VALUES(?,?,?,?)",
-                     (hashlib.sha256(token.encode()).hexdigest(), user["id"], now.isoformat(), expires))
+        conn.execute("INSERT INTO invitations(token_hash,created_by,created_at,expires_at,token) VALUES(?,?,?,?,?)",
+                     (hashlib.sha256(token.encode()).hexdigest(), user["id"], now.isoformat(), expires, token))
     return JSONResponse({"url": "/pub/apphub/?invitation=" + token, "expires_at": expires},
                         headers={"Cache-Control": "no-store"})
+
+
+@_pub.get("/invitations")
+async def list_invitations_pub(x_pub_token: Optional[str] = Header(default=None)):
+    """The caller's own invitations, newest first: the ones still waiting (with
+    their link) and the accepted ones (with who accepted). An unused invitation
+    that expired is gone — it can no longer do anything."""
+    user = get_pub_session(x_pub_token)
+    if not user:
+        raise HTTPException(401)
+    now = datetime.now(timezone.utc).isoformat()
+    with _db() as conn:
+        conn.execute("DELETE FROM invitations WHERE used_at IS NULL AND expires_at <= ?", (now,))
+        rows = conn.execute(
+            "SELECT i.token_hash, i.token, i.created_at, i.expires_at, i.used_at,"
+            " u.username AS used_username, u.display_name AS used_display_name"
+            " FROM invitations i LEFT JOIN public_users u ON u.id=i.used_by"
+            " WHERE i.created_by=? ORDER BY i.created_at DESC", (user["id"],)).fetchall()
+    return JSONResponse([{
+        "id": r["token_hash"],
+        "url": "/pub/apphub/?invitation=" + r["token"] if r["token"] and not r["used_at"] else None,
+        "created_at": r["created_at"], "expires_at": r["expires_at"], "used_at": r["used_at"],
+        "used_by": {"username": r["used_username"], "display_name": r["used_display_name"]}
+                   if r["used_username"] else None,
+    } for r in rows], headers={"Cache-Control": "no-store"})
+
+
+@_pub.delete("/invitations/{invitation_id}")
+async def delete_invitation_pub(invitation_id: str, x_pub_token: Optional[str] = Header(default=None)):
+    """Removes one of the caller's invitations. A waiting link stops working;
+    an accepted one only leaves the list — the account it created stays."""
+    user = get_pub_session(x_pub_token)
+    if not user:
+        raise HTTPException(401)
+    with _db() as conn:
+        cur = conn.execute("DELETE FROM invitations WHERE token_hash=? AND created_by=?",
+                           (invitation_id, user["id"]))
+    if not cur.rowcount:
+        raise HTTPException(404)
+    return JSONResponse({"ok": True})
 
 
 @_pub.post("/logout")
@@ -1170,6 +1216,10 @@ async def list_public_apps(x_pub_token: Optional[str] = Header(default=None)):
         result.append({
             "id":             app_id,
             "name":           names.get(app_id) or m.get("name") or meta.get("name", app_id),
+            # A public name the owner chose replaces the app's own name in
+            # every language, so the translations go only with the default one.
+            "name_i18n":      None if names.get(app_id) else m.get("name_i18n"),
+            "name_key":       None if names.get(app_id) else meta.get("name_key"),
             "icon":           m.get("icon") or meta.get("icon", "📦"),
             "category":       m.get("category") or meta.get("category", "Utilities"),
             "description":    m.get("description") or meta.get("description", ""),
@@ -1272,6 +1322,8 @@ async def list_public_apps_admin(session=Depends(get_current_session)):
         result.append({
             "id":      app_id,
             "name":    m.get("name") or meta.get("name", app_id),
+            "name_i18n": m.get("name_i18n"),
+            "name_key": meta.get("name_key"),
             "icon":    m.get("icon") or meta.get("icon", "📦"),
             "category": m.get("category", "Utilities"),
             "enabled": bool(rows.get(app_id, 0)),
@@ -1338,6 +1390,8 @@ async def list_app_apis_admin(session=Depends(get_current_session)):
         result.append({
             "id":      app_id,
             "name":    m.get("name") or meta.get("name", app_id),
+            "name_i18n": m.get("name_i18n"),
+            "name_key": meta.get("name_key"),
             "icon":    m.get("icon") or meta.get("icon", "📦"),
             "enabled": bool(rows.get(app_id, 0)),
             "actions": _introspect_app_api_actions(app_id),
@@ -1658,7 +1712,10 @@ height:100vh;margin:0;background:#1e1e2e;color:#a6adc8;flex-direction:column;gap
 async def _apphub_public_index():
     if not is_app_public("apphub"):
         return _apphub_private_page()
-    return FileResponse(os.path.join(_PUB_DIR, "index.html"))
+    from .assets import versioned_html
+    with open(os.path.join(_PUB_DIR, "index.html"), encoding="utf-8") as f:
+        html = versioned_html(f.read(), "/pub/apphub/")
+    return HTMLResponse(html, headers={"Cache-Control": "no-cache"})
 
 
 @public_page_router.get("/avatar.js")

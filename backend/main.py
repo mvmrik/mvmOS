@@ -52,6 +52,7 @@ class _AppStaticFiles(StaticFiles):
 
 
 from .db import init_db, get_conn
+from .assets import asset, manifest as assets_manifest, versioned_html
 from .auth import router as auth_router, get_current_session
 from .terminal import router as terminal_router
 from .savedcommands import router as savedcommands_router
@@ -76,6 +77,7 @@ from .startup import router as startup_router, _init_startup_db, run_startup_app
 from .apphub import router as apphub_router, public_page_router as apphub_public_router, _init_db as _init_apphub_db, is_app_public
 from .notifications import router as notifications_router
 from .clipboard import router as clipboard_router, purge_on_startup as _purge_clipboard
+from .automations import router as automations_router, desktop_router as automations_desktop_router, watch_requests as _watch_automations
 from .platform_api import router as platform_router
 from .extapi import admin_router as extapi_admin_router, pub_router as extapi_pub_router, gateway_router as extapi_gateway_router
 from .extensions import router as extensions_router
@@ -117,6 +119,10 @@ app.include_router(apphub_router)
 app.include_router(apphub_public_router, prefix="/pub/apphub")
 app.include_router(notifications_router)
 app.include_router(clipboard_router, prefix="/pub/clipboard")
+app.include_router(automations_router, prefix="/pub/automations")
+app.include_router(automations_desktop_router)
+# A finished write to an app's own /pub/<app>/ routes is an Automations event.
+app.middleware("http")(_watch_automations)
 app.include_router(platform_router)
 app.include_router(extapi_admin_router)
 app.include_router(extapi_pub_router)
@@ -501,23 +507,17 @@ async def layout_inject_middleware(request: Request, call_next):
         body += chunk if isinstance(chunk, bytes) else chunk.encode()
 
     html = body.decode("utf-8", errors="ignore")
-    keyboard_path = os.path.join(os.path.dirname(__file__), "..", "frontend", "keyboard-preference.js")
-    try:
-        keyboard_version = int(os.path.getmtime(keyboard_path))
-    except OSError:
-        keyboard_version = 0
-    keyboard_snippet = f'<script src="/keyboard-preference.js?v={keyboard_version}" data-mvm-keyboard-scope="public"></script>'
+    # Every file the app's page names goes through asset(), whichever route
+    # served the page, so a changed script never arrives stale from a cache.
+    path = request.url.path
+    html = versioned_html(html, path if path.endswith("/") else path.rsplit("/", 1)[0] + "/")
+    keyboard_snippet = f'<script src="{asset("/keyboard-preference.js")}" data-mvm-keyboard-scope="public"></script>'
     html = html.replace("</head>", keyboard_snippet + "</head>", 1) if "</head>" in html else keyboard_snippet + html
 
     if is_mvmshare_recipient or not wants_public_chrome or "/pub/apphub/layout.js" in html:
         snippet = ""
     else:
-        layout_js_path = os.path.join(os.path.dirname(__file__), "apphub_pub", "layout.js")
-        try:
-            v = int(os.path.getmtime(layout_js_path))
-        except OSError:
-            v = 0
-        snippet = f'<script src="/pub/apphub/layout.js?v={v}" data-mvm-app="{app_id}"></script>'
+        snippet = f'<script src="{asset("/pub/apphub/layout.js")}" data-mvm-app="{app_id}"></script>'
     if snippet:
         html = html.replace("</body>", snippet + "</body>", 1) if "</body>" in html else html + snippet
     pwa = None if is_mvmshare_recipient or not wants_public_chrome else _public_pwa_snippet(app_id)
@@ -538,15 +538,11 @@ def _versioned_html():
     index_path = os.path.join(FRONTEND_DIR, "index.html")
     html = open(index_path).read()
 
-    def add_version(m):
-        src = m.group(1)
-        filepath = os.path.join(FRONTEND_DIR, src.lstrip("/"))
-        if os.path.isfile(filepath):
-            mtime = int(os.path.getmtime(filepath))
-            return f'"{src}?v={mtime}"'
-        return m.group(0)
-
-    html = re.sub(r'"(/[^"?]+\.(?:js|css))(?:\?[^"]*)?"', add_version, html)
+    # Every local file the page names goes through asset(), the same function
+    # the browser has as window.asset, so a changed file always has a new URL.
+    html = re.sub(r'\b(src|href)="(/[^"]*)"', lambda m: f'{m.group(1)}="{asset(m.group(2))}"', html)
+    boot = f'<script>window.__assets={assets_manifest()}</script><script src="{asset("/asset.js")}"></script>'
+    html = html.replace("<head>", "<head>" + boot, 1)
 
     # Inject mvmOS version as meta tag
     try:

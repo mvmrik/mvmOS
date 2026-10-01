@@ -59,6 +59,26 @@
   // is loading and skip a switch to English that it should have made.
   window.mvmOS.lang = window.mvmOS.pubLang || 'en';
 
+  // An app's display name in the active language: the manifest's name_i18n
+  // entry, then its English one, then the plain manifest name. Apps without
+  // name_i18n (brand names) simply keep their name everywhere. Built-in apps have
+  // no manifest; the server sends name_key, a core i18n key, for them instead.
+  window.mvmOS.appName = function (app) {
+    if (!app) return '';
+    if (app.name_key && window._i18n && window._i18n[app.name_key]) return window._i18n[app.name_key];
+    const n = app.name_i18n;
+    return (n && (n[window.mvmOS.lang] || n.en)) || app.name || app.id || '';
+  };
+
+  // A Store category is an English word in the manifest; its translation is the
+  // core key appcat_<slug>. A category core does not know stays as written.
+  window.mvmOS.categoryName = function (cat) {
+    if (!cat) return '';
+    const key = 'appcat_' + String(cat).toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+    const v = window._i18n && window._i18n[key];
+    return v || cat;
+  };
+
   // The one entry point for changing language. apphub_pub/layout.js hand-rolled
   // its own loader for this, which put two of them in a race over the same
   // wholesale window._i18n assignment; it now delegates here whenever this file

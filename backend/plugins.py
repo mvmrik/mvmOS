@@ -451,6 +451,10 @@ def _browser_extension(app_id: str):
     } if ext else None
 
 
+# System apps whose public page is wired into core, so no manifest names it.
+_CORE_PUBLIC_PAGES = {"apphub", "clipboard", "automations"}
+
+
 @router.get("")
 async def list_plugins(session=Depends(get_current_session)):
     with get_conn() as conn:
@@ -468,6 +472,7 @@ async def list_plugins(session=Depends(get_current_session)):
             with open(mf_path) as f:
                 mf = json.load(f)
             item["settings"] = mf.get("settings", [])
+            item["name_i18n"] = mf.get("name_i18n")
             item["replaces_widget"] = mf.get("replaces_widget")
             # manifest.json sits beside public/, not inside it, so the loader
             # cannot fetch it over HTTP any more — it reads entry/css here.
@@ -486,7 +491,7 @@ async def list_plugins(session=Depends(get_current_session)):
             # fails for them — but apphub's public page is core-wired (not
             # manifest-driven), so it needs a hardcoded public_url or its
             # desktop window never gets the shared footer's public-page link.
-            item["public_url"] = "/pub/apphub/" if r["id"] == "apphub" else None
+            item["public_url"] = f"/pub/{r['id']}/" if r["id"] in _CORE_PUBLIC_PAGES else None
             # Apps Hub's extension (mvmOS Apps) is defined in core, so it is
             # found without a manifest — see _CORE_EXTENSIONS in extensions.py.
             item["browser_extension"] = _browser_extension(r["id"])

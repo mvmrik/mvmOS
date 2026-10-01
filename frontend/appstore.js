@@ -386,7 +386,7 @@ const AppStore = (() => {
   };
 
   const _catKey = cat => String(cat.name || '').trim().toLowerCase();
-  const _catName = cat => cat.id === '_other' ? t('appstore_cat_other') : cat.name;
+  const _catName = cat => cat.id === '_other' ? t('appstore_cat_other') : mvmOS.categoryName(cat.name);
 
   function _flattenItems(node, trail = []) {
     let out = (node.items || []).map(it => ({ it, cats: trail }));
@@ -450,6 +450,7 @@ const AppStore = (() => {
       if (q) {
         const hits = _flattenItems(tree).filter(({ it, cats }) =>
           (it.name || '').toLowerCase().includes(q) ||
+          mvmOS.appName(it).toLowerCase().includes(q) ||
           (it.id || '').toLowerCase().includes(q) ||
           (it.description || '').toLowerCase().includes(q) ||
           cats.some(c => c.toLowerCase().includes(q))).map(h => h.it);
@@ -629,7 +630,7 @@ const AppStore = (() => {
   }
 
   async function removeMvmosApp(body, app, btn) {
-    const appLabel = app.name || app.id;
+    const appLabel = mvmOS.appName(app);
     const confirmed = app.has_backend
       ? await _backendConfirmDialog(body, appLabel)
       : await mvmOS.confirm(`Remove "${appLabel}"?`, { danger: true });
@@ -657,9 +658,9 @@ const AppStore = (() => {
           : `<button class="s-btn s-btn-sm as-mvmos-install">${t('appstore_install')}</button>`,
       ].join('');
       row.innerHTML = `
-        <button class="as-app-card-main" type="button" aria-label="${app.name}">
+        <button class="as-app-card-main" type="button" aria-label="${mvmOS.appName(app)}">
           <span class="as-app-icon">${app.icon || '📦'}</span>
-          <span class="as-app-copy"><span class="as-app-name">${app.name}${app.premium ? premiumMark() : ''}${badge ? sourceMark(app) : ''}</span><span class="as-app-desc">${app.description || ''}</span></span>
+          <span class="as-app-copy"><span class="as-app-name">${mvmOS.appName(app)}${app.premium ? premiumMark() : ''}${badge ? sourceMark(app) : ''}</span><span class="as-app-desc">${app.description || ''}</span></span>
         </button>
         ${actions ? `<div class="as-app-actions">${actions}</div>` : ''}
       `;
@@ -699,7 +700,7 @@ const AppStore = (() => {
     body.querySelector('.as-wrap').classList.add('as-app-detail-open');
     detail.style.display = 'flex';
     detail.classList.add('as-app-detail');
-    detailBody.innerHTML = `<div class="as-app-detail-head"><span class="as-app-icon">${app.icon || '📦'}</span><div><div class="as-detail-name">${app.name}</div><div class="as-detail-ver">v${app.version || '—'}</div><div class="as-detail-source"></div></div></div><p class="as-detail-short">${app.description || ''}</p><div class="as-app-detail-actions"></div>${app.premium ? '<section class="as-premium-section"></section>' : ''}<a class="as-site-link" target="_blank" rel="noopener" href="https://mvmos.org/app/${encodeURIComponent(app.id)}">${reviewText.siteLink}</a><section class="as-review-section"><h3>${reviewText.title}</h3><div class="as-review-loading">${reviewText.loading}</div></section>`;
+    detailBody.innerHTML = `<div class="as-app-detail-head"><span class="as-app-icon">${app.icon || '📦'}</span><div><div class="as-detail-name">${mvmOS.appName(app)}</div><div class="as-detail-ver">v${app.version || '—'}</div><div class="as-detail-source"></div></div></div><p class="as-detail-short">${app.description || ''}</p><div class="as-app-detail-actions"></div>${app.premium ? '<section class="as-premium-section"></section>' : ''}<a class="as-site-link" target="_blank" rel="noopener" href="https://mvmos.org/app/${encodeURIComponent(app.id)}">${reviewText.siteLink}</a><section class="as-review-section"><h3>${reviewText.title}</h3><div class="as-review-loading">${reviewText.loading}</div></section>`;
     const reviewsEl = detailBody.querySelector('.as-review-section');
     const premiumEl = detailBody.querySelector('.as-premium-section');
     if (premiumEl) loadPremiumSection(premiumEl, app);
@@ -749,7 +750,7 @@ const AppStore = (() => {
         }
       });
       actionsEl.querySelector('.as-act-remove')?.addEventListener('click', async e => {
-        if (await removeMvmosApp(body, { id: app.id, name: app.name, has_backend: inst.has_backend }, e.target)) closeDetail(body);
+        if (await removeMvmosApp(body, { id: app.id, name: app.name, name_i18n: app.name_i18n, has_backend: inst.has_backend }, e.target)) closeDetail(body);
       });
     }
     if (app.installed) setupActions();
@@ -1187,7 +1188,7 @@ const AppStore = (() => {
           <div class="as-pkg-top">
             <span class="as-pkg-name">${w.icon} ${w.name}</span>
             ${browse ? sourceMark(w) : ''}
-            <span class="as-cat-badge as-cat-sm">${w.category}</span>
+            <span class="as-cat-badge as-cat-sm">${mvmOS.categoryName(w.category)}</span>
             ${w.widget_type ? `<span class="as-cat-badge as-cat-sm" style="background:#89b4fa20;color:#89b4fa">${w.widget_type}</span>` : ''}
             ${w.installed ? `<span class="as-installed-badge">${t('appstore_installed_badge')}</span>` : ''}
             ${w.update_available ? `<span class="as-update-badge">${t('appstore_update')}</span>` : ''}

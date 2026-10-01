@@ -190,7 +190,7 @@ const Settings = (() => {
     { id: 'personalization', icon: '🎨', tabs: ['display', 'wallpaper', 'screensaver', 'startmenu'] },
     { id: 'apps',            icon: '🗂️', tabs: ['filemanager', 'defaultapps'] },
     { id: 'accounts',        icon: '👥', tabs: ['users', 'sshaccess'] },
-    { id: 'connections',     icon: '🔌', tabs: ['extapi'] },
+    { id: 'connections',     icon: '🔌', tabs: ['extapi', 'automations'] },
     { id: 'system',          icon: '⚙️', tabs: ['regional', 'system', 'updates', 'backup'] },
     { id: 'mvmos',           icon: '💎', tabs: ['subscription', 'about'] },
   ];
@@ -206,6 +206,7 @@ const Settings = (() => {
     backup: ['backup_title', 'backup_auto_title', 'backup_list_title', 'backup_schedule', 'backup_location', 'backup_keep', 'backup_create'],
     sshaccess: ['ssh_access_keys', 'ssh_access_enable', 'ssh_access_add', 'ssh_access_days'],
     extapi: ['extapi_core_apps', 'extapi_store_apps', 'extapi_my_tokens', 'extapi_token_new'],
+    automations: ['auto_settings_title', 'auto_cross_label'],
   };
 
   function switchTab(tab) {
@@ -262,6 +263,7 @@ const Settings = (() => {
           <div class="settings-tab ${activeTab==='system'?'active':''}" data-tab="system">${t('settings_system')}<span class="settings-tab-dot" id="s-system-dot" hidden></span></div>
           <div class="settings-tab ${activeTab==='sshaccess'?'active':''}" data-tab="sshaccess">🔐 ${t('settings_ssh_access')}</div>
           <div class="settings-tab ${activeTab==='extapi'?'active':''}" data-tab="extapi">🔌 ${t('extapi_title')}</div>
+          <div class="settings-tab ${activeTab==='automations'?'active':''}" data-tab="automations">⚡ ${t('auto_settings_title')}</div>
           <div class="settings-tab ${activeTab==='backup'?'active':''}" data-tab="backup">${t('settings_backup')}</div>
           <div class="settings-tab ${activeTab==='about'?'active':''}" data-tab="about">${t('settings_about')}</div>
         </nav>
@@ -648,6 +650,9 @@ const Settings = (() => {
           <!-- External APIs panel -->
           <div class="settings-panel ${activeTab==='extapi'?'active':''}" id="sp-extapi"></div>
 
+          <!-- Automations panel -->
+          <div class="settings-panel ${activeTab==='automations'?'active':''}" id="sp-automations"></div>
+
           <!-- Screen Saver panel -->
           <div class="settings-panel ${activeTab==='screensaver'?'active':''}" id="sp-screensaver">
             <div class="settings-section">
@@ -715,6 +720,7 @@ const Settings = (() => {
         if (tab.dataset.tab === 'backup') renderBackup(body);
         if (tab.dataset.tab === 'sshaccess') renderSshAccess(body);
         if (tab.dataset.tab === 'extapi') renderExtApi(body);
+        if (tab.dataset.tab === 'automations') renderAutomations(body);
         if (tab.dataset.tab === 'subscription') {
           renderPremiumDevices();
           if (!premium.pending_invoice) refreshQuote();
@@ -1394,6 +1400,7 @@ const Settings = (() => {
 
     if (activeTab === 'sshaccess') renderSshAccess(body);
     if (activeTab === 'extapi') renderExtApi(body);
+    if (activeTab === 'automations') renderAutomations(body);
 
     // Display — auto-save on slider change
     const iconSlider = body.querySelector('#s-icon-size');
@@ -2827,7 +2834,7 @@ const Settings = (() => {
       return `
         <div class="settings-row" style="gap:12px">
           <div style="flex:1;min-width:0">
-            <div style="font-weight:500">${esc(a.icon)} ${esc(a.name)}</div>
+            <div style="font-weight:500">${esc(a.icon)} ${esc(mvmOS.appName(a))}</div>
             <div style="font-size:.76rem;color:var(--text-dim);margin-top:2px">${t('extapi_functions_count', { n: a.functions.length })}</div>
             ${note}
           </div>
@@ -2886,6 +2893,49 @@ const Settings = (() => {
     try { await _loadExtApiTokens(); }
     catch (_) { box.innerHTML = `<div style="color:#e05555">${t('extapi_error_generic')}</div>`; return; }
     tokens = ExtApiTokens.mount(box, { base: '/api/extapi', noAppsKey: 'extapi_no_apps_core' });
+  }
+
+  // Automations: the owner's switch for rules between apps. The change is
+  // announced at once, so an open Automations editor shows or drops the other
+  // apps without a reload.
+  async function renderAutomations(body) {
+    const panel = body.querySelector('#sp-automations');
+    if (!panel) return;
+    panel.innerHTML = `<div style="color:var(--text-dim);font-size:.85rem">${t('loading')}</div>`;
+    let state;
+    try { state = await fetch('/api/automations/settings').then(r => { if (!r.ok) throw 0; return r.json(); }); }
+    catch (_) { panel.innerHTML = `<div style="color:#e05555">${t('auto_error_generic')}</div>`; return; }
+    panel.innerHTML = `
+      <div class="settings-section">
+        <div class="settings-section-title">${t('auto_settings_title')}</div>
+        <div style="font-size:.82rem;color:var(--text-dim);line-height:1.5">${t('auto_settings_desc')}</div>
+        ${state.owner ? '' : `<div style="font-size:.82rem;color:#e0a040;margin-top:10px">${t('auto_owner_only')}</div>`}
+      </div>
+      <div class="settings-section">
+        <div class="settings-row" style="gap:12px">
+          <div style="flex:1;min-width:0">
+            <div style="font-weight:500">${t('auto_cross_label')}</div>
+            <div style="font-size:.78rem;color:var(--text-dim);margin-top:2px;line-height:1.5">${t('auto_cross_desc')}</div>
+          </div>
+          <label class="toggle" id="auto-cross-toggle"><input type="checkbox" ${state.cross ? 'checked' : ''} ${state.owner ? '' : 'disabled'}><span class="toggle-slider"></span></label>
+        </div>
+      </div>`;
+    const label = panel.querySelector('#auto-cross-toggle');
+    const input = label.querySelector('input');
+    if (!state.available) {
+      input.checked = false;
+      window.mvmOS?.premiumGate(label, t('auto_premium'));
+      if (window.mvmOS?.premiumStatus === 'premium') input.disabled = true;
+      return;
+    }
+    input.addEventListener('change', async () => {
+      const res = await fetch('/api/automations/settings', {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cross: input.checked }),
+      }).catch(() => null);
+      if (!res?.ok) { input.checked = !input.checked; alert(t('auto_error_generic')); return; }
+      window.dispatchEvent(new CustomEvent('automations-settings-changed', { detail: { cross: input.checked } }));
+    });
   }
 
   function renderSystem(body) {

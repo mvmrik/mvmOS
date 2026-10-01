@@ -122,6 +122,25 @@ and turn on two-factor authentication in Settings.
 
 ---
 
+## For developers: naming files with asset()
+
+Never write a bare path to a script, stylesheet, image, font or data file that a browser
+loads. Always pass it through `asset()`, which returns the URL with `?v=<time the file last
+changed>`, so a changed file gets a new address and no cache (browser, Electron, Cloudflare)
+can serve an old copy.
+
+- In the browser: `window.asset('/pub/apphub/layout.js')`. It is defined by `frontend/asset.js`
+  and fed with `window.__assets`, which the server writes into the main page.
+- In Python: `from backend.assets import asset`. It is the same function and works for core
+  files, `/apps/<id>/...`, `/pub/<id>/...`, `/widgets` and `/themes`.
+- In the main page `index.html` every local `src` and `href` is passed through it
+  automatically, so write the plain path there and never a hand-made `?v=`.
+
+It is being adopted step by step: use it in everything new, and replace the old `Date.now()`,
+hand-made `?v=` numbers and bare paths with it whenever you touch that code.
+
+---
+
 ## Status
 
 mvmOS is in beta and moving quickly. It is used daily on real servers, but expect the

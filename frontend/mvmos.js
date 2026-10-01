@@ -25,6 +25,7 @@ var mvmOS = (() => {
       { id: 'settings',         name: t('app_settings'),  icon: '⚙️', category: 'System & Administration', system: true, launch: () => Settings.openWindow() },
       { id: 'notifications',   name: t('app_notifications'), icon: '🔔', category: 'Communication', system: true, launch: () => Notifications.openWindow() },
       { id: 'clipboard',        name: t('app_clipboard'), icon: '📋', category: 'Utilities', system: true, launch: () => ClipboardApp.openWindow() },
+      { id: 'automations',      name: t('app_automations'), icon: '⚡', category: 'Utilities', system: true, launch: () => AutomationsApp.openWindow() },
       { id: 'cron-manager',     name: t('app_cron_manager'), icon: '⏰', category: 'System & Administration', system: true, launch: () => CronManager.openWindow() },
     ];
   }
@@ -91,11 +92,12 @@ var mvmOS = (() => {
       if (!cats[cat]) cats[cat] = [];
       cats[cat].push(app);
     });
-    Object.keys(cats).sort().forEach(cat => {
+    const catName = cat => window.mvmOS.categoryName(cat);
+    Object.keys(cats).sort((a, b) => catName(a).localeCompare(catName(b))).forEach(cat => {
       const el = document.createElement('div');
       el.className = 'start-submenu-item';
-      el.innerHTML = `<span class="emoji">📂</span>${cat}<span class="start-menu-item-arrow">›</span>`;
-      el.addEventListener('click', e => { e.stopPropagation(); _renderApps(cats[cat], cat); });
+      el.innerHTML = `<span class="emoji">📂</span>${catName(cat)}<span class="start-menu-item-arrow">›</span>`;
+      el.addEventListener('click', e => { e.stopPropagation(); _renderApps(cats[cat], catName(cat)); });
       _flyout.appendChild(el);
     });
   }
@@ -148,8 +150,10 @@ var mvmOS = (() => {
         const res = await fetch('/api/plugins');
         const data = await res.json();
         const plugins = (data.plugins || data || []).filter(p => _apps[p.id] && p.id !== 'settings');
-        recentApps = [...plugins].filter(p => p.last_opened_at).sort((a, b) => b.last_opened_at - a.last_opened_at).slice(0, prefs.recent);
-        frequentApps = [...plugins].sort((a, b) => (b.open_count || 0) - (a.open_count || 0)).slice(0, prefs.frequent);
+        // The rows only order the apps; what is shown is the registered app,
+        // whose name is in the desktop language (the row has the English one).
+        recentApps = [...plugins].filter(p => p.last_opened_at).sort((a, b) => b.last_opened_at - a.last_opened_at).slice(0, prefs.recent).map(p => _apps[p.id]);
+        frequentApps = [...plugins].sort((a, b) => (b.open_count || 0) - (a.open_count || 0)).slice(0, prefs.frequent).map(p => _apps[p.id]);
       } catch (_) {}
     }
 
@@ -265,6 +269,11 @@ var mvmOS = (() => {
         };
       }
     }
+    // A Store app's own name may be English only; the manifest's name_i18n
+    // gives it in every language and wins wherever it exists.
+    const meta = _pluginsCache.find(p => p.id === def.id);
+    if (meta?.name_i18n) { def.name_i18n = meta.name_i18n; def.name = window.mvmOS.appName(def); }
+    if (!def.category && meta?.category) def.category = meta.category;
     _apps[def.id] = def;
     _ensureAppsMenuItem();
   }
@@ -720,7 +729,7 @@ var mvmOS = (() => {
     return Object.values(_apps).filter(app => {
       if (!app || !app.id) return false;
       const stored = _pluginsCache.find(p => p.id === app.id)?.name;
-      return [app.name, stored, app.id].some(x => _fold(x).includes(q));
+      return [app.name, stored, app.name_i18n?.en, app.id].some(x => _fold(x).includes(q));
     });
   }
 
@@ -1139,6 +1148,7 @@ var mvmOS = (() => {
   // earlier wording, so they are translated again on every language load.
   window.addEventListener('i18n-loaded', () => {
     _SYSTEM_APP_DEFS().forEach(def => { if (_apps[def.id]) _apps[def.id].name = def.name; });
+    Object.values(_apps).forEach(app => { if (app.name_i18n) app.name = window.mvmOS.appName(app); });
   });
 
   document.addEventListener('DOMContentLoaded', () => {
@@ -1160,17 +1170,17 @@ var mvmOS = (() => {
     _ctxMenu.style.cssText = `position:fixed;left:${x}px;top:${y}px;z-index:99999;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:4px 0;min-width:140px;box-shadow:0 4px 16px rgba(0,0,0,.4)`;
     const onDesktop = window._desktopIsOn?.(app.id) ?? false;
     const items = [
-      { label: `▶ Open`, action: () => { _closeFlyout(); document.getElementById('start-menu').classList.remove('open'); _trackOpen(app.id); app.launch(); } },
+      { label: `▶ ${t('start_ctx_open')}`, action: () => { _closeFlyout(); document.getElementById('start-menu').classList.remove('open'); _trackOpen(app.id); app.launch(); } },
       { sep: true },
       onDesktop
-        ? { label: `🗑️ Remove from Desktop`, action: () => { window._desktopRemoveApp?.(app.id); } }
-        : { label: `➕ Add to Desktop`, action: () => { window._desktopAddApp?.({ id: app.id, label: app.name, emoji: app.icon || '📦', app: app.id, x: 20, y: 20 }); } },
+        ? { label: `🗑️ ${t('ctx_remove_from_desktop')}`, action: () => { window._desktopRemoveApp?.(app.id); } }
+        : { label: `➕ ${t('ctx_add_to_desktop')}`, action: () => { window._desktopAddApp?.({ id: app.id, label: app.name, emoji: app.icon || '📦', app: app.id, x: 20, y: 20 }); } },
     ];
     if (!app.system) {
       items.push(
         { sep: true },
-        { label: `🗑 Uninstall`, danger: true, action: async () => {
-          if (!confirm(`Uninstall "${app.name}"?`)) return;
+        { label: `🗑 ${t('start_ctx_uninstall')}`, danger: true, action: async () => {
+          if (!confirm(t('start_ctx_uninstall_confirm', { name: app.name }))) return;
           await fetch(`/api/plugins/${app.id}`, { method: 'DELETE' });
           _removeFromStartMenu(app.id);
           _closeFlyout();
@@ -1642,6 +1652,8 @@ var mvmOS = (() => {
     if (window.mvmOS.onLangChange) _api.onLangChange = window.mvmOS.onLangChange;
     if (window.mvmOS.i18nReady)    _api.i18nReady    = window.mvmOS.i18nReady;
     if (window.mvmOS.lang)         _api.lang         = window.mvmOS.lang;
+    if (window.mvmOS.appName)      _api.appName      = window.mvmOS.appName;
+    if (window.mvmOS.categoryName) _api.categoryName = window.mvmOS.categoryName;
   }
 
   return _api;

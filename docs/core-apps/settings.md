@@ -21,6 +21,7 @@ Settings collects system-level configuration in one desktop window. Its home scr
 - Optional anonymous usage statistics, off until someone turns them on, asked once by the Setup Wizard and changeable at any time from the System section.
 - The subscription area, reserved for future Premium license management.
 - External APIs, where a server owner can choose which built-in or Store app APIs may be reached from outside mvmOS. This Premium capability keeps its controls visible in the desktop for an owner without Premium, but opening or changing it shows the Premium prompt instead.
+- Automations, where the server owner decides whether rules in [[Automations]] may work between apps. Rules between apps are a Premium capability; without Premium the switch is visible but opens the Premium prompt.
 
 When External APIs are available, the owner can create tokens for built-in APIs. A token is shown only once, can be restricted to selected functions, and can be deleted immediately if it is no longer needed. Store apps that the owner opens to external APIs can instead be used by Apps Hub profiles: each profile creates and manages its own restricted tokens from the API tab on the public Apps Hub page. Tokens are sent in an `Authorization: Bearer` header and never in an address.
 

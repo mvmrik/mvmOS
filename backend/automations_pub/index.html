@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Automations</title>
+<style>
+  *,*::before,*::after{box-sizing:border-box}
+  :root{--bg:#1e1e2e;--surface1:#181825;--surface2:#313244;--border:#45475a;--fg:#cdd6f4;--fg2:#a6adc8;--accent:#89b4fa;--red:#f38ba8}
+  body{margin:0;font-family:system-ui,sans-serif;background:var(--pub-bg,var(--bg));color:var(--fg)}
+  #wrap{max-width:760px;margin:0 auto;padding:16px;display:flex;flex-direction:column;gap:12px}
+  h1{margin:0;font-size:1.2rem}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <h1 id="h"></h1>
+  <div id="app"></div>
+</div>
+<script src="/i18n/i18n.js"></script>
+<script>
+(function () {
+  var token = localStorage.getItem('apphub_token');
+  var login = function () { location.replace('/pub/apphub/?return=' + encodeURIComponent(location.href)); };
+  if (!token) { login(); return; }
+  document.getElementById('h').textContent = '⚡ ' + t('app_automations');
+  document.title = t('app_automations');
+  var s = document.createElement('script');
+  s.src = '/pub/automations/ui.js';  // versioned by the server
+  s.onload = function () {
+    AutomationsUI.mount(document.getElementById('app'), {
+      base: '/pub/automations',
+      headers: function () { return { 'X-Pub-Token': token }; },
+      onAuth: login,
+    });
+  };
+  document.body.appendChild(s);
+})();
+</script>
+</body>
+</html>

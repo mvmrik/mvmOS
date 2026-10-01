@@ -183,6 +183,12 @@ def scheduler_tick():
         except Exception as e:
             results.append({"app": sys_sched["id"], "ok": False, "error": str(e)})
 
+    try:
+        from . import automations
+        automations.tick(now)
+    except Exception as e:
+        results.append({"app": "automations", "ok": False, "error": str(e)})
+
     return JSONResponse({"tick": now.isoformat(), "results": results})
 
 
