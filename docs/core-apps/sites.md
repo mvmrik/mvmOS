@@ -17,6 +17,10 @@ Sites combines an Nginx site manager with a lightweight workspace for small web 
 - Use a live-reloading development loop while editing a project.
 - Start and stop the mvmOS public-facing web-server process.
 
+## Administrator access
+
+Registering or removing a project’s published domain or subpath requires administrator rights. These routes also check the desktop session directly, so a filename-like path cannot bypass authentication.
+
 ## Before publishing
 
 Confirm domain DNS, HTTPS, access control, backups, and the security of any application you expose publicly. A site can make services on your server reachable from the internet.

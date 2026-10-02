@@ -8,6 +8,33 @@ APPS_DIR     = os.path.join(os.path.dirname(__file__), "..", "apps")
 WIDGETS_DIR  = os.path.join(os.path.dirname(__file__), "..", "widgets")
 THEMES_DIR   = os.path.join(os.path.dirname(__file__), "..", "themes")
 
+_SAFE_ID_CHARS = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-")
+
+
+def safe_id(value: str) -> str:
+    """An app, widget or theme id that becomes one folder name under apps/,
+    widgets/ or themes/. Anything else, such as "..", would point outside that
+    folder, for example at mvmOS's own data.db with every session in it."""
+    if (not value or value[0] in "._-" or ".." in value
+            or not set(value) <= _SAFE_ID_CHARS):
+        from fastapi import HTTPException
+        raise HTTPException(status_code=400, detail="Invalid id")
+    return value
+
+
+def _deny_attach(action, arg1, arg2, db_name, trigger):
+    return sqlite3.SQLITE_DENY if action in (sqlite3.SQLITE_ATTACH, sqlite3.SQLITE_DETACH) else sqlite3.SQLITE_OK
+
+
+def connect_own_db(db_path: str) -> sqlite3.Connection:
+    """Connection for SQL that an app or widget sends from the browser. The
+    SQL is free, but only inside that one file: ATTACH (and VACUUM INTO, which
+    attaches) could otherwise open or create any file on the server as root."""
+    conn = sqlite3.connect(db_path)
+    conn.set_authorizer(_deny_attach)
+    return conn
+
+
 OFFICIAL_STORE_URL         = "https://raw.githubusercontent.com/mvmrik/mvmos-store/main/manifest.json"
 OFFICIAL_WIDGETS_STORE_URL = "https://raw.githubusercontent.com/mvmrik/mvmos-store/main/widgets/manifest.json"
 OFFICIAL_THEMES_STORE_URL  = "https://raw.githubusercontent.com/mvmrik/mvmos-store/main/themes/manifest.json"

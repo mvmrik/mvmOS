@@ -4,7 +4,7 @@ import subprocess
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
-from .auth import get_current_session
+from .auth import get_current_session, require_admin
 
 router = APIRouter(prefix="/api/users", tags=["users"])
 
@@ -54,7 +54,7 @@ class CreateUserRequest(BaseModel):
 
 
 @router.post("")
-def create_user(body: CreateUserRequest, _session=Depends(get_current_session)):
+def create_user(body: CreateUserRequest, _session=Depends(require_admin)):
     if not body.username.isidentifier():
         raise HTTPException(status_code=400, detail="Invalid username")
     try:
@@ -85,7 +85,7 @@ class UpdateUserRequest(BaseModel):
 
 
 @router.patch("/{username}")
-def update_user(username: str, body: UpdateUserRequest, _session=Depends(get_current_session)):
+def update_user(username: str, body: UpdateUserRequest, _session=Depends(require_admin)):
     try:
         pwd.getpwnam(username)
     except KeyError:
@@ -110,7 +110,7 @@ def update_user(username: str, body: UpdateUserRequest, _session=Depends(get_cur
 
 
 @router.delete("/{username}")
-def delete_user(username: str, _session=Depends(get_current_session)):
+def delete_user(username: str, _session=Depends(require_admin)):
     if username == "root":
         raise HTTPException(status_code=403, detail="Cannot delete root")
     try:

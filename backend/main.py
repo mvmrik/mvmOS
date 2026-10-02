@@ -511,10 +511,18 @@ async def layout_inject_middleware(request: Request, call_next):
     # served the page, so a changed script never arrives stale from a cache.
     path = request.url.path
     html = versioned_html(html, path if path.endswith("/") else path.rsplit("/", 1)[0] + "/")
+    # Asked before the asset list goes in: that list names layout.js too.
+    has_layout = "/pub/apphub/layout.js" in html
+    # The page's own scripts get window.asset too, before anything of theirs runs,
+    # so a file they load themselves is versioned like the ones named in the HTML.
+    boot = f'<script>window.__assets={assets_manifest()}</script><script src="{asset("/asset.js")}"></script>'
+    html, n = re.subn(r"<head\b[^>]*>", lambda h: h.group(0) + boot, html, count=1)
+    if not n:
+        html = boot + html
     keyboard_snippet = f'<script src="{asset("/keyboard-preference.js")}" data-mvm-keyboard-scope="public"></script>'
     html = html.replace("</head>", keyboard_snippet + "</head>", 1) if "</head>" in html else keyboard_snippet + html
 
-    if is_mvmshare_recipient or not wants_public_chrome or "/pub/apphub/layout.js" in html:
+    if is_mvmshare_recipient or not wants_public_chrome or has_layout:
         snippet = ""
     else:
         snippet = f'<script src="{asset("/pub/apphub/layout.js")}" data-mvm-app="{app_id}"></script>'

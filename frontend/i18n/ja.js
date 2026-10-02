@@ -835,6 +835,7 @@ window._i18n = {
   'ah_credits_removed_default':   '管理者による調整（減算）',
   'ah_pub_loading':                '読み込み中…',
   'ah_pub_home':                    'ホーム',
+  'ah_pub_switch_app':              'アプリを切り替え',
   'ah_pub_usage_last':              '最終使用日',
   'ah_pub_usage_count':             '使用回数',
   'ah_pub_usage_summary':           '{count}回開いています（最終：{last}）',

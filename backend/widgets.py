@@ -8,8 +8,8 @@ import zipfile
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
-from .auth import get_current_session
-from .db import get_conn, WIDGETS_DIR
+from .auth import get_current_session, require_admin
+from .db import get_conn, WIDGETS_DIR, safe_id, connect_own_db
 from .plugins import _apply_schema
 
 router = APIRouter(prefix="/api/widgets", tags=["widgets"])
@@ -49,7 +49,7 @@ def _annotate(widgets: list, installed: dict) -> list:
 
 
 def _widget_dir(widget_id: str) -> str:
-    return os.path.join(WIDGETS_DIR, widget_id)
+    return os.path.join(WIDGETS_DIR, safe_id(widget_id))
 
 
 # ── Widget stores ─────────────────────────────────────────────────────────────
@@ -67,7 +67,7 @@ class StoreRequest(BaseModel):
 
 
 @router.post("/stores")
-async def add_store(body: StoreRequest, session=Depends(get_current_session)):
+async def add_store(body: StoreRequest, session=Depends(require_admin)):
     try:
         async with httpx.AsyncClient(timeout=10) as client:
             r = await client.get(body.manifest_url)
@@ -89,7 +89,7 @@ async def add_store(body: StoreRequest, session=Depends(get_current_session)):
 
 
 @router.delete("/stores/{store_id}")
-async def remove_store(store_id: int, session=Depends(get_current_session)):
+async def remove_store(store_id: int, session=Depends(require_admin)):
     with get_conn() as conn:
         row = conn.execute("SELECT official FROM widget_stores WHERE id=?", (store_id,)).fetchone()
         if not row:
@@ -200,7 +200,7 @@ class InstallRequest(BaseModel):
 
 
 @router.post("/install")
-async def install_widget(body: InstallRequest, session=Depends(get_current_session)):
+async def install_widget(body: InstallRequest, session=Depends(require_admin)):
     wdir = _widget_dir(body.id)
     os.makedirs(wdir, exist_ok=True)
 
@@ -320,7 +320,7 @@ async def install_widget(body: InstallRequest, session=Depends(get_current_sessi
 # ── Uninstall ─────────────────────────────────────────────────────────────────
 
 @router.delete("/{widget_id}")
-def uninstall_widget(widget_id: str, session=Depends(get_current_session)):
+def uninstall_widget(widget_id: str, session=Depends(require_admin)):
     wdir = _widget_dir(widget_id)
     if os.path.isdir(wdir):
         shutil.rmtree(wdir)
@@ -378,13 +378,13 @@ class DbRequest(BaseModel):
 
 @router.post("/{widget_id}/db")
 async def widget_db(widget_id: str, body: DbRequest, session=Depends(get_current_session)):
-    widget_dir = os.path.join(WIDGETS_DIR, widget_id)
+    widget_dir = _widget_dir(widget_id)
     if not os.path.isdir(widget_dir):
         return JSONResponse({"error": "Widget not installed"}, status_code=404)
     db_path = os.path.join(widget_dir, "data.db")
     try:
         import sqlite3 as _sqlite3
-        conn = _sqlite3.connect(db_path)
+        conn = connect_own_db(db_path)
         conn.row_factory = _sqlite3.Row
         cur = conn.execute(body.sql, body.params)
         conn.commit()

@@ -4,7 +4,7 @@ import subprocess
 from fastapi import APIRouter, Depends, BackgroundTasks, HTTPException
 from pydantic import BaseModel
 from fastapi.responses import JSONResponse, StreamingResponse
-from .auth import get_current_session, require_root_session
+from .auth import get_current_session, require_admin
 
 router = APIRouter(prefix="/api/system", tags=["system"])
 
@@ -136,7 +136,7 @@ async def check_update(session=Depends(get_current_session)):
 
 
 @router.post("/update")
-async def do_update(session=Depends(get_current_session)):
+async def do_update(session=Depends(require_admin)):
     async def generate():
         import tempfile, tarfile, shutil, httpx
         repo_dir = os.path.abspath(REPO_DIR)
@@ -249,7 +249,7 @@ def _restart():
 
 
 @router.post("/power/restart")
-async def power_restart(bg: BackgroundTasks, session=Depends(require_root_session)):
+async def power_restart(bg: BackgroundTasks, session=Depends(require_admin)):
     bg.add_task(_restart)
     return JSONResponse({"ok": True})
 
@@ -257,7 +257,7 @@ async def power_restart(bg: BackgroundTasks, session=Depends(require_root_sessio
 
 
 @router.post("/power/stop")
-async def power_stop(bg: BackgroundTasks, session=Depends(require_root_session)):
+async def power_stop(bg: BackgroundTasks, session=Depends(require_admin)):
     bg.add_task(_restart)
     return JSONResponse({"ok": True})
 
@@ -488,7 +488,7 @@ class KillRequest(_BM2):
     sudo_password: str = ""
 
 @router.post("/processes/kill")
-def kill_process(body: KillRequest, session=Depends(get_current_session)):
+def kill_process(body: KillRequest, session=Depends(require_admin)):
     if body.signal not in ("TERM", "KILL", "HUP", "INT", "STOP", "CONT"):
         return JSONResponse({"error": "Invalid signal"}, status_code=400)
     if body.pid <= 1:
@@ -611,7 +611,7 @@ class ServiceRequest(_BM):
 
 
 @router.post("/services/action")
-def service_action(body: ServiceRequest, session=Depends(get_current_session)):
+def service_action(body: ServiceRequest, session=Depends(require_admin)):
     if body.action not in ("start", "stop", "restart", "enable", "disable"):
         return JSONResponse({"error": "Invalid action"}, status_code=400)
 
@@ -727,7 +727,7 @@ class PhpIniSaveRequest(BaseModel):
     sudo_password: str = ""
 
 @router.post("/php-ini")
-def save_php_ini(body: PhpIniSaveRequest, session=Depends(get_current_session)):
+def save_php_ini(body: PhpIniSaveRequest, session=Depends(require_admin)):
     path = _find_php_ini()
     if not path:
         raise HTTPException(status_code=404, detail="php.ini not found")
@@ -828,7 +828,7 @@ class MysqlCnfSaveRequest(BaseModel):
     sudo_password: str = ""
 
 @router.post("/mysql-cnf")
-def save_mysql_cnf(body: MysqlCnfSaveRequest, session=Depends(get_current_session)):
+def save_mysql_cnf(body: MysqlCnfSaveRequest, session=Depends(require_admin)):
     path = _find_mysql_cnf()
     if not path:
         raise HTTPException(status_code=404, detail="MySQL config not found")
@@ -908,7 +908,7 @@ class NginxConfSaveRequest(BaseModel):
     sudo_password: str = ""
 
 @router.post("/nginx-conf")
-def save_nginx_conf(body: NginxConfSaveRequest, session=Depends(get_current_session)):
+def save_nginx_conf(body: NginxConfSaveRequest, session=Depends(require_admin)):
     if not os.path.exists(NGINX_CONF_PATH):
         raise HTTPException(status_code=404, detail="nginx.conf not found")
     for key, value in body.values.items():
@@ -993,7 +993,7 @@ class SshdConfSaveRequest(BaseModel):
     values: dict
 
 @router.post("/sshd-conf")
-def save_sshd_conf(body: SshdConfSaveRequest, session=Depends(get_current_session)):
+def save_sshd_conf(body: SshdConfSaveRequest, session=Depends(require_admin)):
     if not os.path.exists(SSH_CONF_PATH):
         raise HTTPException(status_code=404, detail="sshd_config not found")
     for key, value in body.values.items():
@@ -1038,7 +1038,7 @@ def ufw_status(session=Depends(get_current_session)):
 
 
 @router.post("/ufw-toggle")
-def ufw_toggle(session=Depends(get_current_session)):
+def ufw_toggle(session=Depends(require_admin)):
     proc = subprocess.run(["sudo", "ufw", "status"], capture_output=True, text=True)
     enabled = "Status: active" in proc.stdout
     cmd = ["sudo", "ufw", "disable"] if enabled else ["sudo", "ufw", "--force", "enable"]
@@ -1052,7 +1052,7 @@ class UfwRuleRequest(BaseModel):
     rule: str  # e.g. "22/tcp", "80", "from 192.168.1.0/24 to any port 22"
 
 @router.post("/ufw-allow")
-def ufw_allow(body: UfwRuleRequest, session=Depends(get_current_session)):
+def ufw_allow(body: UfwRuleRequest, session=Depends(require_admin)):
     r = subprocess.run(["sudo", "ufw", "allow"] + body.rule.split(), capture_output=True, text=True)
     if r.returncode != 0:
         return JSONResponse({"error": r.stderr.strip() or r.stdout.strip()}, status_code=500)
@@ -1064,7 +1064,7 @@ class UfwDeleteRequest(BaseModel):
     rule: str = ""  # used when UFW is inactive
 
 @router.post("/ufw-delete")
-def ufw_delete(body: UfwDeleteRequest, session=Depends(get_current_session)):
+def ufw_delete(body: UfwDeleteRequest, session=Depends(require_admin)):
     proc = subprocess.run(["sudo", "ufw", "status"], capture_output=True, text=True)
     enabled = "Status: active" in proc.stdout
     if enabled and body.num:

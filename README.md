@@ -27,11 +27,20 @@ installing software without touching the command line.
 
 **Run the machine.** Manage Linux users, cron jobs, systemd services, nginx sites and
 domains, SSH keys, and scheduled backups you can download or restore. Watch CPU, memory and
-disk while you do it.
+disk while you do it. System changes require administrator rights checked by the server;
+sudo users confirm their own password, with a key valid for fifteen minutes without use.
 
 **Make it yours.** Wallpapers, themes, a screensaver, desktop and taskbar widgets, a
-configurable start menu, and an interface in English or Bulgarian. It installs as a PWA, so
-it can sit on your phone's home screen and behave like an app.
+configurable start menu, default apps for every file type, and an interface in nine
+languages: English, Bulgarian, German, Spanish, French, Japanese, Brazilian Portuguese,
+Russian and Simplified Chinese. It installs as a PWA, so it can sit on your phone's home
+screen and behave like an app.
+
+**Let it work on its own.** Notifications and a shared Clipboard come built in, and
+Automations lets your apps act by themselves: when something happens in an app, or at a
+chosen time, a rule can check what the app reports and call its functions or notify you.
+External APIs let your own scripts call the functions you choose, with tokens you can
+restrict and revoke.
 
 **Add what you need.** The core stays deliberately small. Everything else — a budget tracker,
 a task list, a website builder, a chat, an RSS reader, games, an AI assistant, a database
@@ -40,7 +49,9 @@ uninstalls just as cleanly.
 
 **Share it outside the server.** Many apps can publish a public page: a booking form, a
 shared shopping list, a quote for a client. Visitors get their own lightweight account
-through Apps Hub and never touch your Linux users or your desktop.
+through Apps Hub and never touch your Linux users or your desktop. The mvmOS Apps browser
+extension for Chrome and Firefox brings those public apps into the browser toolbar. The
+public header lets visitors switch directly between their apps.
 
 ---
 
@@ -59,7 +70,7 @@ window instead — this is that.
 
 ## Apps, widgets and themes
 
-The official store currently offers **27 apps, 5 widgets and 4 themes**, sorted into twelve
+The official store currently offers **48 apps, 5 widgets and 4 themes**, sorted into thirteen
 categories. It is a plain Git repository, so you can point mvmOS at your own store instead,
 or in addition — private apps for your own machines work exactly like public ones.
 
@@ -68,8 +79,10 @@ can read and write its own folder and nothing else, and anything beyond that goe
 small, explicit platform API. Full documentation lives in the
 [mvmos-store developer guide](https://github.com/mvmrik/mvmos-store).
 
-A few apps also offer optional paid extras. That is entirely opt-in — mvmOS itself is free,
-every app works without it, and nothing about the core depends on it.
+mvmOS itself is free. An optional Premium licence for the server adds extra features to
+some apps and a few to the core, such as Apps Hub credits, External APIs and Automations
+that work across apps. It is entirely opt-in: every app and every core feature without
+the Premium label works fully without it.
 
 ---
 
@@ -130,7 +143,7 @@ changed>`, so a changed file gets a new address and no cache (browser, Electron,
 can serve an old copy.
 
 - In the browser: `window.asset('/pub/apphub/layout.js')`. It is defined by `frontend/asset.js`
-  and fed with `window.__assets`, which the server writes into the main page.
+  and fed with `window.__assets`, which the server writes into desktop and public app pages.
 - In Python: `from backend.assets import asset`. It is the same function and works for core
   files, `/apps/<id>/...`, `/pub/<id>/...`, `/widgets` and `/themes`.
 - In the main page `index.html` every local `src` and `href` is passed through it

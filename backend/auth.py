@@ -532,6 +532,30 @@ def acting_user(session: dict, request: Request) -> str:
     return "root"
 
 
+def ensure_admin(session: dict, request: Request) -> dict:
+    """System-wide actions (Linux users, packages, services, installing apps,
+    core update...) run as root for everyone, so the server itself must check
+    who asks: a password dialog in the browser alone can be skipped by calling
+    the endpoint directly. Root's own session passes; a sudo user passes with
+    the administrator key from /api/auth/admin, i.e. after typing their own
+    Linux password, the same way sudo works. Anyone else gets admin_required,
+    on which the desktop asks for the password and repeats the request."""
+    if session.get("effective_user") == "root":
+        return session
+    key = request.headers.get("X-Admin-Key") or request.query_params.get("admin_key")
+    entry = _admin_keys.get(key or "")
+    now = time.time()
+    if entry and entry["session"] == session["token"] and entry["expires"] >= now:
+        entry["expires"] = now + _ADMIN_IDLE
+        return session
+    raise HTTPException(status_code=403, detail="admin_required")
+
+
+def require_admin(request: Request, session=Depends(get_current_session)) -> dict:
+    """Dependency form of ensure_admin."""
+    return ensure_admin(session, request)
+
+
 class AdminRequest(BaseModel):
     password: str = ""
 
@@ -623,6 +647,13 @@ async def logout(request: Request):
 
 # ── TOTP management API ───────────────────────────────────────────────────────
 
+def _ensure_own_or_admin(username: str, session: dict, request: Request):
+    """Everyone manages their own two-factor login; changing another user's
+    needs administrator rights, or anyone could remove root's second factor."""
+    if username != session["effective_user"]:
+        ensure_admin(session, request)
+
+
 @router.get("/api/auth/totp/{username}")
 async def totp_status(username: str, _session=Depends(get_current_session)):
     with get_conn() as conn:
@@ -631,7 +662,8 @@ async def totp_status(username: str, _session=Depends(get_current_session)):
 
 
 @router.post("/api/auth/totp/{username}/setup")
-async def totp_setup(username: str, _session=Depends(get_current_session)):
+async def totp_setup(username: str, request: Request, session=Depends(get_current_session)):
+    _ensure_own_or_admin(username, session, request)
     secret = _generate_totp_secret()
     label = f"mvmOS:{username}"
     issuer = "mvmOS"
@@ -645,7 +677,8 @@ class TotpConfirmRequest(BaseModel):
 
 
 @router.post("/api/auth/totp/{username}/confirm")
-async def totp_confirm(username: str, body: TotpConfirmRequest, _session=Depends(get_current_session)):
+async def totp_confirm(username: str, body: TotpConfirmRequest, request: Request, session=Depends(get_current_session)):
+    _ensure_own_or_admin(username, session, request)
     if not _verify_totp(body.secret, body.code):
         raise HTTPException(status_code=400, detail="Invalid code. Check your authenticator and try again.")
     with get_conn() as conn:
@@ -657,7 +690,8 @@ async def totp_confirm(username: str, body: TotpConfirmRequest, _session=Depends
 
 
 @router.delete("/api/auth/totp/{username}")
-async def totp_disable(username: str, _session=Depends(get_current_session)):
+async def totp_disable(username: str, request: Request, session=Depends(get_current_session)):
+    _ensure_own_or_admin(username, session, request)
     with get_conn() as conn:
         conn.execute("DELETE FROM user_totp WHERE username = ?", (username,))
     return JSONResponse({"ok": True})

@@ -21,14 +21,30 @@ TMUX_CONF = os.path.join(os.path.dirname(__file__), "terminal.tmux.conf")
 _SID_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 
 
+def _utf8_lang() -> str:
+    """This server's UTF-8 locale, else C.UTF-8. A login shell for another user
+    (runuser -l) and a server started without one have no locale at all, and
+    then tmux replaces every non-ASCII letter, Cyrillic included, with "_"."""
+    for key in ("LC_ALL", "LC_CTYPE", "LANG"):
+        value = os.environ.get(key, "")
+        if value:
+            return value if re.search(r"utf-?8", value, re.I) else "C.UTF-8"
+    return "C.UTF-8"
+
+
+LANG = _utf8_lang()
+
+
 def _tmux_argv(eu: str, *args: str) -> list[str]:
-    return [TMUX, "-L", TMUX_SOCKET, "-f", TMUX_CONF, *args]
+    return [TMUX, "-u", "-L", TMUX_SOCKET, "-f", TMUX_CONF, *args]
 
 
 def _as_user(eu: str, argv: list[str], needs_sudo: bool) -> list[str]:
     if eu == "root" and not needs_sudo:
         return argv
-    cmd = ["runuser", "-l", eu, "-c", shlex.join(argv)]
+    # The login shell keeps the user's own locale when their profile sets one.
+    script = f'[ -n "$LANG" ] || export LANG={shlex.quote(LANG)}; exec {shlex.join(argv)}'
+    cmd = ["runuser", "-l", eu, "-c", script]
     return ["sudo", *cmd] if needs_sudo else cmd
 
 
@@ -67,7 +83,7 @@ async def terminal_ws(websocket: WebSocket, session: str | None = Cookie(default
     tmux_session = f"{eu}-{sid}" if TMUX and _SID_RE.match(sid) else None
 
     if tmux_session:
-        cmd = _as_user(eu, _tmux_argv(eu, "new-session", "-A", "-s", tmux_session, "-c", cwd), needs_sudo)
+        cmd = _as_user(eu, _tmux_argv(eu, "new-session", "-A", "-s", tmux_session, "-c", cwd, "-e", f"LANG={LANG}"), needs_sudo)
     elif needs_sudo or (eu and eu != "root"):
         # A login shell (runuser -l) always starts in the user's home, so the
         # folder asked for has to be entered explicitly before the shell starts.
@@ -79,7 +95,7 @@ async def terminal_ws(websocket: WebSocket, session: str | None = Cookie(default
         cmd,
         cwd=cwd,
         dimensions=(24, 80),
-        env={**os.environ, "TERM": "xterm-256color", "HOME": home, "USER": eu, "LOGNAME": eu},
+        env={"LANG": LANG, **os.environ, "TERM": "xterm-256color", "HOME": home, "USER": eu, "LOGNAME": eu},
     )
 
     loop = asyncio.get_event_loop()

@@ -5,6 +5,7 @@ import json
 import os
 import shutil
 import socket
+import sqlite3
 import sys
 import tempfile
 import time
@@ -13,8 +14,8 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
-from .auth import get_current_session
-from .db import get_conn, APPS_DIR, SYSTEM_APPS
+from .auth import get_current_session, require_admin
+from .db import get_conn, APPS_DIR, SYSTEM_APPS, safe_id, connect_own_db
 from . import app_backends
 from . import premium
 
@@ -65,7 +66,7 @@ def _installed_map() -> dict:
 
 
 def _app_dir(plugin_id: str) -> str:
-    return os.path.join(APPS_DIR, plugin_id)
+    return os.path.join(APPS_DIR, safe_id(plugin_id))
 
 
 def _apply_schema(db_path: str, schema: dict):
@@ -271,7 +272,7 @@ class StoreRequest(BaseModel):
 
 
 @router.post("/stores")
-async def add_store(body: StoreRequest, session=Depends(get_current_session)):
+async def add_store(body: StoreRequest, session=Depends(require_admin)):
     try:
         async with httpx.AsyncClient(timeout=10) as client:
             r = await client.get(body.manifest_url)
@@ -314,7 +315,7 @@ async def add_store(body: StoreRequest, session=Depends(get_current_session)):
 
 
 @router.delete("/stores/{store_id}")
-async def remove_store(store_id: int, session=Depends(get_current_session)):
+async def remove_store(store_id: int, session=Depends(require_admin)):
     with get_conn() as conn:
         row = conn.execute("SELECT official FROM stores WHERE id=?", (store_id,)).fetchone()
         if not row:
@@ -579,7 +580,7 @@ class InstallRequest(BaseModel):
 
 
 @router.post("/install")
-async def install_plugin(body: InstallRequest, session=Depends(get_current_session)):
+async def install_plugin(body: InstallRequest, session=Depends(require_admin)):
     app_dir = _app_dir(body.id)
     os.makedirs(app_dir, exist_ok=True)
 
@@ -789,7 +790,7 @@ async def delete_plugin_review(plugin_id: str, session=Depends(get_current_sessi
     return JSONResponse(response.json(), status_code=response.status_code)
 
 @router.delete("/{plugin_id}")
-def uninstall_plugin(plugin_id: str, session=Depends(get_current_session)):
+def uninstall_plugin(plugin_id: str, session=Depends(require_admin)):
     if any(a["id"] == plugin_id for a in SYSTEM_APPS):
         return JSONResponse({"error": "System apps cannot be uninstalled"}, status_code=400)
     app_dir = _app_dir(plugin_id)
@@ -811,6 +812,57 @@ class DbRequest(BaseModel):
     sql: str
     params: list = []
 
+_browser_db_cache: dict = {}
+
+def _browser_db_settings_only(app_dir: str) -> bool:
+    """True when an app keeps its data behind its own api.py and its browser
+    code never uses this door. Every desktop script shares one session, so for
+    such an app the door must not hand its data (2FA secrets, finances...) to
+    another app's script: only the cfg settings table stays reachable."""
+    api = os.path.join(app_dir, "api.py")
+    if not os.path.isfile(api):
+        return False
+    public = os.path.join(app_dir, "public")
+    stamp = (os.path.getmtime(api), os.path.getmtime(public) if os.path.isdir(public) else 0)
+    hit = _browser_db_cache.get(app_dir)
+    if hit and hit[0] == stamp:
+        return hit[1]
+    uses_door = False
+    for folder, _, files in os.walk(public):
+        for name in files:
+            if name.endswith(".js"):
+                try:
+                    with open(os.path.join(folder, name), errors="ignore") as f:
+                        if "mvmOS.db(" in f.read():
+                            uses_door = True
+                            break
+                except OSError:
+                    pass
+        if uses_door:
+            break
+    _browser_db_cache[app_dir] = (stamp, not uses_door)
+    return not uses_door
+
+_CFG_TABLE_ACTIONS = {sqlite3.SQLITE_READ, sqlite3.SQLITE_INSERT, sqlite3.SQLITE_UPDATE,
+                      sqlite3.SQLITE_DELETE, sqlite3.SQLITE_CREATE_TABLE}
+_FREE_ACTIONS = {sqlite3.SQLITE_SELECT, sqlite3.SQLITE_FUNCTION, sqlite3.SQLITE_TRANSACTION,
+                 sqlite3.SQLITE_SAVEPOINT}
+
+def _settings_only(action, arg1, arg2, db_name, trigger):
+    if action in _FREE_ACTIONS:
+        return sqlite3.SQLITE_OK
+    if action in _CFG_TABLE_ACTIONS and arg1 == "cfg":
+        return sqlite3.SQLITE_OK
+    # CREATE TABLE IF NOT EXISTS cfg: its primary key index and the schema row
+    # it writes. Reading the schema itself (table names, SQL) stays denied.
+    if action == sqlite3.SQLITE_CREATE_INDEX and arg2 == "cfg":
+        return sqlite3.SQLITE_OK
+    if arg1 in ("sqlite_master", "sqlite_schema") and (
+            action in (sqlite3.SQLITE_INSERT, sqlite3.SQLITE_UPDATE)
+            or (action == sqlite3.SQLITE_READ and arg2 == "ROWID")):
+        return sqlite3.SQLITE_OK
+    return sqlite3.SQLITE_DENY
+
 @router.post("/{plugin_id}/db")
 async def app_db(plugin_id: str, body: DbRequest, session=Depends(get_current_session)):
     app_dir = _app_dir(plugin_id)
@@ -819,7 +871,9 @@ async def app_db(plugin_id: str, body: DbRequest, session=Depends(get_current_se
     db_path = os.path.join(app_dir, "data.db")
     try:
         import sqlite3 as _sqlite3
-        conn = _sqlite3.connect(db_path)
+        conn = connect_own_db(db_path)
+        if _browser_db_settings_only(app_dir):
+            conn.set_authorizer(_settings_only)
         conn.row_factory = _sqlite3.Row
         cur = conn.execute(body.sql, body.params)
         conn.commit()

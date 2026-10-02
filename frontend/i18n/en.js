@@ -835,6 +835,7 @@ window._i18n = {
   'ah_credits_removed_default':   'Admin adjustment (removed)',
   'ah_pub_loading':                'Loading…',
   'ah_pub_home':                    'Home',
+  'ah_pub_switch_app':              'Switch app',
   'ah_pub_usage_last':              'Last used',
   'ah_pub_usage_count':             'Times used',
   'ah_pub_usage_summary':           'Opened {count} times, last: {last}',

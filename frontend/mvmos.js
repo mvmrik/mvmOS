@@ -2,6 +2,37 @@
 var mvmOS = (() => {
   const _apps = {};
 
+  // System actions (Linux users, packages, services, installing apps, core
+  // update...) need root. For a sudo user the server answers 403
+  // admin_required; then the password is asked once and the same request is
+  // repeated with the administrator key, which stays valid for 15 minutes
+  // without use, like sudo. Root never gets this answer, so nothing changes
+  // for root, and no app has to know about it.
+  let _adminKey = null;
+  let _adminAsk = null;
+  const _fetch = window.fetch.bind(window);
+  window.fetch = async function (input, init) {
+    const saved = input instanceof Request ? input.clone() : null;
+    let res = await _fetch(input, init);
+    // Administrator credentials belong only to this installation.
+    const url = new URL(saved ? saved.url : input, location.href);
+    if (url.origin !== location.origin) return res;
+    for (let attempt = 0; attempt < 2 && res.status === 403; attempt++) {
+      const detail = await res.clone().json().then(j => j?.detail).catch(() => null);
+      if (detail !== 'admin_required') break;
+      if (attempt > 0 || !_adminKey) {
+        _adminKey = null;
+        _adminAsk ||= mvmOS.requireRoot().finally(() => { _adminAsk = null; });
+        if (!await _adminAsk || !_adminKey) break;
+      }
+      const base = saved ? saved.clone() : input;
+      const headers = new Headers(init?.headers || saved?.headers);
+      headers.set('X-Admin-Key', _adminKey);
+      res = await _fetch(base, { ...init, headers });
+    }
+    return res;
+  };
+
   // Tracks an app open server-side, then refreshes the Start Menu's
   // Recent/Most-used lists so they reflect it immediately (no page reload needed).
   function _trackOpen(id) {
@@ -1432,26 +1463,6 @@ var mvmOS = (() => {
     notify,
     toast: (title, body) => _showToast(title, body || ''),
     storage,
-    multiplayer: {
-      async createRoom(gameId, opts = {}) {
-        const res = await fetch('/api/multiplayer/room', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ game_id: gameId, ...opts }),
-        });
-        const data = await res.json();
-        const origin = location.origin;
-        return {
-          roomId: data.room_id,
-          link: `${origin}/api/multiplayer/play/${gameId}/${data.room_id}`,
-        };
-      },
-      connect(roomId, gameId) {
-        const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-        const ws = new WebSocket(`${proto}://${location.host}/api/multiplayer/room/${roomId}/ws`);
-        return ws;
-      },
-    },
     widgetSetting,
     db: (appId) => _makeDb(appId),
     widgetDb: (widgetId) => _makeWidgetDb(widgetId),
@@ -1498,12 +1509,14 @@ var mvmOS = (() => {
         const confirm = async () => {
           if (!pw.value) { err.textContent = _t('require_root_required') || 'Password required'; return; }
           okBtn.disabled = true; okBtn.textContent = '…';
-          const res = await fetch('/api/auth/verify', {
+          // The password buys an administrator key, which the server itself
+          // checks on every system action (see ensure_admin in backend/auth.py).
+          const res = await fetch('/api/auth/admin', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ password: pw.value }),
           });
-          if (res.ok) { ov.remove(); resolve(true); }
+          if (res.ok) { _adminKey = (await res.json().catch(() => ({}))).key || null; ov.remove(); resolve(true); }
           else {
             const msg = await res.json().catch(() => ({}));
             err.textContent = res.status === 429 ? (msg.detail || 'Too many attempts.') : (_t('require_root_wrong') || 'Wrong password');

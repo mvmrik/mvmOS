@@ -835,6 +835,7 @@ window._i18n = {
   'ah_credits_removed_default':   'Административна корекция (премахване)',
   'ah_pub_loading':                'Зареждане…',
   'ah_pub_home':                    'Начало',
+  'ah_pub_switch_app':              'Смяна на приложение',
   'ah_pub_usage_last':              'Използвано преди',
   'ah_pub_usage_count':             'Брой използвания',
   'ah_pub_usage_summary':           'Отваряно {count} пъти, последно: {last}',

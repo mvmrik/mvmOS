@@ -1,7 +1,7 @@
 /* Shared header/footer chrome for every /pub/<app>/ page.
  * Auto-injected server-side (see backend/main.py) — no app ever includes
- * this manually. Breadcrumb left (Home -> current app), identity + logout
- * right, thin footer. Reads the same apphub_token every app already uses. */
+ * this manually. App switcher left (Home + the account's apps), identity +
+ * logout right, thin footer. Reads the same apphub_token every app already uses. */
 (function () {
   var THIS_SCRIPT = document.currentScript;
   var APP_ID = (THIS_SCRIPT && THIS_SCRIPT.getAttribute('data-mvm-app')) || '';
@@ -292,6 +292,7 @@
       e.stopPropagation();
       var menu = document.querySelector('.mvm-menu');
       if (menu) menu.hidden = true;
+      closeSwitcher();
       _bellOpen = !_bellOpen;
       panel.hidden = !_bellOpen;
       btn.setAttribute('aria-expanded', String(_bellOpen));
@@ -356,11 +357,32 @@
     s.textContent =
       '.mvm-hdr{display:flex;align-items:center;gap:12px;padding:9px 16px;border-bottom:1px solid var(--border,#45475a);' +
       'background:var(--surface1,#181825);font-family:system-ui,sans-serif;flex-shrink:0;order:-1}' +
-      '.mvm-crumbs{display:flex;align-items:center;gap:6px;font-weight:700;font-size:14px;color:var(--fg,#cdd6f4);min-width:0}' +
-      '.mvm-crumbs a{color:inherit;text-decoration:none}' +
-      '.mvm-crumbs a:hover{color:var(--accent,#89b4fa)}' +
-      '.mvm-crumbs .mvm-sep{color:var(--fg2,#a6adc8);font-weight:400}' +
-      '.mvm-crumbs .mvm-cur{color:var(--fg2,#a6adc8);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}' +
+      '.mvm-crumbs{display:flex;align-items:center;min-width:0;font-family:system-ui,sans-serif}' +
+      '.mvm-sw-btn{display:flex;align-items:center;gap:7px;min-width:0;max-width:100%;height:34px;padding:0 10px 0 8px;' +
+      'background:var(--surface2,#313244);border:1px solid var(--border,#45475a);border-radius:9px;cursor:pointer;' +
+      'font-family:inherit;font-size:14px;font-weight:700;color:var(--fg,#cdd6f4);box-sizing:border-box}' +
+      '.mvm-sw-btn:hover,.mvm-sw-btn[aria-expanded="true"]{border-color:var(--accent,#89b4fa)}' +
+      '.mvm-sw-ico{font-size:17px;line-height:1;flex-shrink:0}' +
+      '.mvm-sw-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}' +
+      '.mvm-sw-caret{font-size:10px;color:var(--fg2,#a6adc8);flex-shrink:0;transition:transform .15s}' +
+      '.mvm-sw-btn[aria-expanded="true"] .mvm-sw-caret{transform:rotate(180deg)}' +
+      /* Fixed and placed from the button's own position in JS: on a phone the
+       * public-app root clips absolute descendants, the same reason the bell
+       * opens as a viewport panel. */
+      '.mvm-sw-list{position:fixed;z-index:1002;width:min(320px,calc(100vw - 24px));box-sizing:border-box;' +
+      'background:var(--surface1,#181825);border:1px solid var(--border,#45475a);border-radius:12px;' +
+      'box-shadow:0 8px 24px rgba(0,0,0,.35);padding:6px;overflow-y:auto;display:flex;flex-direction:column;gap:2px;font-family:system-ui,sans-serif}' +
+      '.mvm-sw-list[hidden]{display:none}' +
+      '.mvm-sw-item{display:flex;align-items:center;gap:12px;min-height:50px;padding:6px 10px;border-radius:9px;' +
+      'text-decoration:none;color:var(--fg,#cdd6f4);font-size:15px;font-weight:600;box-sizing:border-box}' +
+      '.mvm-sw-item:hover{background:var(--surface2,#313244)}' +
+      '.mvm-sw-item .mvm-sw-ico{width:36px;height:36px;display:flex;align-items:center;justify-content:center;' +
+      'font-size:24px;border-radius:9px;background:var(--surface2,#313244)}' +
+      '.mvm-sw-item .mvm-sw-name{flex:1}' +
+      '.mvm-sw-item.mvm-sw-sel{background:var(--surface2,#313244);color:var(--accent,#89b4fa)}' +
+      '.mvm-sw-item.mvm-sw-sel .mvm-sw-ico{background:var(--surface1,#181825)}' +
+      '.mvm-sw-check{flex-shrink:0;font-weight:700}' +
+      '.mvm-sw-home{border-bottom:1px solid var(--border,#45475a);border-radius:9px 9px 0 0;margin-bottom:4px;padding-bottom:9px}' +
       '.mvm-user{position:relative;display:flex;align-items:center;font-family:system-ui,sans-serif;flex-shrink:0}' +
       '.mvm-avatar-btn{display:flex;align-items:center;gap:6px;background:none;border:none;padding:3px;border-radius:999px;cursor:pointer}' +
       '.mvm-avatar-btn:hover{background:var(--surface2,#313244)}' +
@@ -460,20 +482,164 @@
   var publicNames = {};
   var originalTitle = document.title;
 
+  // ── App switcher ──────────────────────────────────────────────────
+  // The header's left side used to be a "Home / App" breadcrumb, so moving
+  // from one app to another meant going home, waiting for the grid and then
+  // picking. It is now one compact button that opens the same apps the home
+  // screen shows — its shelf, its category and its sort order — capped at
+  // SWITCHER_LIMIT. Anything further down is a trip home away, as before.
+  var SWITCHER_LIMIT = 10;
+  var _swApps = null;    // /apps as last fetched, with this account's usage
+  var _swPrefs = {};     // the home screen's sort + category
+
+  function homeIsCurrent() { return !APP_ID || APP_ID === 'apphub'; }
+  function homeEntry() {
+    return { id: 'apphub', icon: '🧩', name: publicNames.apphub || tt('ah_pub_home', 'Home'), public_url: '/pub/apphub/' };
+  }
+  function appLabel(a) {
+    return publicNames[a.id] || (window.mvmOS && window.mvmOS.appName ? window.mvmOS.appName(a) : a.name) || a.id;
+  }
+
+  async function fetchApps() {
+    try {
+      var r = await fetch('/api/pub/apphub/apps', { headers: pubHeaders() });
+      return r.ok ? await r.json() : [];
+    } catch (e) { return []; }
+  }
+
+  async function fetchPrefs() {
+    if (!localStorage.getItem(TOKEN_KEY)) return {};
+    try {
+      var r = await fetch('/api/pub/apphub/prefs', { headers: pubHeaders() });
+      return r.ok ? await r.json() : {};
+    } catch (e) { return {}; }
+  }
+
+  // Mirrors renderApps()/_sortApps() in index.html, so the list matches what
+  // the home screen shows. A visitor has no shelf and no preferences, and the
+  // home screen gives them every app alphabetically — so does this.
+  function switcherApps() {
+    var all = _swApps || [];
+    var apps = localStorage.getItem(TOKEN_KEY) ? all.filter(function (a) { return a.installed; }) : all.slice();
+    var cat = _swPrefs.apps_category || 'all';
+    if (cat !== 'all' && apps.some(function (a) { return (a.category || 'Utilities') === cat; })) {
+      apps = apps.filter(function (a) { return (a.category || 'Utilities') === cat; });
+    }
+    var mode = _swPrefs.apps_sort || 'alpha';
+    apps.sort(function (a, b) {
+      if (mode === 'recent') return new Date(b.last_opened_at || 0) - new Date(a.last_opened_at || 0);
+      if (mode === 'frequent') return (b.open_count || 0) - (a.open_count || 0);
+      return appLabel(a).localeCompare(appLabel(b));
+    });
+    var list = apps.slice(0, SWITCHER_LIMIT);
+    // The app being looked at is always there to show as selected, even when
+    // it is off the shelf, in another category or below the limit.
+    if (!homeIsCurrent() && !list.some(function (a) { return a.id === APP_ID; })) {
+      var self = all.filter(function (a) { return a.id === APP_ID; })[0];
+      if (self) list.push(self);
+    }
+    return list;
+  }
+
+  function switcherRow(a, isHome) {
+    var sel = isHome ? homeIsCurrent() : a.id === APP_ID;
+    return '<a class="mvm-sw-item' + (sel ? ' mvm-sw-sel' : '') + (isHome ? ' mvm-sw-home' : '') + '" href="' + esc(a.public_url) + '" data-id="' + esc(a.id) + '"' + (sel ? ' aria-current="page"' : '') + '>'
+      + '<span class="mvm-sw-ico">' + esc(a.icon || '📦') + '</span>'
+      + '<span class="mvm-sw-name">' + esc(isHome ? a.name : appLabel(a)) + '</span>'
+      + (sel ? '<span class="mvm-sw-check">✓</span>' : '')
+      + '</a>';
+  }
+
+  function renderSwitcherList(list) {
+    list.innerHTML = switcherRow(homeEntry(), true) + switcherApps().map(function (a) { return switcherRow(a, false); }).join('');
+    list.querySelectorAll('.mvm-sw-item').forEach(function (el) {
+      el.addEventListener('click', function (e) {
+        var id = el.dataset.id;
+        var isCurrent = id === 'apphub' ? homeIsCurrent() : id === APP_ID;
+        if (id === 'apphub' && window.MvmApphub && window.MvmApphub.goToTab) {
+          e.preventDefault();
+          closeSwitcher();
+          window.MvmApphub.goToTab('apps');
+          return;
+        }
+        if (isCurrent) { e.preventDefault(); closeSwitcher(); return; }
+        // Counted like a tap on the home screen's card, so recent/frequent
+        // keep meaning the same thing whichever way an app was opened.
+        var token = localStorage.getItem(TOKEN_KEY);
+        if (id !== 'apphub' && token) {
+          fetch('/api/pub/apphub/apps/' + encodeURIComponent(id) + '/open', {
+            method: 'POST', headers: { 'X-Pub-Token': token }, keepalive: true
+          }).catch(function () {});
+        }
+      });
+    });
+  }
+
+  function switcherOpen() {
+    var list = document.querySelector('.mvm-sw-list');
+    return !!(list && !list.hidden);
+  }
+
+  function closeSwitcher() {
+    var list = document.querySelector('.mvm-sw-list');
+    if (list) list.hidden = true;
+    var btn = document.querySelector('.mvm-sw-btn');
+    if (btn) btn.setAttribute('aria-expanded', 'false');
+  }
+
+  function placeSwitcher(list, btn) {
+    var r = btn.getBoundingClientRect();
+    var width = Math.min(320, window.innerWidth - 24);
+    var top = r.bottom + 8;
+    list.style.top = top + 'px';
+    list.style.left = Math.max(12, Math.min(r.left, window.innerWidth - width - 12)) + 'px';
+    list.style.maxHeight = (window.innerHeight - top - 12) + 'px';
+  }
+
+  function openSwitcher(btn) {
+    var menu = document.querySelector('.mvm-menu');
+    if (menu) menu.hidden = true;
+    if (_bellOpen) { _bellOpen = false; renderBell(); }
+    var list = document.querySelector('.mvm-sw-list');
+    if (!list) {
+      list = document.createElement('nav');
+      list.className = 'mvm-sw-list';
+      list.setAttribute('aria-label', tt('ah_pub_switch_app', 'Switch app'));
+      document.body.appendChild(list);
+    }
+    renderSwitcherList(list);
+    placeSwitcher(list, btn);
+    list.hidden = false;
+    btn.setAttribute('aria-expanded', 'true');
+    // What was fetched with the header is shown at once; the sort or the shelf
+    // may have changed since (on Apps Hub's own page without any reload), so
+    // it is asked for again and the open list is redrawn when that arrives.
+    Promise.all([fetchApps(), fetchPrefs()]).then(function (res) {
+      _swApps = res[0];
+      _swPrefs = res[1] || {};
+      if (switcherOpen()) renderSwitcherList(list);
+    });
+  }
+
   function buildHeader(appMeta, user, credits) {
     var hdr = document.createElement('header');
     hdr.className = 'mvm-hdr';
 
     var crumbs = document.createElement('div');
     crumbs.className = 'mvm-crumbs';
-    var homeIsCurrent = !APP_ID || APP_ID === 'apphub';
-    var homeLabel = '🧩 ' + esc(publicNames.apphub || tt('ah_pub_home', 'Home'));
-    if (homeIsCurrent) {
-      crumbs.innerHTML = '<span class="mvm-cur">' + homeLabel + '</span>';
-    } else {
-      var label = appMeta ? (esc(appMeta.icon || '') + ' ' + esc(publicNames[APP_ID] || (window.mvmOS && window.mvmOS.appName ? window.mvmOS.appName(appMeta) : appMeta.name) || APP_ID)) : esc(publicNames[APP_ID] || APP_ID);
-      crumbs.innerHTML = '<a href="/pub/apphub/">' + homeLabel + '</a><span class="mvm-sep">/</span><span class="mvm-cur">' + label + '</span>';
-    }
+    var cur = homeIsCurrent() ? homeEntry() : {
+      icon: (appMeta && appMeta.icon) || '📦',
+      name: appMeta ? appLabel(appMeta) : (publicNames[APP_ID] || APP_ID)
+    };
+    var swLabel = esc(tt('ah_pub_switch_app', 'Switch app'));
+    crumbs.innerHTML = '<button class="mvm-sw-btn" type="button" aria-haspopup="true" aria-expanded="false" title="' + swLabel + '" aria-label="' + swLabel + '">'
+      + '<span class="mvm-sw-ico">' + esc(cur.icon) + '</span>'
+      + '<span class="mvm-sw-name">' + esc(cur.name) + '</span>'
+      + '<span class="mvm-sw-caret">▼</span></button>';
+    crumbs.querySelector('.mvm-sw-btn').onclick = function (e) {
+      e.stopPropagation();
+      if (switcherOpen()) closeSwitcher(); else openSwitcher(this);
+    };
     hdr.appendChild(crumbs);
 
     var spacer = document.createElement('div');
@@ -511,6 +677,7 @@
       var menu = box.querySelector('.mvm-menu');
       menuBtn.onclick = function (e) {
         e.stopPropagation();
+        closeSwitcher();
         if (_bellOpen) { _bellOpen = false; renderBell(); }
         var willOpen = menu.hidden;
         menu.hidden = !willOpen;
@@ -557,12 +724,16 @@
     }
     var bell = document.querySelector('.mvm-bell');
     if (_bellOpen && bell && !bell.contains(e.target)) { _bellOpen = false; renderBell(); }
+    var list = document.querySelector('.mvm-sw-list');
+    if (switcherOpen() && list && !list.contains(e.target)) closeSwitcher();
   });
+  window.addEventListener('resize', closeSwitcher);
   document.addEventListener('keydown', function (e) {
     if (e.key !== 'Escape') return;
     var menu = document.querySelector('.mvm-menu');
     if (menu) menu.hidden = true;
     if (_bellOpen) { _bellOpen = false; renderBell(); }
+    closeSwitcher();
   });
 
   function buildFooter() {
@@ -593,14 +764,15 @@
     } catch (e) { return null; }
   }
 
+  // One /apps request serves both the current app's name and icon and the
+  // switcher's list, which is why it carries the token: only then does it say
+  // which apps are on this account's shelf and when each was last opened.
   async function fetchAppMeta() {
-    if (!APP_ID || APP_ID === 'apphub') return null;
-    try {
-      var r = await fetch('/api/pub/apphub/apps');
-      if (!r.ok) return null;
-      var apps = await r.json();
-      for (var i = 0; i < apps.length; i++) if (apps[i].id === APP_ID) return apps[i];
-    } catch (e) {}
+    var res = await Promise.all([fetchApps(), fetchPrefs()]);
+    _swApps = res[0];
+    _swPrefs = res[1] || {};
+    if (homeIsCurrent()) return null;
+    for (var i = 0; i < _swApps.length; i++) if (_swApps[i].id === APP_ID) return _swApps[i];
     return null;
   }
 
@@ -612,6 +784,7 @@
     var r = _lastResults || [null, null, null];
     var hdr = buildHeader(r[0], r[1], r[2]);
     var existingHdr = document.querySelector('.mvm-hdr');
+    closeSwitcher();
     if (existingHdr) existingHdr.replaceWith(hdr);
     else document.body.prepend(hdr);
     return hdr;

@@ -195,6 +195,10 @@ const Settings = (() => {
     { id: 'mvmos',           icon: '💎', tabs: ['subscription', 'about'] },
   ];
   const categoryOf = tab => CATEGORIES.find(c => c.tabs.includes(tab)) || CATEGORIES[0];
+  // openSettings() also takes a category id and opens its first tab; a tab
+  // with the same id ('system') wins.
+  const resolveTab = tab => CATEGORIES.some(c => c.tabs.includes(tab))
+    ? tab : (CATEGORIES.find(c => c.id === tab)?.tabs[0] || tab);
 
   // Search reads the labels straight from the panels, so it follows every
   // new setting on its own. Panels drawn only when opened are searchable
@@ -216,7 +220,7 @@ const Settings = (() => {
 
   function render(body, s, activeTab, premium) {
     const startHome = !activeTab;
-    activeTab = activeTab || 'display';
+    activeTab = resolveTab(activeTab || 'display');
     const d = loadDisplay();
     const fm = loadFMPrefs();
     premium = premium || { status: 'free', expires_at: null, license_key_set: false, license_key_hint: '', site: '' };
@@ -756,6 +760,7 @@ const Settings = (() => {
       root.querySelector('.settings-nav').hidden = cat.tabs.length < 2;
     };
     const openTab = tab => {
+      tab = resolveTab(tab);
       if (!tabEl(tab)) return;
       search.value = '';
       showCategory(categoryOf(tab));
@@ -1602,12 +1607,30 @@ const Settings = (() => {
                   <div style="font-size:.75rem;color:var(--text-dim);margin-top:3px">${date} &middot; ${mb} MB</div>
                 </div>
                 <div style="display:flex;gap:6px;flex-shrink:0">
-                  <a class="s-btn-sm" href="/api/backup/download/${b.filename}" download>${t('backup_download')}</a>
+                  <a class="s-btn-sm bk-download" href="/api/backup/download/${encodeURIComponent(b.filename)}" download>${t('backup_download')}</a>
                   <button class="s-btn-sm s-btn-danger bk-del">${t('users_delete')}</button>
                 </div>
               </div>
             </div>`;
         }).join('');
+        listEl.querySelectorAll('.bk-download').forEach(link => {
+          link.addEventListener('click', async event => {
+            event.preventDefault();
+            try {
+              // fetch handles the administrator challenge before downloading.
+              const res = await fetch(link.href);
+              if (!res.ok) return;
+              const url = URL.createObjectURL(await res.blob());
+              const download = document.createElement('a');
+              download.href = url;
+              download.download = link.closest('[data-file]').dataset.file + '.zip';
+              download.click();
+              setTimeout(() => URL.revokeObjectURL(url), 60000);
+            } catch (_) {
+              mvmOS.toast(t('backup_load_failed'));
+            }
+          });
+        });
         listEl.querySelectorAll('.bk-del').forEach(btn => {
           btn.addEventListener('click', async () => {
             const filename = btn.closest('[data-file]').dataset.file;

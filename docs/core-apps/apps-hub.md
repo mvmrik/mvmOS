@@ -35,6 +35,12 @@ Removing is only hiding: nothing the app stored for that profile is deleted, and
 
 The chosen apps, the sort order and the selected category belong to the profile and are kept on the server, so the same account sees the same home screen on a phone and on a computer.
 
+## Switching public apps
+
+The app button in the shared public header opens Home and up to ten apps from your own home screen, following its selected category and alphabetical, recent or frequent order. The current app is also shown when it falls outside that list. Visitors without a profile see published apps alphabetically. Opening an app here updates its usage history, and the menu closes with Escape or a tap outside.
+
+Profile searches match names without case differences in any script, including Cyrillic.
+
 ## App-to-app communication
 
 Apps Hub is also the switchboard for server-side app-to-app calls. An app may expose a small `app_api.py` surface, but Apps Hub keeps that API disabled until the administrator enables it for the target app. Calling apps use the central Apps Hub API rather than importing another app directly, so the permission gate remains enforceable. For any app that exposes one, Apps Hub also lists the individual actions it makes available — name, parameters, and a short description read straight from the function's own docstring — so an administrator can see exactly what an integration would be able to call before enabling it.

@@ -835,6 +835,7 @@ window._i18n = {
   'ah_credits_removed_default':   'Admin-Anpassung (entfernt)',
   'ah_pub_loading':                'Wird geladen…',
   'ah_pub_home':                    'Start',
+  'ah_pub_switch_app':              'App wechseln',
   'ah_pub_usage_last':              'Zuletzt verwendet',
   'ah_pub_usage_count':             'Verwendungshäufigkeit',
   'ah_pub_usage_summary':           '{count}-mal geöffnet, zuletzt: {last}',

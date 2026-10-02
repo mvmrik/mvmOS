@@ -32,12 +32,12 @@ idempotency_key (unique per app_id) makes retries safe — replaying the same ke
 returns the same result instead of charging twice.
 
 App-to-app API — the only sanctioned way for one app's backend to reach into
-another's. An app opts in by adding backend/apps/<id>/api.py, a plain Python
-module exposing whatever functions it's willing to let other apps call (never
+another's. An app opts in by adding apps/<id>/app_api.py (backend/apps/<id>/api.py
+in the older layout), a plain Python module exposing whatever functions it's willing to let other apps call (never
 raw DB access). Apps Hub admin must explicitly enable the target app's API
 (off by default, same posture as the public-page toggle) before any call
 succeeds. Callers must always go through call_app_api() here — never import
-another app's api.py directly — so this stays the single enforceable trust
+another app's app_api.py directly — so this stays the single enforceable trust
 boundary even after apps are sandboxed into separate processes down the line.
 """
 
@@ -462,7 +462,7 @@ def _load_app_api(app_id: str):
             exec(compile(source, path, "exec"), mod.__dict__)
         _api_modules[app_id] = mod
     except Exception as e:
-        print(f"[app-api] failed to load api.py for {app_id}: {e}")
+        print(f"[app-api] failed to load the app API of {app_id}: {e}")
         _api_modules[app_id] = None
     return _api_modules[app_id]
 
@@ -499,7 +499,7 @@ def _introspect_app_api_actions(app_id: str) -> list:
 
 
 class AppApiError(Exception):
-    """Raised by call_app_api() when the target app has no api.py, its API is
+    """Raised by call_app_api() when the target app has no app_api.py, its API is
     disabled by the admin, or it doesn't expose the requested method. Callers
     should expect this as a normal, non-exceptional outcome (the target app
     may simply not be installed) and degrade gracefully — e.g. a task's
@@ -509,14 +509,14 @@ class AppApiError(Exception):
 
 
 def call_app_api(target_app_id: str, method: str, *args, **kwargs):
-    """Call a function exposed by another app's backend/apps/<id>/api.py,
-    in-process. The target app receives only the args/kwargs you pass — it
+    """Call a function exposed by another app's apps/<id>/app_api.py (or the
+    older backend/apps/<id>/api.py), in-process. The target app receives only the args/kwargs you pass — it
     has no way to know which app is calling."""
     if not is_app_api_enabled(target_app_id):
         raise AppApiError(f"'{target_app_id}' app API is not enabled")
     mod = _load_app_api(target_app_id)
     if mod is None:
-        raise AppApiError(f"'{target_app_id}' has no api.py")
+        raise AppApiError(f"'{target_app_id}' has no app API")
     fn = getattr(mod, method, None)
     if fn is None or not callable(fn):
         raise AppApiError(f"'{target_app_id}' does not expose '{method}'")
@@ -558,14 +558,14 @@ def get_pub_session(token: Optional[str]) -> Optional[dict]:
 def get_users_by_ids(ids: list) -> list:
     """Bulk-lookup public profile fields for a list of user ids. Used by other
     app backends to render display name/avatar for ids they've stored but
-    don't hold a session token for."""
+    don't hold a session token for, and to know each one's language."""
     ids = [i for i in dict.fromkeys(ids) if i]
     if not ids:
         return []
     placeholders = ",".join("?" for _ in ids)
     with _db() as conn:
         rows = conn.execute(
-            f"SELECT id, username, display_name, avatar_color, avatar_svg FROM public_users "
+            f"SELECT id, username, display_name, avatar_color, avatar_svg, language FROM public_users "
             f"WHERE id IN ({placeholders})",
             ids
         ).fetchall()
@@ -675,12 +675,15 @@ def search_users(q: str, exclude_id: Optional[str] = None, limit: int = 20) -> l
     q = q.strip()
     if len(q) < 2:
         return []
-    like = f"%{q}%"
+    # SQLite's LIKE ignores case only for ASCII, so "иван" would miss
+    # "Иван Петров"; Python's casefold() compares names in any script.
+    q = q.casefold()
     with _db() as conn:
+        conn.create_function("fold", 1, lambda s: (s or "").casefold(), deterministic=True)
         rows = conn.execute(
             "SELECT id, username, display_name, avatar_color, avatar_svg FROM public_users "
-            "WHERE (username LIKE ? OR display_name LIKE ?) AND id != ? LIMIT ?",
-            (like, like, exclude_id or "", limit)
+            "WHERE (instr(fold(username), ?) OR instr(fold(display_name), ?)) AND id != ? LIMIT ?",
+            (q, q, exclude_id or "", limit)
         ).fetchall()
     return [dict(r) for r in rows]
 
@@ -1373,7 +1376,7 @@ async def toggle_public_app(app_id: str, body: PublicAppToggle, session=Depends(
 
 @_admin.get("/app-apis")
 async def list_app_apis_admin(session=Depends(get_current_session)):
-    """List all apps that expose an api.py, with their enabled status."""
+    """List all apps that expose an app-to-app API, with their enabled status."""
     import json
     detected = _detect_app_apis()
     apps_dir = os.path.join(os.path.dirname(__file__), "..", "apps")

@@ -835,6 +835,7 @@ window._i18n = {
   'ah_credits_removed_default':   'Ajuste del administrador (retirado)',
   'ah_pub_loading':                'Cargando…',
   'ah_pub_home':                    'Inicio',
+  'ah_pub_switch_app':              'Cambiar de aplicación',
   'ah_pub_usage_last':              'Último uso',
   'ah_pub_usage_count':             'Veces usada',
   'ah_pub_usage_summary':           'Abierta {count} veces, última vez: {last}',

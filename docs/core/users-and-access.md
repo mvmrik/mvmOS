@@ -9,6 +9,10 @@ order: 30
 
 mvmOS supports local users for an installation. User and session information belongs to the server running mvmOS; it is not synchronised to mvmos.org as part of normal Core operation.
 
+## Administrative actions
+
+Root can perform system actions directly. Other Linux users need sudo privileges and must confirm their own password. The server checks a session-bound administrator key on each protected action and renews its fifteen-minute idle period when used. Users can manage their own desktop two-factor authentication; changing another account’s setup requires administrator confirmation.
+
 ## Access responsibilities
 
 - Create only the accounts your installation needs.

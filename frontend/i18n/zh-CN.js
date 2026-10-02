@@ -835,6 +835,7 @@ window._i18n = {
   'ah_credits_removed_default':   '管理员调整（已移除）',
   'ah_pub_loading':                '正在加载…',
   'ah_pub_home':                    '主页',
+  'ah_pub_switch_app':              '切换应用',
   'ah_pub_usage_last':              '上次使用',
   'ah_pub_usage_count':             '使用次数',
   'ah_pub_usage_summary':           '已打开 {count} 次，最近一次：{last}',

@@ -6,7 +6,7 @@ import time
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
-from .auth import get_current_session
+from .auth import get_current_session, require_admin
 
 router = APIRouter(prefix="/api/packages", tags=["packages"])
 
@@ -364,21 +364,21 @@ async def upgradable(session=Depends(get_current_session)):
 
 
 @router.post("/upgrade")
-async def upgrade(body: PkgRequest, session=Depends(get_current_session)):
+async def upgrade(body: PkgRequest, session=Depends(require_admin)):
     if not re.match(r'^[a-z0-9][a-z0-9.+\-]+$', body.name):
         return JSONResponse({"error": "Invalid package name"}, status_code=400)
     return await _stream_apt(["apt-get", "install", "-y", "--only-upgrade", body.name])
 
 
 @router.post("/install")
-async def install(body: PkgRequest, session=Depends(get_current_session)):
+async def install(body: PkgRequest, session=Depends(require_admin)):
     if not re.match(r'^[a-z0-9][a-z0-9.+\-]+$', body.name):
         return JSONResponse({"error": "Invalid package name"}, status_code=400)
     return await _stream_apt(["apt-get", "install", "-y", body.name])
 
 
 @router.post("/remove")
-async def remove(body: PkgRequest, session=Depends(get_current_session)):
+async def remove(body: PkgRequest, session=Depends(require_admin)):
     if not re.match(r'^[a-z0-9][a-z0-9.+\-]+$', body.name):
         return JSONResponse({"error": "Invalid package name"}, status_code=400)
     return await _stream_apt(["apt-get", "remove", "-y", body.name])

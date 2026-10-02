@@ -1,13 +1,15 @@
 import os
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel
 from typing import Optional
 from .db import get_conn
+from .auth import get_current_session, require_admin
 
 BACKENDS_DIR = os.path.join(os.path.dirname(__file__), "apps")
 
-router = APIRouter(prefix="/api/domains", tags=["domains"])
+# Every route needs a desktop session of its own, not only the middleware.
+router = APIRouter(prefix="/api/domains", tags=["domains"], dependencies=[Depends(get_current_session)])
 
 
 class SiteBody(BaseModel):
@@ -32,7 +34,7 @@ def list_sites():
 
 
 @router.post("")
-def add_site(body: SiteBody):
+def add_site(body: SiteBody, _admin=Depends(require_admin)):
     if not body.domain and not body.path:
         raise HTTPException(400, "Provide domain or path")
 
@@ -63,7 +65,7 @@ def add_site(body: SiteBody):
 
 
 @router.delete("/{site_id}")
-def delete_site(site_id: int):
+def delete_site(site_id: int, _admin=Depends(require_admin)):
     with get_conn() as conn:
         conn.execute("DELETE FROM domains WHERE id = ?", (site_id,))
     return {"ok": True}

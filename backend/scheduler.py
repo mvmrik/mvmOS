@@ -28,7 +28,7 @@ import sys
 import sqlite3
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
@@ -119,8 +119,20 @@ def _get_config(app_id: str) -> dict:
         return {}
 
 
+def _from_local_cron(request: Request) -> bool:
+    """The tick comes only from this machine's crontab, which calls 127.0.0.1
+    directly. A request passed on by nginx, Cloudflare or another proxy also
+    arrives from 127.0.0.1, but carries the visitor's address in a header, so
+    any such header means it came from outside."""
+    if not request.client or request.client.host not in ("127.0.0.1", "::1"):
+        return False
+    return not any(request.headers.get(h) for h in ("x-forwarded-for", "x-real-ip", "cf-connecting-ip", "forwarded"))
+
+
 @router.api_route("/api/scheduler/tick", methods=["GET", "POST"])
-def scheduler_tick():
+def scheduler_tick(request: Request):
+    if not _from_local_cron(request):
+        raise HTTPException(status_code=403, detail="Local cron only")
     now = datetime.now()
     results = []
 

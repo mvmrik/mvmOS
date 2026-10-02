@@ -3,11 +3,14 @@ import os
 import time
 import httpx
 import zipfile
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from .db import get_conn, THEMES_DIR
+from .auth import get_current_session, require_admin
 
-router = APIRouter()
+# Every route needs a desktop session of its own: the session middleware lets
+# through any path that ends like a static file, which a theme id can.
+router = APIRouter(dependencies=[Depends(get_current_session)])
 
 _cache: dict = {}
 CACHE_TTL = 120
@@ -40,7 +43,7 @@ class AddThemeStore(BaseModel):
 
 
 @router.post("/api/themes/stores")
-def add_theme_store(body: AddThemeStore):
+def add_theme_store(body: AddThemeStore, _admin=Depends(require_admin)):
     with get_conn() as conn:
         try:
             conn.execute(
@@ -53,7 +56,7 @@ def add_theme_store(body: AddThemeStore):
 
 
 @router.delete("/api/themes/stores/{store_id}")
-def remove_theme_store(store_id: int):
+def remove_theme_store(store_id: int, _admin=Depends(require_admin)):
     with get_conn() as conn:
         row = conn.execute("SELECT official FROM theme_stores WHERE id=?", (store_id,)).fetchone()
         if not row:
@@ -129,7 +132,7 @@ class InstallTheme(BaseModel):
 
 
 @router.post("/api/themes/install")
-async def install_theme(body: InstallTheme):
+async def install_theme(body: InstallTheme, _admin=Depends(require_admin)):
     theme_dir = os.path.join(THEMES_DIR, body.id)
     os.makedirs(theme_dir, exist_ok=True)
 
@@ -179,7 +182,7 @@ async def install_theme(body: InstallTheme):
 
 
 @router.delete("/api/themes/{theme_id}")
-def uninstall_theme(theme_id: str):
+def uninstall_theme(theme_id: str, _admin=Depends(require_admin)):
     if theme_id == "default":
         raise HTTPException(400, "Cannot uninstall default theme")
     with get_conn() as conn:

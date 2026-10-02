@@ -190,6 +190,10 @@ window.ErrorReporter = (() => {
 
   function _patchErrors() {
     window.addEventListener('error', e => {
+      // A script from another origin (or one the browser injects itself, as Brave
+      // on iOS does) reaches us only as "Script error." with no file, line or
+      // stack — nothing in it points to mvmOS, so it is not worth a report.
+      if (!e.filename && !e.error && /^Script error\.?$/.test(e.message || '')) return;
       _capture('js', e.message, e.error?.stack || null, e.filename || location.href);
     });
     window.addEventListener('unhandledrejection', e => {

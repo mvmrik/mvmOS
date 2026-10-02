@@ -17,6 +17,10 @@ Cron Manager edits the server's crontab and controls the mvmOS Scheduler — the
 - See read-only system jobs from `/etc/cron.d/`, including which installed apps registered a scheduler and whether their backend file is still present.
 - Enable or disable the installation's own scheduler tick, which every app's scheduled work depends on.
 
+## Scheduler requests
+
+The Scheduler tick is accepted only from a direct local request on the server. Requests forwarded through nginx, Cloudflare or another proxy are refused; the installed cron line calls the local port directly.
+
 ## Practical tip
 
 Editing another user's crontab, or toggling the installation's scheduler, requires that account's password even for an administrator — this is the same sudo confirmation used elsewhere in mvmOS, not a separate login.

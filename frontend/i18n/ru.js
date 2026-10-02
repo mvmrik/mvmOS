@@ -835,6 +835,7 @@ window._i18n = {
   'ah_credits_removed_default':   'Корректировка администратором (списано)',
   'ah_pub_loading':                'Загрузка…',
   'ah_pub_home':                    'Главная',
+  'ah_pub_switch_app':              'Сменить приложение',
   'ah_pub_usage_last':              'Последнее использование',
   'ah_pub_usage_count':             'Число использований',
   'ah_pub_usage_summary':           'Открыто раз: {count}, последний: {last}',

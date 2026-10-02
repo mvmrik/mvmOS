@@ -7,7 +7,7 @@ order: 270
 ---
 ## Opt-in diagnostics
 
-When mvmOS detects a browser error or a server response failure, it can show a report dialog. Nothing is sent until the user chooses Send report. The dialog also offers an option to stop showing future report prompts.
+When mvmOS detects a browser error or a server response failure, it can show a report dialog. Nothing is sent until the user chooses Send report. The dialog also offers an option to stop showing future report prompts. Generic browser messages saying only “Script error.”, with no source file or error details, are ignored because they cannot identify an mvmOS problem.
 
 ## What a report contains
 

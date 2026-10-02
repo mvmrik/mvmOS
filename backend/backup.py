@@ -15,7 +15,7 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse, JSONResponse
 from pydantic import BaseModel
-from .auth import get_current_session
+from .auth import get_current_session, require_admin
 from .db import get_conn
 
 router = APIRouter(prefix="/api/backup", tags=["backup"])
@@ -91,7 +91,7 @@ def list_backups(_session=Depends(get_current_session)):
 
 
 @router.post("/create")
-def create_backup(_session=Depends(get_current_session)):
+def create_backup(_session=Depends(require_admin)):
     _ensure_dir()
     ts = datetime.now().strftime("%Y-%m-%d-%H%M%S")
     folder_name = f"mvmos-backup-{ts}"
@@ -141,7 +141,7 @@ def create_backup(_session=Depends(get_current_session)):
 
 
 @router.get("/download/{folder_name}")
-def download_backup(folder_name: str, _session=Depends(get_current_session)):
+def download_backup(folder_name: str, _session=Depends(require_admin)):
     if "/" in folder_name or ".." in folder_name:
         raise HTTPException(400, "Invalid name")
     folder_path = os.path.join(BACKUP_DIR, folder_name)
@@ -176,7 +176,7 @@ def download_backup(folder_name: str, _session=Depends(get_current_session)):
 
 
 @router.delete("/{folder_name}")
-def delete_backup(folder_name: str, _session=Depends(get_current_session)):
+def delete_backup(folder_name: str, _session=Depends(require_admin)):
     if "/" in folder_name or ".." in folder_name:
         raise HTTPException(400, "Invalid name")
     folder_path = os.path.join(BACKUP_DIR, folder_name)
@@ -210,7 +210,7 @@ class ScheduleRequest(BaseModel):
 
 
 @router.post("/schedule")
-def set_schedule(body: ScheduleRequest, _session=Depends(get_current_session)):
+def set_schedule(body: ScheduleRequest, _session=Depends(require_admin)):
     if body.schedule not in _VALID_SCHEDULES:
         raise HTTPException(400, "Invalid schedule")
     keep = max(1, min(body.keep, 99))

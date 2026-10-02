@@ -17,6 +17,10 @@ Core backups archive the mvmOS installation files while excluding the Python vir
 - Choose how many backup generations to retain; older generations are pruned when the limit is reached.
 - Delete a backup that is no longer needed.
 
+## Administrator access
+
+Creating, downloading or deleting a backup and changing its schedule require administrator rights. Sudo users confirm their own Linux password; Settings handles confirmation before downloading the ZIP.
+
 ## Recovery discipline
 
 Copy downloaded backups to storage separate from the server. Test restoring on a safe machine before relying on a recovery process. Installed apps and their data can have their own storage and integrations, so verify that the backup covers the apps you depend on.

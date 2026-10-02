@@ -18,6 +18,10 @@ Terminal opens a real interactive Linux shell in the mvmOS desktop. It is not a 
 - Lets apps open a terminal in a chosen folder with its own session. The shell starts in that folder even when it must switch to another Linux user first. When `tmux` is installed on the server, such a session keeps running on the server while the connection is gone, so a reconnect or a reloaded page returns to the same shell and whatever was running in it, and the session ends only when the app closes that terminal. Git Manager uses this for its repository terminals. Without `tmux`, a reconnect starts a new shell in the same folder.
 - Keeps Linux as the permission boundary; commands are not separately sandboxed by mvmOS.
 
+## Text encoding
+
+Terminal starts with a UTF-8 locale, including when opening a login shell for another user. Persistent tmux sessions run in UTF-8 mode too, so Cyrillic and other non-ASCII text stays readable when the service started without a locale.
+
 ## Saved commands and the quick prompt
 
 Commands you run often can be saved once and started with a click instead of being typed again.

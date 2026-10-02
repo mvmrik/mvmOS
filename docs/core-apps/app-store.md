@@ -19,6 +19,10 @@ App Store is the desktop client for browsing, installing, updating, and configur
 - Ask for confirmation before an installation that needs a server backend.
 - Show which apps have a licensed Premium build available.
 
+## Administrator confirmation
+
+Adding or removing stores, installing or updating apps, widgets and themes, and uninstalling them require administrator rights checked by the server. Root proceeds directly; a sudo user confirms their own Linux password, with the confirmation reused for fifteen minutes without use.
+
 ## Before installing
 
 Read an app’s documentation, required permissions, integrations, and storage behaviour. Back up app data before major updates. Store apps are separate from Core and can add their own server-side services.
