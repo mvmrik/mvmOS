@@ -206,14 +206,16 @@ async def install_widget(body: InstallRequest, session=Depends(require_admin)):
 
     async with httpx.AsyncClient(timeout=30) as client:
         if body.zip_url:
+            from . import premium
+            is_premium = premium.is_premium_content_url(body.zip_url)
             try:
-                from .plugins import _premium_headers, _is_premium_refusal
-                r = await client.get(body.zip_url, headers=_premium_headers(body.zip_url))
-                r.raise_for_status()
+                r = await client.get(body.zip_url, headers=premium.license_headers() if is_premium else {})
             except Exception as e:
-                if _is_premium_refusal(body.zip_url, e):
-                    return JSONResponse({"error": "premium_required"}, status_code=402)
                 return JSONResponse({"error": f"Cannot fetch zip: {e}"}, status_code=502)
+            if is_premium and r.status_code in (401, 402, 403):
+                return JSONResponse({"error": "premium_required"}, status_code=402)
+            if r.status_code != 200:
+                return JSONResponse({"error": f"Cannot fetch zip: HTTP {r.status_code}"}, status_code=502)
             try:
                 with zipfile.ZipFile(io.BytesIO(r.content)) as zf:
                     names = zf.namelist()

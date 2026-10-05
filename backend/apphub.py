@@ -430,6 +430,15 @@ def _confine_app(app_id: str):
     return _swap()
 
 
+def forget_app_api(app_id: str) -> None:
+    """Drop the loaded app_api.py of an app that was just installed, updated or
+    removed. The cache below never looks at the disk again, so without this an
+    update keeps answering with the previous version's functions until the
+    backend restarts."""
+    _api_modules.pop(app_id, None)
+    sys.modules.pop(f"app_api_{app_id}", None)
+
+
 def _load_app_api(app_id: str):
     if app_id in _api_modules:
         return _api_modules[app_id]

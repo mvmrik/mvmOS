@@ -199,6 +199,10 @@ def _install_from_zip(zip_bytes: bytes, plugin_id: str, install_backend: bool) -
         if mf_data is None:
             raise ValueError("manifest.json not found in zip")
 
+        # The new app_api.py is on disk now; the one Apps Hub has loaded is not.
+        from . import apphub
+        apphub.forget_app_api(plugin_id)
+
         # apply db.json schema if present
         db_json_path = os.path.join(app_dir, "db.json")
         if os.path.exists(db_json_path):
@@ -798,6 +802,8 @@ def uninstall_plugin(plugin_id: str, session=Depends(require_admin)):
     # already imported api.py stays alive until the next backend restart.
     from . import public_loader
     public_loader.unload_app(plugin_id)
+    from . import apphub
+    apphub.forget_app_api(plugin_id)
     if os.path.isdir(app_dir):
         shutil.rmtree(app_dir)
     app_backends.uninstall(plugin_id)
