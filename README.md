@@ -51,7 +51,7 @@ uninstalls just as cleanly.
 shared shopping list, a quote for a client. Visitors get their own lightweight account
 through Apps Hub and never touch your Linux users or your desktop. The mvmOS Apps browser
 extension for Chrome and Firefox brings those public apps into the browser toolbar. The
-public header lets visitors switch directly between their apps.
+public header lets visitors switch directly between their apps, and a closed Community feed lets profiles of the same server share posts, photos and what they did in an app with everyone, their favourites or chosen people.
 
 ---
 

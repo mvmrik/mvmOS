@@ -173,9 +173,22 @@
     }).catch(function () {});
   }
 
+  // navigator.clipboard exists only on HTTPS or localhost; over plain http
+  // text still copies through the old execCommand path.
+  function writeText(text) {
+    if (navigator.clipboard && window.isSecureContext) return navigator.clipboard.writeText(text);
+    var box = document.createElement('textarea');
+    box.value = text; box.style.cssText = 'position:fixed;top:0;left:0;opacity:0';
+    document.body.appendChild(box); box.select();
+    var ok = document.execCommand('copy');
+    box.remove();
+    return ok ? Promise.resolve() : Promise.reject(new Error('copy'));
+  }
+
   function copyItem(i) {
     var p;
-    if (i.kind === 'text') p = navigator.clipboard.writeText(i.text);
+    if (i.kind !== 'text' && !(navigator.clipboard && window.isSecureContext && window.ClipboardItem)) { flash(t('clip_copy_needs_https')); return; }
+    if (i.kind === 'text') p = writeText(i.text);
     else p = api('/items/' + i.id + '/file').then(function (r) { return r.blob(); }).then(function (blob) {
       if (blob.type === 'image/png') return blob;
       return createImageBitmap(blob).then(function (bmp) {

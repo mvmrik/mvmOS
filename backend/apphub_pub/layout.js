@@ -293,6 +293,7 @@
       var menu = document.querySelector('.mvm-menu');
       if (menu) menu.hidden = true;
       closeSwitcher();
+      closeActivity();
       _bellOpen = !_bellOpen;
       panel.hidden = !_bellOpen;
       btn.setAttribute('aria-expanded', String(_bellOpen));
@@ -332,7 +333,7 @@
   // rebuilds the whole header element and would close the open panel out from
   // under whoever is reading it.
   function renderBell() {
-    var existing = document.querySelector('.mvm-bell');
+    var existing = document.querySelector('.mvm-bell:not(.mvm-act)');
     if (existing) existing.replaceWith(buildBell());
   }
 
@@ -348,6 +349,387 @@
     _notifs = rows;
     ensureAppI18n(rows);
     renderBell();
+  }
+
+  // ── Recent activity ───────────────────────────────────────────────
+  // What this person just did in an app, kept only in this browser so they
+  // can pass it on in Community if they feel like it. Nothing is recorded on
+  // the server and no app takes part: backend/feed.py marks a successful write
+  // an app's own page made to its own routes with the name of the handler that
+  // did it (X-Mvm-Action), and the suggestions are the plain values the page
+  // sent and the app answered — whatever the app, the same way.
+  var ACTIVITY_KEY = 'apphub_activity';
+  var ACTIVITY_MAX = 30;
+  var ACTIVITY_MS = 7 * 86400000;
+  var MAX_CHIPS = 10;
+  var _actOpen = false;
+
+  function currentUserId() {
+    return (_lastResults && _lastResults[1] && _lastResults[1].id) || null;
+  }
+
+  function loadActivity() {
+    var list = [];
+    try { list = JSON.parse(localStorage.getItem(ACTIVITY_KEY) || '[]'); } catch (e) {}
+    if (!Array.isArray(list)) return [];
+    var me = currentUserId(), now = Date.now();
+    return list.filter(function (a) {
+      return a && a.app && now - new Date(a.at).getTime() < ACTIVITY_MS && (!me || !a.u || a.u === me);
+    });
+  }
+
+  function saveActivity(list) {
+    try { localStorage.setItem(ACTIVITY_KEY, JSON.stringify(list.slice(0, ACTIVITY_MAX))); } catch (e) {}
+  }
+
+  // Values that say something to another person: names and amounts. Ids,
+  // tokens, colours, dates, flags and long texts are bookkeeping, recognised by
+  // their key or their shape alone.
+  var SKIP_KEY = /(^|_)(id|ids|uuid|guid|token|hash|key|password|secret|salt|color|colour|icon|emoji|avatar|image|img|photo|url|path|file|created|updated|modified|deleted|at|ts|time|timestamp|date|day|week|month|year|order|position|index|idx|sort|pos|version|rev|ok|success|status|code|type|kind|lang|language|currency|tz|timezone)$/;
+  var SKIP_TREE = /^(user|users|owner|author|profile|meta|settings|prefs|config|session|auth)$/;
+  var UNITS = [
+    [/(^|_)ml$/, ' ml'], [/(^|_)(l|liters?|litres?)$/, ' l'], [/(^|_)kg$/, ' kg'], [/(^|_)mg$/, ' mg'],
+    [/(^|_)(g|grams?)$/, ' g'], [/(^|_)(kcal|calories|cal)$/, ' kcal'], [/(^|_)(percent|pct)$/, '%'],
+    [/(^|_)(min|mins|minutes)$/, ' min'], [/(^|_)(sec|secs|seconds)$/, ' s'], [/(^|_)(h|hours)$/, ' h'],
+    [/(^|_)km$/, ' km'], [/(^|_)cm$/, ' cm']
+  ];
+
+  function snake(k) { return String(k || '').replace(/([a-z0-9])([A-Z])/g, '$1_$2').toLowerCase(); }
+
+  function chipFor(key, v, currency) {
+    if (typeof v === 'string') {
+      v = v.trim();
+      if (/^-?\d+(\.\d+)?$/.test(v)) v = Number(v);
+      else {
+        if (v.length < 2 || v.length > 60 || /\n/.test(v)) return null;
+        if (/^[0-9a-f-]{8,}$/i.test(v) || /^[A-Za-z0-9_+/=-]{20,}$/.test(v)) return null;
+        if (/^\d{4}-\d{2}-\d{2}/.test(v) || /^\d{1,2}:\d{2}/.test(v)) return null;
+        if (/^#[0-9a-f]{3,8}$/i.test(v) || /^(rgb|hsl)a?\(/i.test(v)) return null;
+        if (/^(true|false|null|none|undefined)$/i.test(v)) return null;
+        return v;
+      }
+    }
+    if (typeof v !== 'number' || !isFinite(v) || v === 0 || Math.abs(v) > 1e11) return null;
+    var lang = (window.mvmOS && (window.mvmOS.lang || window.mvmOS.pubLang)) || undefined;
+    // Money kept in cents ("price_cents": 5000) is 50.00, in the currency sent
+    // beside it when there is one.
+    if (/(^|_)cents$/.test(key)) {
+      try {
+        return (v / 100).toLocaleString(lang, currency ? { style: 'currency', currency: currency } : { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      } catch (e) { return (v / 100).toFixed(2); }
+    }
+    if (Math.abs(v) > 1e9) return null;
+    var unit = '';
+    for (var i = 0; i < UNITS.length; i++) if (UNITS[i][0].test(key)) { unit = UNITS[i][1]; break; }
+    var num;
+    try { num = Number(v.toFixed(2)).toLocaleString(lang); } catch (e) { num = String(Number(v.toFixed(2))); }
+    return num + unit;
+  }
+
+  // out.chips holds what a button shows, out.keys the field it came from, so a
+  // saved template can say "{amount_ml}" and get this time's amount next time.
+  function collectChips(value, key, depth, out, budget, currency) {
+    if (value == null || out.chips.length >= MAX_CHIPS * 3 || budget.n-- <= 0 || depth > 3) return;
+    var k = snake(key);
+    if (Array.isArray(value)) {
+      // A whole list is the app's state, not what just happened.
+      if (value.length <= 3) value.forEach(function (v) { collectChips(v, key, depth + 1, out, budget); });
+      return;
+    }
+    if (typeof value === 'object') {
+      if (k && SKIP_TREE.test(k)) return;
+      var cur = typeof value.currency === 'string' && /^[A-Z]{3}$/.test(value.currency) ? value.currency : currency;
+      Object.keys(value).forEach(function (sub) { collectChips(value[sub], sub, depth + 1, out, budget, cur); });
+      return;
+    }
+    if (k && SKIP_KEY.test(k)) return;
+    var chip = chipFor(k, value, currency);
+    if (!chip || out.chips.indexOf(chip) >= 0) return;
+    var name = k || 'value', n = 2;
+    while (out.keys.indexOf(name) >= 0) name = (k || 'value') + '_' + n++;
+    out.chips.push(chip);
+    out.keys.push(name);
+  }
+
+  function sentValues(body) {
+    try {
+      if (typeof body === 'string') return JSON.parse(body);
+      var out = {};
+      if (window.FormData && body instanceof FormData || window.URLSearchParams && body instanceof URLSearchParams) {
+        body.forEach(function (v, k) { if (typeof v === 'string') out[k] = v; });
+        return out;
+      }
+    } catch (e) {}
+    return null;
+  }
+
+  // An app's values are often its own codes ("black_tea") and its fields are
+  // named in English; its own translations say what they read as. Every store
+  // app ships them in /apps/<id>/i18n.js, so that file is run aside, against a
+  // stand-in window, and whatever table it fills is read for the page's
+  // language. Nothing here knows any app or its keys.
+  var _appWords = {};
+  function appWords(app) {
+    var lang = (window.mvmOS && (window.mvmOS.lang || window.mvmOS.pubLang)) || 'en';
+    var id = app + '|' + lang;
+    if (!_appWords[id]) {
+      _appWords[id] = fetch(window.asset('/apps/' + app + '/i18n.js')).then(function (r) {
+        return r.ok ? r.text() : '';
+      }).then(function (code) {
+        var table = {};
+        if (!code) return table;
+        var aside = { _i18n: {}, mvmOS: { lang: lang, pubLang: lang, onLangChange: function () {} } };
+        try { new Function('window', 'self', 'globalThis', code)(aside, aside, aside); } catch (e) {}
+        var short = lang.split('-')[0];
+        Object.keys(aside).forEach(function (k) {
+          var v = aside[k];
+          if (!v || typeof v !== 'object' || k === 'mvmOS') return;
+          var t = k === '_i18n' ? v : (v[lang] || v[short] || null);
+          if (t && typeof t === 'object') Object.keys(t).forEach(function (w) { if (typeof t[w] === 'string') table[w] = t[w]; });
+        });
+        return table;
+      }).catch(function () { return {}; });
+    }
+    return _appWords[id];
+  }
+
+  // A code is read by the key that is named exactly like it, or else by the
+  // shortest keys ending in it ("hy_p_black_tea" for "black_tea"), as long as
+  // those agree. Texts with blanks to fill in are wording, not names.
+  function wordFor(table, code, notExact) {
+    if (!/^[a-z][a-z0-9_]*$/.test(code)) return null;
+    // A name is short and is not a sentence: "Enter a number." is a message.
+    var plain = function (v) { return typeof v === 'string' && v && v.length <= 40 && !/[{\n]|[.!?…:]$|—/.test(v); };
+    if (!notExact && plain(table[code])) return table[code];
+    var best = null, vals = [];
+    Object.keys(table).forEach(function (k) {
+      if (k.slice(-code.length - 1) !== '_' + code || !plain(table[k])) return;
+      if (best === null || k.length < best) { best = k.length; vals = []; }
+      if (k.length === best && vals.indexOf(table[k]) < 0) vals.push(table[k]);
+    });
+    return vals.length === 1 ? vals[0] : null;
+  }
+
+  var UNIT_WORDS = /^(cents|ml|l|liters?|litres?|kg|mg|g|grams?|kcal|cal|calories|percent|pct|min|mins|minutes|sec|secs|seconds|h|hours|km|cm)$/;
+  function fieldWord(table, key) {
+    var base = String(key || '').replace(/_\d+$/, function (m) { return m === '_100' ? m : ''; });
+    var hit = wordFor(table, base);
+    if (hit) return hit;
+    // Without its units, wherever they sit: "caffeine_mg_100" is "caffeine_100".
+    var words = base.split('_').filter(function (w, i) { return w && (i === 0 || !UNIT_WORDS.test(w)); });
+    return words.length && words.join('_') !== base ? wordFor(table, words.join('_')) : null;
+  }
+
+  // A link the app gave to what was just made ("url": ".../?listing=5") is
+  // offered as it is: whatever the field is called, a link reads as a link.
+  var LINK_KEY = /^(url|link|href|permalink|public_url|share_url|web_url)$/;
+  function pageLink(got) {
+    if (!got || typeof got !== 'object' || Array.isArray(got)) return null;
+    for (var k in got) {
+      if (!LINK_KEY.test(snake(k)) || typeof got[k] !== 'string') continue;
+      try {
+        var u = new URL(got[k], location.href);
+        // The app sees the server from behind a proxy; the reader opens it here.
+        if (u.hostname === location.hostname) u = new URL(u.pathname + u.search + u.hash, location.origin);
+        if (/^https?:$/.test(u.protocol)) return u.href;
+      } catch (e) {}
+    }
+    return null;
+  }
+
+  async function captureActivity(app, action, body, res) {
+    var got = null;
+    try {
+      if (/json/.test(res.headers.get('content-type') || '')) got = await res.json();
+    } catch (e) {}
+    var found = { chips: [], keys: [] }, budget = { n: 200 };
+    // What the app answered names things ("Water"); what was sent may only
+    // hold the id of it, but also carries the amounts the person typed.
+    collectChips(got, '', 0, found, budget);
+    collectChips(sentValues(body), '', 0, found, budget);
+    var words = await appWords(app);
+    // A field the app never names in its own translations is not one it shows
+    // people, so its value is left out. A key such as "title" may name the app
+    // itself there: the field is kept, under its own name.
+    var appName = activityApp(app).name, labels = [], chips = [], keys = [];
+    var named = Object.keys(words).length > 0;
+    var link = pageLink(got), room = MAX_CHIPS - (link ? 1 : 0);
+    found.keys.forEach(function (k, i) {
+      var w = fieldWord(words, k);
+      // Named after the app itself, the field is read from a longer key ("ad_title").
+      if (w && w === appName) w = wordFor(words, k, true) || w;
+      if ((named && !w) || chips.length >= room) return;
+      chips.push(wordFor(words, found.chips[i]) || found.chips[i]);
+      keys.push(k);
+      labels.push(w && w !== appName ? w : null);
+    });
+    if (link) { chips.push(link); keys.push('url'); labels.push(tt('feed_link', 'Link')); }
+    found.chips = chips;
+    found.keys = keys;
+    var list = loadActivity();
+    var entry = {
+      id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+      app: app, action: action, at: new Date().toISOString(), chips: found.chips, keys: found.keys, labels: labels, u: currentUserId()
+    };
+    // The same thing again within a minute (a +1 tapped five times) is one entry.
+    var last = list[0];
+    if (last && last.app === app && last.action === action && !last.shared && Date.now() - new Date(last.at).getTime() < 60000) list[0] = entry;
+    else list.unshift(entry);
+    saveActivity(list);
+    renderActivity();
+  }
+
+  (function patchFetch() {
+    var original = window.fetch;
+    if (!original || window.__mvmActivityFetch) return;
+    window.__mvmActivityFetch = true;
+    window.fetch = function (input, init) {
+      var p = original.apply(window, arguments);
+      try {
+        var method = String((init && init.method) || (input && input.method) || 'GET').toUpperCase();
+        if (method === 'GET' || method === 'HEAD') return p;
+        var url = new URL(typeof input === 'string' ? input : (input && input.url) || String(input), location.href);
+        var m = /^\/pub\/([a-zA-Z0-9_-]+)\//.exec(url.pathname);
+        if (url.origin !== location.origin || !m || m[1] === 'apphub') return p;
+        var body = init && init.body;
+        p.then(function (res) {
+          var action = res.ok && res.headers.get('X-Mvm-Action');
+          if (action) captureActivity(m[1], action, body, res.clone());
+        }).catch(function () {});
+      } catch (e) {}
+      return p;
+    };
+  })();
+
+  // A handler's name is the only description there is: "add_entry" reads as
+  // "Add entry". The app beside it is named in the reader's language.
+  function actionLabel(a) {
+    var s = String(a || '').replace(/^_+/, '').replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/_+/g, ' ')
+      .replace(/\b(pub|public|api|endpoint|route|handler)\b/gi, '').replace(/\s+/g, ' ').trim().toLowerCase();
+    return s.charAt(0).toUpperCase() + s.slice(1);
+  }
+
+  function activityApp(id) {
+    var found = (_swApps || []).filter(function (a) { return a.id === id; })[0];
+    return { icon: (found && found.icon) || '📦', name: found ? appLabel(found) : (publicNames[id] || id) };
+  }
+
+  var _feedLoading = null;
+  function loadFeed() {
+    if (window.MvmFeed) return Promise.resolve(window.MvmFeed);
+    if (!_feedLoading) {
+      _feedLoading = new Promise(function (resolve, reject) {
+        var s = document.createElement('script');
+        s.src = window.asset('/pub/apphub/feed.js');
+        s.onload = function () { resolve(window.MvmFeed); };
+        s.onerror = function () { _feedLoading = null; reject(new Error('feed')); };
+        document.head.appendChild(s);
+      });
+    }
+    return _feedLoading;
+  }
+
+  function toast(text, href, linkText) {
+    var old = document.querySelector('.mvm-toast');
+    if (old) old.remove();
+    var el = document.createElement('div');
+    el.className = 'mvm-toast';
+    el.innerHTML = '<span>' + esc(text) + '</span>' + (href ? '<a href="' + esc(href) + '">' + esc(linkText) + '</a>' : '');
+    document.body.appendChild(el);
+    setTimeout(function () { el.remove(); }, 5000);
+  }
+
+  function shareActivity(entry) {
+    closeActivity();
+    loadFeed().then(function (feed) {
+      feed.compose({
+        app_id: entry ? entry.app : '',
+        chips: entry ? entry.chips : [],
+        keys: entry ? entry.keys : null,
+        labels: entry ? entry.labels : null,
+        onPosted: function () {
+          if (entry) {
+            var list = loadActivity();
+            list.forEach(function (a) { if (a.id === entry.id) a.shared = true; });
+            saveActivity(list);
+            renderActivity();
+          }
+          if (window.MvmApphub && window.MvmApphub.goToTab) return;
+          toast(tt('feed_posted', 'Posted to Community'), '/pub/apphub/?tab=community', tt('feed_open', 'Open'));
+        }
+      });
+    }).catch(function () {});
+  }
+
+  function activityRow(a) {
+    var app = activityApp(a.app);
+    var chips = (a.chips || []).slice(0, 4).join(' · ');
+    return '<div class="mvm-act-row">'
+      + '<span class="mvm-act-ico">' + esc(app.icon) + '</span>'
+      + '<span class="mvm-notif-text">'
+        + '<span class="mvm-notif-title">' + esc(app.name) + ' · ' + esc(actionLabel(a.action)) + '</span>'
+        + (chips ? '<span class="mvm-notif-body">' + esc(chips) + '</span>' : '')
+        + '<span class="mvm-notif-time">' + esc(notifTime(a.at)) + '</span>'
+      + '</span>'
+      + (a.shared
+        ? '<span class="mvm-act-done" title="' + esc(tt('feed_shared_done', 'Shared')) + '">✓</span>'
+        : '<button class="mvm-act-share" type="button" data-id="' + esc(a.id) + '" title="' + esc(tt('feed_share', 'Share')) + '" aria-label="' + esc(tt('feed_share', 'Share')) + '">↗</button>')
+      + '</div>';
+  }
+
+  function buildActivity() {
+    var wrap = document.createElement('div');
+    wrap.className = 'mvm-bell mvm-act';
+    var list = loadActivity();
+    // Like the bell: nothing at all until there is something behind it.
+    if (!list.length) return wrap;
+    var label = esc(tt('feed_activity_title', 'Recent activity'));
+    wrap.innerHTML =
+      '<button class="mvm-bell-btn mvm-act-btn" type="button" aria-haspopup="true" aria-expanded="' + (_actOpen ? 'true' : 'false') + '" title="' + label + '" aria-label="' + label + '">🕘</button>'
+      + '<div class="mvm-notif mvm-act-panel"' + (_actOpen ? '' : ' hidden') + '>'
+        + '<div class="mvm-notif-hdr"><span>' + label + '</span>'
+          + '<button class="mvm-notif-all mvm-act-new" type="button">✏️ ' + esc(tt('feed_new_post', 'New post')) + '</button></div>'
+        + '<div class="mvm-notif-list">' + list.map(activityRow).join('') + '</div>'
+        + '<div class="mvm-act-foot"><span>' + esc(tt('feed_activity_hint', 'Only you see this list. It stays in this browser.')) + '</span>'
+          + '<button class="mvm-notif-all mvm-act-clear" type="button">' + esc(tt('feed_activity_clear', 'Clear')) + '</button></div>'
+      + '</div>';
+
+    var btn = wrap.querySelector('.mvm-act-btn');
+    var panel = wrap.querySelector('.mvm-act-panel');
+    btn.onclick = function (e) {
+      e.stopPropagation();
+      var menu = document.querySelector('.mvm-menu');
+      if (menu) menu.hidden = true;
+      closeSwitcher();
+      if (_bellOpen) { _bellOpen = false; renderBell(); }
+      _actOpen = !_actOpen;
+      panel.hidden = !_actOpen;
+      btn.setAttribute('aria-expanded', String(_actOpen));
+    };
+    panel.onclick = function (e) { e.stopPropagation(); };
+    wrap.querySelector('.mvm-act-new').onclick = function () { shareActivity(null); };
+    wrap.querySelector('.mvm-act-clear').onclick = function () {
+      saveActivity(loadActivity().filter(function (a) { return currentUserId() && a.u && a.u !== currentUserId(); }));
+      closeActivity();
+    };
+    wrap.querySelectorAll('.mvm-act-share').forEach(function (el) {
+      el.onclick = function () {
+        var entry = list.filter(function (a) { return a.id === el.dataset.id; })[0];
+        if (entry) shareActivity(entry);
+      };
+    });
+    return wrap;
+  }
+
+  function renderActivity() {
+    var existing = document.querySelector('.mvm-act');
+    if (existing) existing.replaceWith(buildActivity());
+  }
+
+  function closeActivity() {
+    if (!_actOpen) return;
+    _actOpen = false;
+    renderActivity();
   }
 
   function ensureStyle() {
@@ -418,6 +800,19 @@
       /* On a phone the public-app root clips absolute descendants. The bell
        * therefore opens as a viewport panel, not as a child of the narrow
        * header container. */
+      '.mvm-act-row{display:flex;align-items:center;gap:9px;padding:9px 11px;border-bottom:1px solid var(--border,#45475a)}' +
+      '.mvm-act-row:last-child{border-bottom:none}' +
+      '.mvm-act-ico{font-size:20px;width:28px;text-align:center;flex-shrink:0}' +
+      '.mvm-act-share{flex-shrink:0;width:32px;height:32px;border-radius:50%;border:1px solid var(--border,#45475a);' +
+      'background:var(--surface2,#313244);color:var(--accent,#89b4fa);font-size:15px;font-weight:700;cursor:pointer}' +
+      '.mvm-act-share:hover{border-color:var(--accent,#89b4fa)}' +
+      '.mvm-act-done{flex-shrink:0;width:32px;text-align:center;color:var(--green,#a6e3a1);font-weight:700}' +
+      '.mvm-act-foot{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 11px;' +
+      'border-top:1px solid var(--border,#45475a);font-size:10.5px;color:var(--fg2,#a6adc8)}' +
+      '.mvm-toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:3000;display:flex;gap:12px;align-items:center;' +
+      'padding:10px 16px;border-radius:12px;background:var(--surface1,#181825);border:1px solid var(--border,#45475a);' +
+      'box-shadow:0 8px 24px rgba(0,0,0,.35);font-family:system-ui,sans-serif;font-size:13px;color:var(--fg,#cdd6f4)}' +
+      '.mvm-toast a{color:var(--accent,#89b4fa);font-weight:700;text-decoration:none}' +
       '@media(max-width:600px){.mvm-notif{position:fixed;top:72px;right:12px;left:12px;width:auto;max-width:none;max-height:calc(100dvh - 84px)}.mvm-notif-list{max-height:calc(100dvh - 132px)}}' +
       '.mvm-menu{position:absolute;top:calc(100% + 8px);right:0;min-width:200px;background:var(--surface1,#181825);' +
       'border:1px solid var(--border,#45475a);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.35);' +
@@ -600,6 +995,7 @@
     var menu = document.querySelector('.mvm-menu');
     if (menu) menu.hidden = true;
     if (_bellOpen) { _bellOpen = false; renderBell(); }
+    closeActivity();
     var list = document.querySelector('.mvm-sw-list');
     if (!list) {
       list = document.createElement('nav');
@@ -647,6 +1043,7 @@
     hdr.appendChild(spacer);
 
     if (user) {
+      hdr.appendChild(buildActivity());
       hdr.appendChild(buildBell());
 
       var creditsUnit = tt('ah_pub_credits_unit', 'credits');
@@ -678,6 +1075,7 @@
       menuBtn.onclick = function (e) {
         e.stopPropagation();
         closeSwitcher();
+        closeActivity();
         if (_bellOpen) { _bellOpen = false; renderBell(); }
         var willOpen = menu.hidden;
         menu.hidden = !willOpen;
@@ -722,8 +1120,10 @@
       var btn = box.querySelector('.mvm-avatar-btn');
       if (btn) btn.setAttribute('aria-expanded', 'false');
     }
-    var bell = document.querySelector('.mvm-bell');
+    var bell = document.querySelector('.mvm-bell:not(.mvm-act)');
     if (_bellOpen && bell && !bell.contains(e.target)) { _bellOpen = false; renderBell(); }
+    var act = document.querySelector('.mvm-act');
+    if (_actOpen && act && !act.contains(e.target)) closeActivity();
     var list = document.querySelector('.mvm-sw-list');
     if (switcherOpen() && list && !list.contains(e.target)) closeSwitcher();
   });
@@ -733,6 +1133,7 @@
     var menu = document.querySelector('.mvm-menu');
     if (menu) menu.hidden = true;
     if (_bellOpen) { _bellOpen = false; renderBell(); }
+    closeActivity();
     closeSwitcher();
   });
 

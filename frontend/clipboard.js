@@ -305,10 +305,28 @@ const ClipboardApp = (() => {
     } catch (_) {}
   }
 
+  // navigator.clipboard exists only on HTTPS or localhost; an install opened
+  // by IP over plain http still copies text through the old execCommand path.
+  async function _writeText(text) {
+    if (navigator.clipboard && window.isSecureContext) return navigator.clipboard.writeText(text);
+    const box = document.createElement('textarea');
+    box.value = text;
+    box.style.cssText = 'position:fixed;top:0;left:0;opacity:0';
+    document.body.appendChild(box);
+    box.select();
+    const ok = document.execCommand('copy');
+    box.remove();
+    if (!ok) throw new Error('copy');
+  }
+
   async function _copyItem(item) {
+    if (item.kind !== 'text' && !(navigator.clipboard && window.isSecureContext && window.ClipboardItem)) {
+      _toast(t('app_clipboard'), t('clip_copy_needs_https'));
+      return;
+    }
     try {
       if (item.kind === 'text') {
-        await navigator.clipboard.writeText(item.text);
+        await _writeText(item.text);
       } else {
         const res = await _api(`/items/${item.id}/file`);
         let blob = await res.blob();
@@ -399,7 +417,7 @@ const ClipboardApp = (() => {
             case 'copy': _copyItem(item); break;
             case 'download': _download(item); break;
             case 'copypath':
-              try { await navigator.clipboard.writeText(item.path); _toast(t('clip_copied'), item.path); }
+              try { await _writeText(item.path); _toast(t('clip_copied'), item.path); }
               catch (_) { _toast(t('app_clipboard'), t('clip_error_generic')); }
               break;
             case 'pin':

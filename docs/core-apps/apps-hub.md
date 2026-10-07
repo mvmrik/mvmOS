@@ -41,6 +41,16 @@ The app button in the shared public header opens Home and up to ten apps from yo
 
 Profile searches match names without case differences in any script, including Cyrillic.
 
+## Community
+
+Community is a tab of the public Apps Hub page where signed-in profiles of the same installation share with each other. It is closed: nobody outside the installation sees a post, and the author chooses who may. A post can be free text (links and YouTube addresses are recognised), up to four photos of up to 10 MB each, or a repost of someone's post. Others can like, comment on and repost it, and the author is notified of each. A red dot on the Community tab shows that others have shared something since the profile last looked, and older posts load on demand.
+
+Each post has an audience: everyone with a profile, only the profile's favourites, or chosen people searched by name; chosen people are notified. Only posts for everyone can be reposted. The audience new posts start with is set in Settings under Sharing, and can still be changed for each post.
+
+Every public app page has a New post button in the shared header. It opens the composer from inside the app, and offers the recent things the visitor did in that app, such as adding a listing or logging a drink, as values to put into the text, so a post can be written in a moment. The list of recent activity is kept only in the visitor's own browser, is shown only to them and can be cleared. Texts can be saved as templates for an app, up to 50 for each app. Apps do not have to be written for this and none is named in it.
+
+The public Settings page is now split into sections: Appearance, Language and formats, Sharing, and, for profiles that have it, the API. Links that used to open the API tab open it there.
+
 ## App-to-app communication
 
 Apps Hub is also the switchboard for server-side app-to-app calls. An app may expose a small `app_api.py` surface, but Apps Hub keeps that API disabled until the administrator enables it for the target app. Calling apps use the central Apps Hub API rather than importing another app directly, so the permission gate remains enforceable. For any app that exposes one, Apps Hub also lists the individual actions it makes available — name, parameters, and a short description read straight from the function's own docstring — so an administrator can see exactly what an integration would be able to call before enabling it.

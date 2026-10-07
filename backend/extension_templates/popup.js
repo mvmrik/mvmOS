@@ -92,13 +92,55 @@
     return result && typeof result.then === 'function' ? result :
       new Promise(function (resolve) { api.storage.local.get(values, resolve); });
   }
-  function getActiveTab() {
+  // The tab the user is on, as the browser reports it.
+  function queryActiveTab() {
     var result = api.tabs.query({active: true, currentWindow: true});
     return result && typeof result.then === 'function'
       ? result.then(function (tabs) { return tabs[0] || null; })
       : new Promise(function (resolve) {
           api.tabs.query({active: true, currentWindow: true}, function (tabs) { resolve(tabs[0] || null); });
         });
+  }
+  function isHostTab(tab) { return !!tab && /^https?:/i.test(tab.url || ''); }
+  // The mvmOS Desktop app opens the popup with the page behind it in the
+  // popup's own address. Nothing has to run inside the popup for that to
+  // arrive, so it holds even when the app cannot reach into the page.
+  function tabFromAddress() {
+    var params = new URLSearchParams(location.search);
+    var id = Number(params.get('mvmos_tab_id'));
+    var tab = {id: id, url: params.get('mvmos_tab_url') || ''};
+    return Number.isInteger(id) && id > 0 && isHostTab(tab) ? tab : null;
+  }
+  function getActiveTab() {
+    var params = new URLSearchParams(location.search);
+    // Explicit empty context is authoritative too: without an open site the
+    // host must not fall back to treating the focused popup as a browser tab.
+    if (params.has('mvmos_tab_id') || params.has('mvmos_tab_url')) return Promise.resolve(tabFromAddress());
+    // A host that embeds the popup (the mvmOS Desktop app) can answer which
+    // page the user is on better than tabs.query, which there may name the
+    // popup itself. It offers __mvmosActiveTab, which answers with an http(s)
+    // page or null, and may only install it after the page has loaded.
+    function fromHost() {
+      return Promise.resolve(globalThis.__mvmosActiveTab())
+        .then(function (tab) { return isHostTab(tab) ? tab : null; })
+        .catch(function () { return null; });
+    }
+    if (typeof globalThis.__mvmosActiveTab === 'function') return fromHost();
+    return queryActiveTab().then(function (tab) {
+      // Only web pages provide site context. If the focused extension page
+      // was returned, give the embedding host a moment to supply the site.
+      if (isHostTab(tab)) return tab;
+      if (!tab || String(tab.url || '').indexOf(location.origin) !== 0) return null;
+      return new Promise(function (resolve) {
+        var waited = 0;
+        (function poll() {
+          if (typeof globalThis.__mvmosActiveTab === 'function') { resolve(fromHost()); return; }
+          waited += 100;
+          if (waited >= 3000) { resolve(null); return; }
+          setTimeout(poll, 100);
+        })();
+      });
+    });
   }
   function postToFrame(message) {
     if (!frame.contentWindow || !serverOrigin) return false;

@@ -1767,3 +1767,11 @@ async def _apphub_extapi_tokens_js():
 async def _apphub_layout_js():
     return FileResponse(os.path.join(_PUB_DIR, "layout.js"),
                         media_type="application/javascript")
+
+
+@public_page_router.get("/feed.js")
+async def _apphub_feed_js():
+    # Community's composer and feed: the Community tab mounts all of it, and
+    # every public app page's header (layout.js) opens just the composer.
+    return FileResponse(os.path.join(_PUB_DIR, "feed.js"),
+                        media_type="application/javascript")

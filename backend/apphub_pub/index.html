@@ -28,6 +28,15 @@
   .tab{background:none;border:none;padding:10px 14px;font-size:.88rem;color:var(--fg2);border-bottom:2px solid transparent;margin-bottom:-1px;transition:color .15s,border-color .15s}
   .tab.active{color:var(--accent);border-color:var(--accent)}
   .tab:hover:not(.active){color:var(--fg)}
+  .tab-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--red);margin-left:6px;vertical-align:middle}
+  .tab-dot[hidden]{display:none}
+  .subtabs{display:flex;flex-wrap:wrap;gap:6px}
+  .subtab{background:var(--surface2);border:1px solid var(--border);color:var(--fg2);border-radius:999px;padding:7px 14px;font-size:.85rem;font-weight:600}
+  .subtab.active{background:var(--accent);border-color:var(--accent);color:#1e1e2e}
+  .subtab:hover:not(.active){color:var(--fg)}
+  .aud-opt{display:flex;align-items:flex-start;gap:10px;padding:10px;border-radius:10px;border:2px solid var(--border);cursor:pointer}
+  .aud-opt.active{border-color:var(--accent)}
+  .aud-opt small{display:block;color:var(--fg2);margin-top:3px;font-size:.78rem}
   .section{padding:16px}
   .app-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:12px;padding:16px}
   .app-card{position:relative;background:var(--surface1);border:1px solid var(--border);border-radius:12px;padding:16px 12px;display:flex;flex-direction:column;align-items:center;gap:8px;cursor:pointer;transition:background .12s,border-color .12s;text-decoration:none;color:var(--fg)}
@@ -248,28 +257,31 @@ function renderRegForm() {
 // ── Dashboard ───────────────────────────────────────────────────
 
 let _activeTab = 'apps';
+let _feedView = null;     // the mounted Community feed, while that tab is open
+let _feedUnseen = 0;      // posts others shared since this account last looked
+let _feedPoll = null;
+let _settingsSection = 'appearance';
 
 function showDashboard(activeTab) {
   activeTab = _activeTab = activeTab || 'apps';
   app.innerHTML = `
     <div class="tab-bar">
       <button class="tab${activeTab==='apps'?' active':''}" data-t="apps">${t('ah_pub_tab_apps')}</button>
+      <button class="tab${activeTab==='community'?' active':''}" data-t="community">${t('feed_tab')}<span class="tab-dot" id="feed-dot"${_feedUnseen && activeTab!=='community' ? '' : ' hidden'}></span></button>
       <button class="tab${activeTab==='store'?' active':''}" data-t="store">${t('ah_pub_tab_store')}</button>
       <button class="tab${activeTab==='favourites'?' active':''}" data-t="favourites">${t('ah_pub_tab_favourites')}</button>
-      ${_me.api ? `<button class="tab${activeTab==='api'?' active':''}" data-t="api">${t('extapi_pub_title')}</button>` : ''}
     </div>
     <div id="d-body" style="flex:1;overflow-y:auto"></div>`;
 
   window.MvmLayout && MvmLayout.refresh();
   app.querySelectorAll('.tab').forEach(t => {
     t.onclick = () => {
-      app.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
-      t.classList.add('active');
-      _activeTab = t.dataset.t;
+      _markTab(t.dataset.t);
       renderTab(t.dataset.t);
     };
   });
   renderTab(activeTab);
+  _startFeedPoll();
 }
 
 // A language change (Settings tab, applied live by layout.js without a full
@@ -283,7 +295,11 @@ window.addEventListener('i18n-loaded', () => {
 
 function renderTab(t) {
   clearInterval(_badgePoll);
+  if (_feedView) { _feedView.destroy(); _feedView = null; }
   const c = app.querySelector('#d-body');
+  // The API used to be a tab of its own; it now lives in Settings, and old
+  // links to ?tab=api land there.
+  if (t === 'api') { _settingsSection = 'api'; t = 'settings'; _markTab('settings'); }
   // Credits exist only where the installation is licensed. Without it the tab
   // is not hidden behind a lock — it is not a place you can get to at all, so
   // even ?tab=credits typed by hand just lands on the app list.
@@ -293,10 +309,10 @@ function renderTab(t) {
   if (t === 'api' && !(_me && _me.api)) t = 'apps';
   if (t === 'invitations' && !(_me && _me.invitations)) t = 'apps';
   if (t === 'apps')       renderApps(c);
+  if (t === 'community')  renderCommunity(c);
   if (t === 'store')      renderStore(c);
   if (t === 'favourites') renderFavourites(c);
   if (t === 'credits')    renderCredits(c);
-  if (t === 'api')        renderApi(c);
   if (t === 'invitations') renderInvitations(c);
   if (t === 'profile')    renderProfile(c);
   if (t === 'settings')   renderSettings(c);
@@ -310,13 +326,16 @@ function renderTab(t) {
 window.MvmApphub = {
   goToTab(tab) {
     if (!_me || !app.querySelector('.tab-bar')) return;
-    app.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
-    const btn = app.querySelector(`.tab[data-t="${tab}"]`);
-    if (btn) btn.classList.add('active');
-    _activeTab = tab;
+    _markTab(tab);
     renderTab(tab);
   }
 };
+
+function _markTab(tab) {
+  app.querySelectorAll('.tab').forEach(x => x.classList.toggle('active', x.dataset.t === tab));
+  _activeTab = tab;
+  _setFeedDot(_feedUnseen);
+}
 
 // ── Apps tab ────────────────────────────────────────────────────
 
@@ -846,8 +865,20 @@ function renderSettings(c) {
   try { disableSoftwareKeyboard = JSON.parse(localStorage.getItem('apphub_public_display') || '{}').disable_software_keyboard === true; } catch (_) {}
   const availableLangs = (window.mvmOS && window.mvmOS.availableLangs) || ['en'];
 
+  // Settings grew past what fits one scrolling column on a phone, so it is
+  // split into sections; all of them are drawn and only one is shown.
+  const sections = [
+    ['appearance', t('ah_pub_settings_sec_appearance')],
+    ['formats', t('ah_pub_settings_sec_formats')],
+    ['sharing', t('feed_settings_title')],
+  ].concat(_me.api ? [['api', t('extapi_pub_title')]] : []);
+  if (!sections.some(s => s[0] === _settingsSection)) _settingsSection = 'appearance';
+
   c.innerHTML = `
-    <div class="section" style="max-width:480px;display:flex;flex-direction:column;gap:20px">
+    <div class="section" style="max-width:${_settingsSection === 'api' ? '1200px' : '480px'};display:flex;flex-direction:column;gap:20px">
+      <div class="subtabs">${sections.map(([id, label]) =>
+        `<button type="button" class="subtab${id === _settingsSection ? ' active' : ''}" data-sec="${id}">${esc(label)}</button>`).join('')}</div>
+      <div data-sec="appearance" style="display:flex;flex-direction:column;gap:20px">
       <div class="card" style="padding:16px;display:flex;flex-direction:column;gap:12px">
         <div style="font-weight:600;font-size:13px">${t('ah_pub_settings_theme_label')}</div>
         <div id="st-theme" style="display:flex;gap:12px"></div>
@@ -856,6 +887,8 @@ function renderSettings(c) {
         <div style="font-weight:600;font-size:13px">${t('ah_pub_settings_font_label')}</div>
         <div id="st-font" style="display:flex;flex-wrap:wrap;gap:10px"></div>
       </div>
+      </div>
+      <div data-sec="formats" style="display:flex;flex-direction:column;gap:20px">
       <div class="card" style="padding:16px;display:flex;flex-direction:column;gap:12px">
         <div style="font-weight:600;font-size:13px">${t('ah_pub_settings_language_label')}</div>
         <div id="st-lang" style="display:flex;flex-wrap:wrap;gap:10px"></div>
@@ -879,8 +912,54 @@ function renderSettings(c) {
         <span><strong style="display:block;font-size:13px">${t('ah_pub_disable_software_keyboard')}</strong><small style="display:block;margin-top:4px;color:var(--fg2)">${t('ah_pub_per_device')}</small></span>
         <input id="st-disable-software-keyboard" type="checkbox" ${disableSoftwareKeyboard ? 'checked' : ''}>
       </label>
+      </div>
+      <div data-sec="sharing" style="display:flex;flex-direction:column;gap:20px">
+        <div class="card" style="padding:16px;display:flex;flex-direction:column;gap:12px">
+          <div style="font-weight:600;font-size:13px">${t('feed_settings_audience')}</div>
+          <div style="font-size:.8rem;color:var(--fg2)">${t('feed_settings_audience_hint')}</div>
+          <div id="st-audience" style="display:flex;flex-direction:column;gap:8px"></div>
+        </div>
+      </div>
+      ${_me.api ? '<div data-sec="api"><div class="card" style="padding:16px"><div id="api-tokens"></div></div></div>' : ''}
       <div class="err" id="st-err"></div>
     </div>`;
+
+  let apiMounted = false;
+  function showSection(id) {
+    _settingsSection = id;
+    c.querySelectorAll('.subtab').forEach(b => b.classList.toggle('active', b.dataset.sec === id));
+    c.querySelectorAll('div[data-sec]').forEach(el => { el.style.display = el.dataset.sec === id ? 'flex' : 'none'; });
+    c.firstElementChild.style.maxWidth = id === 'api' ? '1200px' : '480px';
+    if (id === 'api' && !apiMounted) { apiMounted = true; _mountApiTokens(c.querySelector('#api-tokens')); }
+  }
+  c.querySelectorAll('.subtab').forEach(b => { b.onclick = () => showSection(b.dataset.sec); });
+  showSection(_settingsSection);
+
+  // Who a new post is for unless chosen otherwise when writing it.
+  const audWrap = c.querySelector('#st-audience');
+  function renderAudience(current) {
+    audWrap.innerHTML = [['favourites', '⭐', t('feed_aud_favourites'), t('feed_aud_favourites_hint')],
+                         ['all', '🌍', t('feed_aud_all'), t('feed_aud_all_hint')]].map(([v, icon, label, hint]) => `
+      <label class="aud-opt${current === v ? ' active' : ''}">
+        <input type="radio" name="st-aud" value="${v}" ${current === v ? 'checked' : ''} style="margin-top:3px">
+        <span><strong>${icon} ${esc(label)}</strong><small>${esc(hint)}</small></span>
+      </label>`).join('');
+    audWrap.querySelectorAll('input').forEach(inp => {
+      inp.onchange = async () => {
+        renderAudience(inp.value);
+        const r = await fetch(BASE + '/feed/settings', {
+          method: 'PUT', headers: {'Content-Type':'application/json','X-Pub-Token':_token},
+          body: JSON.stringify({ audience: inp.value })
+        }).catch(() => null);
+        const errEl = c.querySelector('#st-err');
+        if (errEl) errEl.textContent = r && r.ok ? '' : t('ah_pub_error_saving');
+      };
+    });
+  }
+  fetch(BASE + '/feed/settings', { headers: {'X-Pub-Token':_token} })
+    .then(r => r.ok ? r.json() : { audience: 'favourites' })
+    .then(d => renderAudience(d.audience))
+    .catch(() => renderAudience('favourites'));
 
   const themeWrap = c.querySelector('#st-theme');
   const fontWrap  = c.querySelector('#st-font');
@@ -1001,23 +1080,61 @@ function renderSettings(c) {
   renderTimeFormatButtons();
 }
 
-// ── API tab ─────────────────────────────────────────────────────
-
-function renderApi(c) {
-  c.innerHTML = `
-    <div class="section" style="max-width:1200px">
-      <div class="card" style="padding:16px"><div id="api-tokens"></div></div>
-    </div>`;
-  _mountApiTokens(c.querySelector('#api-tokens'));
-}
+// ── API (a section of Settings) ─────────────────────────────────
 
 function _mountApiTokens(box) {
   const mount = () => ExtApiTokens.mount(box, { base: '/api/pub/extapi', headers: () => ({ 'X-Pub-Token': _token }) });
   if (window.ExtApiTokens) return mount();
   const s = document.createElement('script');
-  s.src = '/pub/apphub/extapi-tokens.js?v=1.9.0.4';
+  s.src = window.asset('/pub/apphub/extapi-tokens.js');
   s.onload = mount;
   document.head.appendChild(s);
+}
+
+// ── Community tab ───────────────────────────────────────────────
+// Posts the people on this server share with each other. The feed itself,
+// and the composer every app page's header opens too, are in feed.js.
+
+function _loadFeedJs() {
+  if (window.MvmFeed) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = window.asset('/pub/apphub/feed.js');
+    s.onload = resolve;
+    s.onerror = reject;
+    document.head.appendChild(s);
+  });
+}
+
+function _setFeedDot(n) {
+  _feedUnseen = n;
+  const dot = app.querySelector('#feed-dot');
+  if (dot) dot.hidden = !n || _activeTab === 'community';
+}
+
+async function _checkFeed() {
+  if (!_token || document.hidden) return;
+  try {
+    const r = await fetch(BASE + '/feed/unseen', { headers: { 'X-Pub-Token': _token } });
+    if (!r.ok) return;
+    const n = (await r.json()).count || 0;
+    if (_activeTab === 'community' && _feedView) _feedView.notifyNew(n);
+    else _setFeedDot(n);
+  } catch (_) {}
+}
+
+function _startFeedPoll() {
+  if (_feedPoll) return;
+  _checkFeed();
+  _feedPoll = setInterval(_checkFeed, 60000);
+  document.addEventListener('visibilitychange', _checkFeed);
+}
+
+async function renderCommunity(c) {
+  c.innerHTML = '<div class="section"></div>';
+  try { await _loadFeedJs(); } catch (_) { return; }
+  if (_activeTab !== 'community' || !c.isConnected) return;
+  _feedView = MvmFeed.mount(c.firstElementChild, { me: _me, onSeen: () => _setFeedDot(0) });
 }
 
 // ── Invitations tab ─────────────────────────────────────────────

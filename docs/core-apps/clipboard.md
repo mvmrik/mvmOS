@@ -20,7 +20,7 @@ A small dot on the taskbar button shows that something new arrived from another 
 
 ## Managing items
 
-Each item can be copied back to the system clipboard (text and common image types), downloaded, pinned, or deleted. Clicking an image opens it in the image viewer, where it can be zoomed around the pointer and panned while enlarged. On the desktop, files also have Copy path, which copies the file's location on the server so it can be pasted into a terminal or handed to a tool that reads files from the installation. The public page never shows server paths. Long text is shown collapsed and opens with a click. Clear removes everything that is not pinned.
+Each item can be copied back to the system clipboard (text and common image types; images need an HTTPS address, while text also copies when mvmOS is opened by IP over plain http), downloaded, pinned, or deleted. Clicking an image opens it in the image viewer, where it can be zoomed around the pointer and panned while enlarged. On the desktop, files also have Copy path, which copies the file's location on the server so it can be pasted into a terminal or handed to a tool that reads files from the installation. The public page never shows server paths. Long text is shown collapsed and opens with a click. Clear removes everything that is not pinned.
 
 Items are removed automatically 24 hours after they were added. Pinned items stay until they are unpinned or deleted. One file can be up to 50 MB, and a single owner can keep up to 250 MB and 200 items; when a limit is reached the new item is refused with a message instead of older ones being deleted silently.
 

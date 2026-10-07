@@ -77,6 +77,7 @@ from .startup import router as startup_router, _init_startup_db, run_startup_app
 from .apphub import router as apphub_router, public_page_router as apphub_public_router, _init_db as _init_apphub_db, is_app_public
 from .notifications import router as notifications_router
 from .clipboard import router as clipboard_router, purge_on_startup as _purge_clipboard
+from .feed import router as feed_router, init_db as _init_feed_db, mark_actions as _mark_feed_actions
 from .automations import router as automations_router, desktop_router as automations_desktop_router, watch_requests as _watch_automations
 from .platform_api import router as platform_router
 from .extapi import admin_router as extapi_admin_router, pub_router as extapi_pub_router, gateway_router as extapi_gateway_router
@@ -93,6 +94,7 @@ _purge_clipboard()
 init_ssh_access_db()
 _init_startup_db()
 _init_apphub_db()
+_init_feed_db()
 
 app.include_router(auth_router)
 app.include_router(terminal_router)
@@ -123,6 +125,9 @@ app.include_router(automations_router, prefix="/pub/automations")
 app.include_router(automations_desktop_router)
 # A finished write to an app's own /pub/<app>/ routes is an Automations event.
 app.middleware("http")(_watch_automations)
+# ...and the same write is offered to its author for sharing in Community.
+app.middleware("http")(_mark_feed_actions)
+app.include_router(feed_router)
 app.include_router(platform_router)
 app.include_router(extapi_admin_router)
 app.include_router(extapi_pub_router)
