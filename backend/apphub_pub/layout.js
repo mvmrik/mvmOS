@@ -732,6 +732,118 @@
     renderActivity();
   }
 
+  // ── Live strip ────────────────────────────────────────────────────
+  // A full-width row of its own under the header, never part of the header:
+  // on a phone the header has no room left, and a row of its own keeps the
+  // text readable. It is only there while something is going on — one item
+  // shows in full, and when there are more a "+N" button opens the rest
+  // inside the strip, pushing the page down instead of covering it.
+  var _live = [];
+  var _liveAt = 0;       // when _live was fetched, to keep running timers ticking
+  var _liveOpen = false;
+  var _liveTimer = null;
+
+  function clock(sec) {
+    sec = Math.max(0, Math.floor(sec));
+    var h = Math.floor(sec / 3600), m = Math.floor(sec % 3600 / 60), s = sec % 60;
+    function p(n) { return (n < 10 ? '0' : '') + n; }
+    return (h ? h + ':' : '') + p(m) + ':' + p(s);
+  }
+
+  var LIVE_ACT = {
+    pause:  ['⏸', 'ah_live_act_pause', 'Pause'],
+    resume: ['▶', 'ah_live_act_resume', 'Resume'],
+    stop:   ['⏹', 'ah_live_act_stop', 'Stop'],
+    done:   ['✓', 'ah_live_act_done', 'Done']
+  };
+
+  function liveRow(it) {
+    var idx = _live.indexOf(it);
+    var shown = it.elapsed_seconds == null ? '' : clock(it.elapsed_seconds + (it.state === 'running' ? (Date.now() - _liveAt) / 1000 : 0));
+    var state = it.state === 'paused' ? tt('ah_live_paused', 'Paused') : tt('ah_live_running', 'Running');
+    var acts = (it.actions || []).map(function (a, n) {
+      var d = LIVE_ACT[a.type];
+      return d ? '<button type="button" class="mvm-live-act" data-i="' + idx + '" data-a="' + n + '">' +
+        '<span>' + d[0] + '</span> ' + esc(tt(d[1], d[2])) + '</button>' : '';
+    }).join('');
+    return '<div class="mvm-live-item"><a class="mvm-live-row" href="/pub/' + esc(it.app) + '/">' +
+      '<span class="mvm-live-ico">' + esc(it.icon) + '</span>' +
+      '<span class="mvm-live-text"><span class="mvm-live-title">' + esc(it.title) + '</span>' +
+      '<span class="mvm-live-state">' + esc(state) + '</span></span>' +
+      '<span class="mvm-live-time" data-i="' + idx + '">' + esc(shown) + '</span></a>' +
+      (acts ? '<div class="mvm-live-acts">' + acts + '</div>' : '') + '</div>';
+  }
+
+  async function liveAct(btn) {
+    var it = _live[+btn.dataset.i], a = it && it.actions[+btn.dataset.a];
+    if (!a) return;
+    var all = document.querySelectorAll('.mvm-live-act');
+    all.forEach(function (b) { b.disabled = true; });
+    try {
+      var r = await fetch('/api/pub/apphub/live/action', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Pub-Token': localStorage.getItem(TOKEN_KEY) || '' },
+        body: JSON.stringify({ app: it.app, function: a.function, args: a.args })
+      });
+      if (r.ok) {
+        var d = await r.json();
+        _live = d.items || [];
+        _liveAt = Date.now();
+        renderLive();
+        return;
+      }
+    } catch (e) {}
+    // Something changed meanwhile (the timer was stopped elsewhere): show the real state.
+    refreshLive();
+  }
+
+  function renderLive() {
+    var el = document.querySelector('.mvm-live');
+    var hdr = document.querySelector('.mvm-hdr');
+    if (!_live.length || !hdr) {
+      if (el) el.remove();
+      clearInterval(_liveTimer); _liveTimer = null;
+      return;
+    }
+    if (!el) {
+      el = document.createElement('div');
+      el.className = 'mvm-live';
+      hdr.after(el);
+    }
+    var more = _live.length - 1;
+    el.innerHTML = '<div class="mvm-live-main"><div class="mvm-live-first">' + liveRow(_live[0]) + '</div>' +
+      (more > 0 ? '<button type="button" class="mvm-live-more" aria-expanded="' + _liveOpen + '" aria-label="' +
+        esc(tt('ah_live_title', 'Happening now')) + '">+' + more + '</button>' : '') + '</div>' +
+      (more > 0 && _liveOpen ? '<div class="mvm-live-list">' + _live.slice(1).map(liveRow).join('') + '</div>' : '');
+    el.querySelectorAll('.mvm-live-act').forEach(function (b) { b.onclick = function () { liveAct(b); }; });
+    var btn = el.querySelector('.mvm-live-more');
+    if (btn) btn.onclick = function () { _liveOpen = !_liveOpen; renderLive(); };
+    if (!_liveTimer) _liveTimer = setInterval(tickLive, 1000);
+  }
+
+  function tickLive() {
+    if (document.hidden) return;
+    document.querySelectorAll('.mvm-live-time').forEach(function (n) {
+      var it = _live[+n.dataset.i];
+      if (it && it.state === 'running' && it.elapsed_seconds != null) {
+        n.textContent = clock(it.elapsed_seconds + (Date.now() - _liveAt) / 1000);
+      }
+    });
+  }
+
+  async function refreshLive() {
+    var token = localStorage.getItem(TOKEN_KEY);
+    if (!token) { _live = []; renderLive(); return; }
+    try {
+      var r = await fetch('/api/pub/apphub/live', { headers: { 'X-Pub-Token': token } });
+      if (!r.ok) return;
+      var d = await r.json();
+      _live = Array.isArray(d.items) ? d.items : [];
+      _liveAt = Date.now();
+    } catch (e) { return; }
+    renderLive();
+  }
+
   function ensureStyle() {
     if (document.getElementById('mvm-layout-css')) return;
     var s = document.createElement('style');
@@ -739,6 +851,23 @@
     s.textContent =
       '.mvm-hdr{display:flex;align-items:center;gap:12px;padding:9px 16px;border-bottom:1px solid var(--border,#45475a);' +
       'background:var(--surface1,#181825);font-family:system-ui,sans-serif;flex-shrink:0;order:-1}' +
+      '.mvm-live{order:-1;flex-shrink:0;background:var(--surface2,#313244);border-bottom:1px solid var(--border,#45475a);font-family:system-ui,sans-serif}' +
+      '.mvm-live-main{display:flex;align-items:stretch}' +
+      '.mvm-live-first,.mvm-live-item{flex:1;min-width:0}' +
+      '.mvm-live-acts{display:flex;gap:8px;padding:0 16px 10px}' +
+      '.mvm-live-act{flex:1;min-height:44px;border:1px solid var(--border,#45475a);border-radius:9px;background:var(--surface1,#181825);' +
+      'color:var(--fg,#cdd6f4);font-size:14px;font-weight:600;font-family:inherit;cursor:pointer}' +
+      '.mvm-live-act:hover{border-color:var(--accent,#89b4fa)}.mvm-live-act:disabled{opacity:.5}' +
+      '.mvm-live-row{display:flex;align-items:center;gap:10px;flex:1;min-width:0;min-height:48px;padding:6px 16px;box-sizing:border-box;' +
+      'text-decoration:none;color:var(--fg,#cdd6f4)}' +
+      '.mvm-live-list .mvm-live-item{border-top:1px solid var(--border,#45475a)}' +
+      '.mvm-live-ico{font-size:20px;flex-shrink:0}' +
+      '.mvm-live-text{display:flex;flex-direction:column;min-width:0;flex:1}' +
+      '.mvm-live-title{font-size:14px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}' +
+      '.mvm-live-state{font-size:11.5px;color:var(--green,#a6e3a1)}' +
+      '.mvm-live-time{font-size:16px;font-weight:700;font-variant-numeric:tabular-nums;flex-shrink:0}' +
+      '.mvm-live-more{flex-shrink:0;min-width:48px;border:none;border-left:1px solid var(--border,#45475a);background:none;' +
+      'color:var(--accent,#89b4fa);font-size:14px;font-weight:700;font-family:inherit;cursor:pointer}' +
       '.mvm-crumbs{display:flex;align-items:center;min-width:0;font-family:system-ui,sans-serif}' +
       '.mvm-sw-btn{display:flex;align-items:center;gap:7px;min-width:0;max-width:100%;height:34px;padding:0 10px 0 8px;' +
       'background:var(--surface2,#313244);border:1px solid var(--border,#45475a);border-radius:9px;cursor:pointer;' +
@@ -1209,6 +1338,10 @@
       applyTheme(user.theme, user.font_size);
       applyLanguage(user.language);
       refreshNotifications();
+      refreshLive();
+    } else {
+      _live = [];
+      renderLive();
     }
   }
 
@@ -1225,8 +1358,11 @@
     setInterval(function () {
       if (!document.hidden) refreshNotifications();
     }, 60000);
+    setInterval(function () {
+      if (!document.hidden) refreshLive();
+    }, 30000);
     document.addEventListener('visibilitychange', function () {
-      if (!document.hidden) refreshNotifications();
+      if (!document.hidden) { refreshNotifications(); refreshLive(); }
     });
   }
 
@@ -1235,6 +1371,7 @@
     // Apps that create a notification themselves (or act on one) can pull the
     // bell up to date instead of waiting for the next poll.
     refreshNotifications: refreshNotifications,
+    refreshLive: refreshLive,
     THEMES: THEMES, FONT_SCALE: FONT_SCALE
   };
 
@@ -1246,7 +1383,7 @@
   // switch to trigger it. This re-renders from the cached fetch rather than
   // calling refresh(), which would repeat /me and /credits on every page load.
   window.addEventListener('i18n-loaded', function () {
-    if (document.querySelector('.mvm-hdr')) renderHeader();
+    if (document.querySelector('.mvm-hdr')) { renderHeader(); renderLive(); }
   });
 
   if (document.body) init();

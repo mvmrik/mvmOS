@@ -51,6 +51,12 @@ Every public app page has a New post button in the shared header. It opens the c
 
 The public Settings page is now split into sections: Appearance, Language and formats, Sharing, and, for profiles that have it, the API. Links that used to open the API tab open it there.
 
+## What is happening now
+
+When something is running in one of a profile's apps, a row of its own appears under the header of every public page, for example a Tasks timer with its title and a clock that keeps counting. Tapping it opens the app. When more than one thing is running, a +N button at the end of the row opens the rest inside the row, pushing the page down instead of covering it. The row is only there while there is something to show and it belongs to the profile alone; nobody else sees it.
+
+An app takes part by offering a `get_live_activity` function in its app API, and it is shown only for apps that the profile keeps on its home screen. The administrator's app-to-app switch is not needed, because the profile only reads its own data on its own page. An item can also carry buttons — pause, resume, stop or done — each naming a function of the same app, and the row draws them under the title, full width on a phone. The page can only run a button the app offered a moment before for that profile. Tasks reports its running and paused timers with Pause or Resume and Stop. The function is for the page itself and is not listed in the External APIs or in Automations.
+
 ## App-to-app communication
 
 Apps Hub is also the switchboard for server-side app-to-app calls. An app may expose a small `app_api.py` surface, but Apps Hub keeps that API disabled until the administrator enables it for the target app. Calling apps use the central Apps Hub API rather than importing another app directly, so the permission gate remains enforceable. For any app that exposes one, Apps Hub also lists the individual actions it makes available — name, parameters, and a short description read straight from the function's own docstring — so an administrator can see exactly what an integration would be able to call before enabling it.

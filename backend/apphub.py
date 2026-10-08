@@ -41,7 +41,7 @@ another app's app_api.py directly — so this stays the single enforceable trust
 boundary even after apps are sandboxed into separate processes down the line.
 """
 
-import contextlib, hashlib, json, os, secrets, sqlite3, sys, uuid
+import asyncio, contextlib, hashlib, inspect, json, os, secrets, sqlite3, sys, uuid
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, Header
@@ -1083,6 +1083,115 @@ async def me_pub(x_pub_token: Optional[str] = Header(default=None)):
         "invitations": invitations_enabled(),
         "api": _extapi_public(),
     })
+
+
+# ── Live strip ──────────────────────────────────────────────────
+# What is going on right now, for the strip under the public header: a running
+# timer today, a reminder that is about to fall due later. An app takes part
+# by offering get_live_activity(user_id) in its app_api.py; the profile only
+# sees apps it keeps on its shelf. The administrator's app-to-app switch is
+# not involved: it guards one app reaching into another, while here the
+# profile only reads its own data on its own page. Nothing is stored here.
+
+@_pub.get("/live")
+async def live_activity(x_pub_token: Optional[str] = Header(default=None)):
+    u = get_pub_session(x_pub_token)
+    if not u:
+        raise HTTPException(401)
+    return JSONResponse({"items": await asyncio.to_thread(_live_items, u["id"])})
+
+
+def _live_items(user_id: str) -> list:
+    shelf = get_user_apps(user_id)
+    apps_dir = os.path.join(os.path.dirname(__file__), "..", "apps")
+    out = []
+    for app_id in _detect_app_apis():
+        if not shelf.get(app_id) or not is_app_public(app_id):
+            continue
+        try:
+            mod = _load_app_api(app_id)
+            fn = getattr(mod, "get_live_activity", None)
+            if not callable(fn):
+                continue
+            with _confine_app(app_id):
+                rows = fn(user_id)
+        except Exception:
+            continue
+        try:
+            m = json.load(open(os.path.join(apps_dir, app_id, "manifest.json")))
+        except Exception:
+            m = {}
+        for r in (rows or [])[:5]:
+            if not isinstance(r, dict) or not r.get("title"):
+                continue
+            out.append({
+                "app": app_id,
+                "icon": m.get("icon") or "📦",
+                "id": str(r.get("id", "")),
+                "title": str(r["title"])[:120],
+                "state": str(r.get("state", "running")),
+                "elapsed_seconds": r.get("elapsed_seconds"),
+                "due_at": r.get("due_at"),
+                "actions": _live_actions(r.get("actions")),
+            })
+    return out[:20]
+
+
+# The kinds of button the strip knows how to draw. An app picks one and names
+# its own function for it, so the strip never has to know what a "pause" is
+# inside any particular app.
+_LIVE_ACTIONS = ("pause", "resume", "stop", "done")
+
+
+def _live_actions(raw) -> list:
+    out = []
+    for a in (raw or [])[:3]:
+        if (isinstance(a, dict) and a.get("type") in _LIVE_ACTIONS
+                and isinstance(a.get("function"), str) and not a["function"].startswith("_")):
+            args = a.get("args")
+            out.append({"type": a["type"], "function": a["function"],
+                        "args": args if isinstance(args, dict) else {}})
+    return out
+
+
+class LiveActionBody(BaseModel):
+    app: str
+    function: str
+    args: dict = {}
+
+
+@_pub.post("/live/action")
+async def live_action(body: LiveActionBody, x_pub_token: Optional[str] = Header(default=None)):
+    u = get_pub_session(x_pub_token)
+    if not u:
+        raise HTTPException(401)
+    return JSONResponse(await asyncio.to_thread(_live_run, u["id"], body))
+
+
+def _live_run(user_id: str, body: LiveActionBody) -> dict:
+    """Run a button of the strip. Only what an app offered a moment ago for
+    this very profile can be run — the page cannot name any other function."""
+    offered = any(
+        i["app"] == body.app and any(a["function"] == body.function and a["args"] == body.args
+                                     for a in i["actions"])
+        for i in _live_items(user_id))
+    if not offered:
+        raise HTTPException(400, "Not available any more")
+    fn = getattr(_load_app_api(body.app), body.function, None)
+    if not callable(fn):
+        raise HTTPException(400, "Not available any more")
+    try:
+        with _confine_app(body.app):
+            res = fn(user_id, **body.args)
+            if inspect.isawaitable(res):
+                asyncio.run(_await_it(res))
+    except (ValueError, LookupError) as e:
+        raise HTTPException(400, str(e))
+    return {"ok": True, "items": _live_items(user_id)}
+
+
+async def _await_it(aw):
+    return await aw
 
 
 def _extapi_public() -> bool:
