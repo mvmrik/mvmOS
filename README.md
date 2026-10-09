@@ -70,7 +70,7 @@ window instead — this is that.
 
 ## Apps, widgets and themes
 
-The official store currently offers **48 apps, 5 widgets and 4 themes**, sorted into thirteen
+The official store currently offers **49 apps, 5 widgets and 4 themes**, sorted into thirteen
 categories. It is a plain Git repository, so you can point mvmOS at your own store instead,
 or in addition — private apps for your own machines work exactly like public ones.
 
