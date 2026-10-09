@@ -869,6 +869,7 @@ window._i18n = {
   'ah_pub_no_installed_apps':      'You have not added any apps yet.',
   'ah_pub_open_store':             'Open the Store',
   'ah_pub_store_hint':             'Pick which apps appear on your home screen. Removing one only hides it — nothing you saved in it is deleted, and you can add it back at any time.',
+  'ah_pub_store_search':           'Search apps',
   'ah_pub_store_cat_summary':      '{total} apps · {added} added',
   'ah_pub_store_back':             '← Categories',
   'ah_pub_store_installed_btn':    '✓ Added ({n})',

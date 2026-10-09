@@ -869,6 +869,7 @@ window._i18n = {
   'ah_pub_no_installed_apps':      'Você ainda não adicionou nenhum aplicativo.',
   'ah_pub_open_store':             'Abrir a Loja',
   'ah_pub_store_hint':             'Escolha quais aplicativos aparecem na sua tela inicial. Remover um apenas o oculta — nada do que você salvou nele é excluído, e você pode adicioná-lo de volta a qualquer momento.',
+  'ah_pub_store_search':           'Buscar aplicativos',
   'ah_pub_store_cat_summary':      '{total} aplicativos · {added} adicionados',
   'ah_pub_store_back':             '← Categorias',
   'ah_pub_store_installed_btn':    '✓ Adicionado ({n})',

@@ -869,6 +869,7 @@ window._i18n = {
   'ah_pub_no_installed_apps':      'Sie haben noch keine Apps hinzugefügt.',
   'ah_pub_open_store':             'Store öffnen',
   'ah_pub_store_hint':             'Wählen Sie, welche Apps auf Ihrem Startbildschirm erscheinen. Das Entfernen einer App blendet sie nur aus — nichts, was Sie darin gespeichert haben, wird gelöscht, und Sie können sie jederzeit wieder hinzufügen.',
+  'ah_pub_store_search':           'App suchen',
   'ah_pub_store_cat_summary':      '{total} Apps · {added} hinzugefügt',
   'ah_pub_store_back':             '← Kategorien',
   'ah_pub_store_installed_btn':    '✓ Hinzugefügt ({n})',

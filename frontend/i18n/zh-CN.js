@@ -869,6 +869,7 @@ window._i18n = {
   'ah_pub_no_installed_apps':      '你还没有添加任何应用。',
   'ah_pub_open_store':             '打开商店',
   'ah_pub_store_hint':             '选择要显示在主页上的应用。移除某个应用只是将其隐藏 — 你在其中保存的内容不会被删除，随时都可以重新添加回来。',
+  'ah_pub_store_search':           '搜索应用',
   'ah_pub_store_cat_summary':      '共 {total} 个应用 · 已添加 {added} 个',
   'ah_pub_store_back':             '← 分类',
   'ah_pub_store_installed_btn':    '✓ 已添加（{n}）',

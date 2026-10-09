@@ -869,6 +869,7 @@ window._i18n = {
   'ah_pub_no_installed_apps':      'Aún no has añadido ninguna aplicación.',
   'ah_pub_open_store':             'Abrir la Tienda',
   'ah_pub_store_hint':             'Elige qué aplicaciones aparecen en tu pantalla de inicio. Quitar una solo la oculta — nada de lo que hayas guardado en ella se elimina, y puedes volver a añadirla en cualquier momento.',
+  'ah_pub_store_search':           'Buscar aplicaciones',
   'ah_pub_store_cat_summary':      '{total} aplicaciones · {added} añadidas',
   'ah_pub_store_back':             '← Categorías',
   'ah_pub_store_installed_btn':    '✓ Añadidas ({n})',

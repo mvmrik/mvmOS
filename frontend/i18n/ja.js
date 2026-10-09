@@ -869,6 +869,7 @@ window._i18n = {
   'ah_pub_no_installed_apps':      'まだアプリを追加していません。',
   'ah_pub_open_store':             'ストアを開く',
   'ah_pub_store_hint':             'ホーム画面に表示するアプリを選びます。削除しても非表示になるだけで、保存済みのデータは失われず、いつでも再度追加できます。',
+  'ah_pub_store_search':           'アプリを検索',
   'ah_pub_store_cat_summary':      '全{total}アプリ・追加済み{added}',
   'ah_pub_store_back':             '← カテゴリ',
   'ah_pub_store_installed_btn':    '✓ 追加済み（{n}）',

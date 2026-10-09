@@ -613,6 +613,7 @@ const AppStore = (() => {
       await mvmOS._loadPlugin(appData.id);
       if (wasOpen) Desktop.reloadApp?.(appData.id);
       body._as?.refreshCurrent?.();
+      mvmOS.refreshAppUpdateNotification?.();
       return true;
     }
     restore();
@@ -784,9 +785,8 @@ const AppStore = (() => {
   }
 
   function _backendConfirmDialog(body, appName) {
-    return mvmOS.requireRoot(
-      t('appstore_backend_title'),
-      `"${appName}" ${t('appstore_backend_msg')}<br><span style="color:#f38ba8;font-size:.8rem">${t('appstore_backend_warn')}</span>`
+    return mvmOS.confirm(
+      `"${mvmOS._escHtml(appName)}" ${t('appstore_backend_msg')}<br><span style="color:#f38ba8;font-size:.8rem">${t('appstore_backend_warn')}</span>`
     );
   }
 
@@ -1707,6 +1707,7 @@ const UpdateManager = (() => {
           mvmosUpdates = mvmosUpdates.filter(x => !(x.id === u.id && x.type === u.type));
           row.remove();
           renderMvmOS();
+          mvmOS.refreshAppUpdateNotification?.();
         });
         mvmosList.appendChild(row);
       });
@@ -1732,6 +1733,7 @@ const UpdateManager = (() => {
         mvmosAllBtn.textContent = t('um_update_all');
       }
       renderMvmOS();
+      mvmOS.refreshAppUpdateNotification?.();
     });
 
     loadMvmOS();
@@ -1828,8 +1830,8 @@ const UpdateManager = (() => {
         const result = await install('/api/plugins/install', payload);
         if (result.needs_backend_confirm) {
           if (!batch?.backendConfirmed) {
-            const confirmed = await mvmOS.requireRoot(t('appstore_backend_title'),
-              batch ? t('um_backend_batch_confirm') : `"${u.name}" ${t('appstore_backend_msg')}`);
+            const confirmed = await mvmOS.confirm(batch ? t('um_backend_batch_confirm') :
+              `"${mvmOS._escHtml(u.name)}" ${t('appstore_backend_msg')}<br><span style="color:#f38ba8;font-size:.8rem">${t('appstore_backend_warn')}</span>`);
             if (!confirmed) { if (batch) batch.cancelled = true; return false; }
             if (batch) batch.backendConfirmed = true;
           }

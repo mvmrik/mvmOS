@@ -24,8 +24,8 @@
   .inp{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--fg);font-size:.9rem;width:100%;outline:none}
   .inp:focus{border-color:var(--accent)}
   .err{color:var(--red);font-size:.82rem;min-height:18px}
-  .tab-bar{display:flex;gap:6px;border-bottom:1px solid var(--border);padding:0 16px;flex-shrink:0}
-  .tab{background:none;border:none;padding:10px 14px;font-size:.88rem;color:var(--fg2);border-bottom:2px solid transparent;margin-bottom:-1px;transition:color .15s,border-color .15s}
+  .tab-bar{display:flex;gap:6px;border-bottom:1px solid var(--border);padding:0 16px;flex-shrink:0;min-width:0}
+  .tab{flex:1;min-width:0;background:none;border:none;padding:10px 14px;font-size:.88rem;color:var(--fg2);border-bottom:2px solid transparent;margin-bottom:-1px;transition:color .15s,border-color .15s;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .tab.active{color:var(--accent);border-color:var(--accent)}
   .tab:hover:not(.active){color:var(--fg)}
   .tab-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--red);margin-left:6px;vertical-align:middle}
@@ -44,6 +44,8 @@
   .app-icon{font-size:2.2rem;line-height:1;position:relative}
   .app-badge{position:absolute;top:-2px;right:-4px;width:10px;height:10px;border-radius:50%;background:var(--red);border:2px solid var(--surface1)}
   .app-name{font-size:.85rem;font-weight:600;text-align:center}
+  #apps-grid .app-card{padding:14px 10px;min-height:96px;justify-content:center}
+  #apps-grid .app-name{line-height:1.25;overflow-wrap:anywhere}
   .app-desc{font-size:.72rem;color:var(--fg2);text-align:center;line-height:1.4}
   .st-row{display:flex;align-items:flex-start;gap:12px;background:var(--surface1);border:1px solid var(--border);border-radius:12px;padding:14px}
   .st-row .app-icon{font-size:1.8rem}
@@ -55,6 +57,7 @@
   .st-btn:hover{opacity:.85}
   .st-btn:disabled{opacity:.45;cursor:default}
   .avatar{border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;color:#1e1e2e;flex-shrink:0}
+  @media(max-width:600px){.tab-bar{gap:2px;padding:0 6px}.tab{padding:10px 4px;font-size:.82rem}#apps-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;padding:12px}#apps-grid .app-card{min-height:84px;padding:10px 5px;gap:6px}#apps-grid .app-icon{font-size:1.8rem}#apps-grid .app-name{font-size:.73rem;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}}
 </style>
 </head>
 <body>
@@ -269,7 +272,6 @@ function showDashboard(activeTab) {
       <button class="tab${activeTab==='apps'?' active':''}" data-t="apps">${t('ah_pub_tab_apps')}</button>
       <button class="tab${activeTab==='community'?' active':''}" data-t="community">${t('feed_tab')}<span class="tab-dot" id="feed-dot"${_feedUnseen && activeTab!=='community' ? '' : ' hidden'}></span></button>
       <button class="tab${activeTab==='store'?' active':''}" data-t="store">${t('ah_pub_tab_store')}</button>
-      <button class="tab${activeTab==='favourites'?' active':''}" data-t="favourites">${t('ah_pub_tab_favourites')}</button>
     </div>
     <div id="d-body" style="flex:1;overflow-y:auto"></div>`;
 
@@ -374,9 +376,7 @@ function _setPref(key, value) {
 }
 
 // Usage (open_count / last_opened_at) lives server-side per Apps Hub
-// account (backend/apphub.py: app_usage table) so recent/frequent sort
-// order and the stats shown on each card agree across every device the
-// same account logs in from, instead of drifting per browser.
+// account so recent/frequent sorting agrees across every device.
 function _recordUsage(id) {
   if (!_token) return;
   // The card is a plain <a href>, so the click that calls this navigates away
@@ -387,23 +387,6 @@ function _recordUsage(id) {
   fetch(BASE + '/apps/' + encodeURIComponent(id) + '/open', {
     method: 'POST', headers: {'X-Pub-Token': _token}, keepalive: true
   }).catch(() => {});
-}
-
-function _relativeTime(iso) {
-  if (!iso) return t('ah_pub_usage_never');
-  const then = new Date(iso).getTime();
-  const days = Math.floor((Date.now() - then) / 86400000);
-  if (days <= 0) return t('ah_pub_usage_today');
-  if (days === 1) return t('ah_pub_usage_yesterday');
-  if (days < 30) return t('ah_pub_usage_days_ago', {n: days});
-  // Years are counted off the same 30-day month as the step above, not off 365
-  // days: mixing the two dropped days 360-364 past "11 months" into
-  // Math.floor(days / 365) === 0 and printed "0 years ago".
-  const months = Math.floor(days / 30);
-  if (months < 12) return months === 1 ? t('ah_pub_usage_month_ago')
-                                       : t('ah_pub_usage_months_ago', {n: months});
-  const years = Math.floor(months / 12);
-  return years === 1 ? t('ah_pub_usage_year_ago') : t('ah_pub_usage_years_ago', {n: years});
 }
 
 function _getSortPref() { return _prefs.apps_sort || 'alpha'; }
@@ -454,9 +437,8 @@ let _apps = null;
 async function _loadApps(force) {
   if (_apps && !force) return _apps;
   try {
-    // With the token, /apps answers with this account's open_count,
-    // last_opened_at and installed flag per app; without it the server has no
-    // identity to look usage up for and every card reads "never / 0".
+    // With the token, /apps answers with this account's usage and installed
+    // flag; without it the server has no identity for those preferences.
     const r = await fetch(BASE + '/apps', _token ? {headers: {'X-Pub-Token': _token}} : undefined);
     _apps = r.ok ? await r.json() : [];
   } catch(_) { _apps = []; }
@@ -484,17 +466,11 @@ async function renderApps(c) {
 
   const categories = [...new Set(apps.map(a => a.category || 'Utilities'))].sort((a, b) => _catName(a).localeCompare(_catName(b)));
   const categoryMode = _getCategoryPref(categories);
-  const sortMode = _getSortPref();
   c.innerHTML = `
-    <div style="display:flex;align-items:center;justify-content:flex-end;gap:8px;padding:12px 16px 0;flex-wrap:wrap">
+    <div style="display:flex;align-items:center;justify-content:flex-start;gap:8px;padding:12px 16px 0;flex-wrap:wrap">
       <select class="inp" id="apps-category" aria-label="${esc(t('ah_apps_category'))}" title="${esc(t('ah_apps_category'))}" style="width:auto;padding:5px 10px;font-size:.8rem">
         <option value="all">${t('ah_apps_all_categories')}</option>
         ${categories.map(category => `<option value="${esc(category)}"${categoryMode===category?' selected':''}>${esc(_catName(category))}</option>`).join('')}
-      </select>
-      <select class="inp" id="apps-sort" aria-label="${esc(t('ah_pub_sort_by'))}" title="${esc(t('ah_pub_sort_by'))}" style="width:auto;padding:5px 10px;font-size:.8rem">
-        <option value="alpha"${sortMode==='alpha'?' selected':''}>${t('ah_pub_sort_alpha')}</option>
-        <option value="recent"${sortMode==='recent'?' selected':''}>${t('ah_pub_sort_recent')}</option>
-        <option value="frequent"${sortMode==='frequent'?' selected':''}>${t('ah_pub_sort_frequent')}</option>
       </select>
     </div>
     <div class="app-grid" id="apps-grid"></div>`;
@@ -507,7 +483,6 @@ async function renderApps(c) {
       <a class="app-card" href="${esc(a.public_url)}" data-id="${esc(a.id)}">
         <div class="app-icon">${esc(a.icon)}${badges[a.id] ? '<span class="app-badge"></span>' : ''}</div>
         <div class="app-name">${esc(_appName(a))}</div>
-        <div class="app-desc">${esc(t('ah_pub_usage_summary', {count: a.open_count || 0, last: _relativeTime(a.last_opened_at)}))}</div>
       </a>`).join('');
     c.querySelectorAll('.app-card').forEach(el => {
       el.addEventListener('click', () => _recordUsage(el.dataset.id));
@@ -515,7 +490,6 @@ async function renderApps(c) {
   };
   renderGrid();
 
-  c.querySelector('#apps-sort').onchange = e => { _setSortPref(e.target.value); renderGrid(); };
   c.querySelector('#apps-category').onchange = e => { _setCategoryPref(e.target.value); renderGrid(); };
 
   clearInterval(_badgePoll);
@@ -570,17 +544,25 @@ async function renderStore(c) {
   const categoryOf = a => a.category || 'Utilities';
   const categories = [...new Set(apps.map(categoryOf))].sort((a, b) => _catName(a).localeCompare(_catName(b)));
   if (_storeView && _storeView !== 'installed' && !categories.includes(_storeView)) _storeView = null;
+  c.innerHTML = `
+    <div style="padding:16px 16px 0;color:var(--fg2);font-size:.82rem;line-height:1.5">${t('ah_pub_store_hint')}</div>
+    <div style="padding:12px 16px 0">
+      <input class="inp" id="store-search" type="search" autocomplete="off"
+        aria-label="${esc(t('ah_pub_store_search'))}" placeholder="${esc(t('ah_pub_store_search'))}">
+    </div>
+    <div id="store-content"></div>`;
+  const content = c.querySelector('#store-content');
+  const search = c.querySelector('#store-search');
 
   const drawCategories = () => {
     const added = apps.filter(a => a.installed).length;
-    c.innerHTML = `
-      <div style="padding:16px 16px 0;color:var(--fg2);font-size:.82rem;line-height:1.5">${t('ah_pub_store_hint')}</div>
+    content.innerHTML = `
       <div style="padding:12px 16px 0">
         <button class="st-btn" id="store-installed"${added ? '' : ' disabled'}>${esc(t('ah_pub_store_installed_btn', {n: added}))}</button>
       </div>
       <div class="app-grid" id="store-grid"></div>`;
-    c.querySelector('#store-installed').onclick = () => { _storeView = 'installed'; drawApps(); };
-    c.querySelector('#store-grid').innerHTML = categories.map(category => {
+    content.querySelector('#store-installed').onclick = () => { _storeView = 'installed'; drawApps(); };
+    content.querySelector('#store-grid').innerHTML = categories.map(category => {
       const inCategory = apps.filter(a => categoryOf(a) === category);
       const added = inCategory.filter(a => a.installed).length;
       return `
@@ -590,40 +572,34 @@ async function renderStore(c) {
           <div class="app-desc">${esc(t('ah_pub_store_cat_summary', {total: inCategory.length, added}))}</div>
         </div>`;
     }).join('');
-    c.querySelectorAll('[data-cat]').forEach(el => {
+    content.querySelectorAll('[data-cat]').forEach(el => {
       el.onclick = () => { _storeView = el.dataset.cat; drawApps(); };
     });
   };
 
-  const drawApps = () => {
-    const installedView = _storeView === 'installed';
+  const drawRows = (rows, installedView, title, showBack) => {
     // The added list keeps showing an app after it is taken off, so the button
     // that just said "remove" can put it straight back — a redraw would make
     // the row vanish under the cursor and an accidental click unfixable.
-    const rows = (installedView ? apps.filter(a => a.installed)
-                                : apps.filter(a => categoryOf(a) === _storeView))
-                 .sort((a, b) => _appName(a).localeCompare(_appName(b)));
-    c.innerHTML = `
-      <div style="padding:12px 16px 0">
-        <button class="st-btn" id="store-back">${t('ah_pub_store_back')}</button>
-      </div>
-      <div style="padding:12px 16px;font-weight:600">${esc(installedView ? t('ah_pub_store_installed_title') : _catName(_storeView))}</div>
+    content.innerHTML = `
+      ${showBack ? `<div style="padding:12px 16px 0"><button class="st-btn" id="store-back">${t('ah_pub_store_back')}</button></div>` : ''}
+      ${title ? `<div style="padding:12px 16px;font-weight:600">${esc(title)}</div>` : ''}
       <div class="err" id="store-err" style="padding:0 16px"></div>
       <div style="display:flex;flex-direction:column;gap:10px;padding:0 16px 16px" id="store-list"></div>`;
-    c.querySelector('#store-back').onclick = () => { _storeView = null; drawCategories(); };
+    if (showBack) content.querySelector('#store-back').onclick = () => { _storeView = null; drawCategories(); };
 
-    const list = c.querySelector('#store-list');
-    list.innerHTML = rows.map(a => `
+    const list = content.querySelector('#store-list');
+    list.innerHTML = rows.length ? rows.map(a => `
       <div class="st-row">
         <div class="app-icon">${esc(a.icon)}</div>
         <div class="st-info">
           <div class="app-name">${esc(_appName(a))}</div>
-          <div class="app-desc">${esc(installedView ? _catName(categoryOf(a)) : (a.description || ''))}</div>
+          <div class="app-desc">${esc(installedView || !showBack ? _catName(categoryOf(a)) : (a.description || ''))}</div>
         </div>
         <button class="st-btn${a.installed ? '' : ' add'}" data-app="${esc(a.id)}">
           ${a.installed ? t('ah_pub_store_remove') : t('ah_pub_store_add')}
         </button>
-      </div>`).join('');
+      </div>`).join('') : `<div style="padding:20px;text-align:center;color:var(--fg2)">${esc(t('no_results'))}</div>`;
 
     list.querySelectorAll('[data-app]').forEach(btn => {
       btn.onclick = async () => {
@@ -643,12 +619,29 @@ async function renderStore(c) {
           btn.textContent = wanted ? t('ah_pub_store_remove') : t('ah_pub_store_add');
           btn.classList.toggle('add', !wanted);
         } catch (_) {
-          c.querySelector('#store-err').textContent = t('ah_pub_store_failed');
+          content.querySelector('#store-err').textContent = t('ah_pub_store_failed');
         }
         btn.disabled = false;
       };
     });
   };
+
+  const drawApps = () => {
+    const installedView = _storeView === 'installed';
+    const rows = (installedView ? apps.filter(a => a.installed)
+                                : apps.filter(a => categoryOf(a) === _storeView))
+                 .sort((a, b) => _appName(a).localeCompare(_appName(b)));
+    drawRows(rows, installedView, installedView ? t('ah_pub_store_installed_title') : _catName(_storeView), true);
+  };
+
+  search.addEventListener('input', () => {
+    const query = search.value.trim().toLocaleLowerCase();
+    if (!query) { if (_storeView) drawApps(); else drawCategories(); return; }
+    const rows = apps.filter(a => [_appName(a), a.description || '', _catName(categoryOf(a))]
+      .some(value => value.toLocaleLowerCase().includes(query)))
+      .sort((a, b) => _appName(a).localeCompare(_appName(b)));
+    drawRows(rows, false, '', false);
+  });
 
   if (_storeView) drawApps(); else drawCategories();
 }
@@ -676,7 +669,7 @@ async function _toggleFav(p) {
 }
 
 async function renderFavourites(c) {
-  c.innerHTML = `<div class="section" style="display:flex;flex-direction:column;gap:14px;max-width:560px"></div>`;
+  c.innerHTML = `<div class="section" style="display:flex;flex-direction:column;gap:14px;max-width:560px"><h2 style="font-size:1.1rem">${t('ah_pub_tab_favourites')}</h2></div>`;
   const sc = c.querySelector('.section');
 
   if (_favs === null) await _loadFavs();
@@ -869,6 +862,7 @@ function renderSettings(c) {
   // split into sections; all of them are drawn and only one is shown.
   const sections = [
     ['appearance', t('ah_pub_settings_sec_appearance')],
+    ['apps', t('ah_pub_tab_apps')],
     ['formats', t('ah_pub_settings_sec_formats')],
     ['sharing', t('feed_settings_title')],
   ].concat(_me.api ? [['api', t('extapi_pub_title')]] : []);
@@ -887,6 +881,16 @@ function renderSettings(c) {
         <div style="font-weight:600;font-size:13px">${t('ah_pub_settings_font_label')}</div>
         <div id="st-font" style="display:flex;flex-wrap:wrap;gap:10px"></div>
       </div>
+      </div>
+      <div data-sec="apps" style="display:flex;flex-direction:column;gap:20px">
+        <div class="card" style="padding:16px;display:flex;flex-direction:column;gap:12px">
+          <label for="st-apps-sort" style="font-weight:600;font-size:13px">${t('ah_pub_sort_by')}</label>
+          <select class="inp" id="st-apps-sort">
+            <option value="alpha"${_getSortPref()==='alpha'?' selected':''}>${t('ah_pub_sort_alpha')}</option>
+            <option value="recent"${_getSortPref()==='recent'?' selected':''}>${t('ah_pub_sort_recent')}</option>
+            <option value="frequent"${_getSortPref()==='frequent'?' selected':''}>${t('ah_pub_sort_frequent')}</option>
+          </select>
+        </div>
       </div>
       <div data-sec="formats" style="display:flex;flex-direction:column;gap:20px">
       <div class="card" style="padding:16px;display:flex;flex-direction:column;gap:12px">
@@ -934,6 +938,7 @@ function renderSettings(c) {
   }
   c.querySelectorAll('.subtab').forEach(b => { b.onclick = () => showSection(b.dataset.sec); });
   showSection(_settingsSection);
+  c.querySelector('#st-apps-sort').onchange = e => _setSortPref(e.target.value);
 
   // Who a new post is for unless chosen otherwise when writing it.
   const audWrap = c.querySelector('#st-audience');

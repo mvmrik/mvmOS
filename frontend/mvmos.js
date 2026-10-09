@@ -1096,12 +1096,18 @@ var mvmOS = (() => {
     } catch (_) {}
   }
 
+  let _updatesCheckVersion = 0;
   async function _checkUpdates() {
+    const version = ++_updatesCheckVersion;
     try {
       const res = await fetch('/api/updates');
       if (!res.ok) return;
       const updates = await res.json();
-      if (!updates.length) return;
+      if (version !== _updatesCheckVersion) return;
+      if (!updates.length) {
+        await markNotifsRead('system', 'app-updates');
+        return;
+      }
       const count = updates.length;
       _pushNotif(
         t('updates_available', { n: count, s: count !== 1 ? 's' : '' }),
@@ -1650,6 +1656,9 @@ var mvmOS = (() => {
     // Notifications app mutates notifications directly via fetch; call this
     // afterwards so the bell badge/panel reflect the change immediately.
     _refreshNotifs: _loadNotifs,
+    // Store and Update Manager call this after a successful install so the
+    // persistent update notice reflects the remaining updates immediately.
+    refreshAppUpdateNotification: _checkUpdates,
     // Notifications app's own fetch calls need the same X-Pub-Token header
     // as the bell (see _identities() in backend/notifications.py).
     _pubHeaders,

@@ -16,6 +16,7 @@ Notifications is the system-wide notification centre and taskbar bell. Apps can 
 - Mark individual notices, groups of notices, or viewed notices as read.
 - Delete old notifications.
 - Open the relevant app or destination through an action attached to a notice.
+- Clear the app update notice automatically when no app updates remain after installation or a fresh update check.
 
 ## Desktop notices stay on the desktop
 

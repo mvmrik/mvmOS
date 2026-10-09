@@ -29,11 +29,11 @@ The Clipboard is a built-in app with a public page of its own, so it appears in 
 
 ## Each profile chooses its own home screen
 
-The public portal has two views of the same list. **Apps** is the profile’s own home screen; **Store** is everything the administrator has published, grouped by category, with a description for each app. Adding an app from the Store puts it on the home screen, removing it takes it off again.
+The public portal has two views of the same list. **Apps** is the profile’s own home screen; **Store** is everything the administrator has published, grouped by category, with a description for each app. Search in Store finds apps across all categories. Adding an app from the Store puts it on the home screen, removing it takes it off again.
 
 Removing is only hiding: nothing the app stored for that profile is deleted, and adding the app back returns it exactly as it was. A brand-new profile starts with an empty home screen and builds it from the Store; profiles that were already using apps keep the ones they had opened.
 
-The chosen apps, the sort order and the selected category belong to the profile and are kept on the server, so the same account sees the same home screen on a phone and on a computer.
+The chosen apps, the sort order and the selected category belong to the profile and are kept on the server, so the same account sees the same home screen on a phone and on a computer. Set the Apps sort order under Settings → Apps. Favourites are available from the profile menu in the shared header.
 
 ## Switching public apps
 
@@ -49,13 +49,13 @@ Each post has an audience: everyone with a profile, only the profile's favourite
 
 Every public app page has a New post button in the shared header. It opens the composer from inside the app, and offers the recent things the visitor did in that app, such as adding a listing or logging a drink, as values to put into the text, so a post can be written in a moment. The list of recent activity is kept only in the visitor's own browser, is shown only to them and can be cleared. Texts can be saved as templates for an app, up to 50 for each app. Apps do not have to be written for this and none is named in it.
 
-The public Settings page is now split into sections: Appearance, Language and formats, Sharing, and, for profiles that have it, the API. Links that used to open the API tab open it there.
+The public Settings page is split into sections: Appearance, Apps, Language and formats, Sharing, and, for profiles that have it, the API. Links to the API open that section.
 
 ## What is happening now
 
-When something is running in one of a profile's apps, a row of its own appears under the header of every public page, for example a Tasks timer with its title and a clock that keeps counting. Tapping it opens the app. When more than one thing is running, a +N button at the end of the row opens the rest inside the row, pushing the page down instead of covering it. The row is only there while there is something to show and it belongs to the profile alone; nobody else sees it.
+When something is running in one of a profile's apps, a compact panel appears under the header of every public page, for example a Tasks timer with its title and a clock that keeps counting. Tapping it opens the app. When more than one thing is running, a +N button reveals the rest below the first item. The panel is only there while there is something to show and it belongs to the profile alone; nobody else sees it.
 
-An app takes part by offering a `get_live_activity` function in its app API, and it is shown only for apps that the profile keeps on its home screen. The administrator's app-to-app switch is not needed, because the profile only reads its own data on its own page. An item can also carry buttons — pause, resume, stop or done — each naming a function of the same app, and the row draws them under the title, full width on a phone. The page can only run a button the app offered a moment before for that profile. Tasks reports its running and paused timers with Pause or Resume and Stop. The function is for the page itself and is not listed in the External APIs or in Automations.
+An app takes part by offering a `get_live_activity` function in its app API, and it is shown only for apps that the profile keeps on its home screen. The administrator's app-to-app switch is not needed, because the profile only reads its own data on its own page. An item can also carry compact buttons beside the timer — pause, resume, stop or done — each naming a function of the same app. The page can only run a button the app offered a moment before for that profile. Tasks reports its running and paused timers with Pause or Resume and Stop. The function is for the page itself and is not listed in the External APIs or in Automations.
 
 ## App-to-app communication
 

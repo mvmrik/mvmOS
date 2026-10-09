@@ -733,11 +733,9 @@
   }
 
   // ── Live strip ────────────────────────────────────────────────────
-  // A full-width row of its own under the header, never part of the header:
-  // on a phone the header has no room left, and a row of its own keeps the
-  // text readable. It is only there while something is going on — one item
-  // shows in full, and when there are more a "+N" button opens the rest
-  // inside the strip, pushing the page down instead of covering it.
+  // A small panel below the header leaves the app switcher and account
+  // controls usable on phones. Actions stay beside the timer so one activity
+  // occupies a single row; "+N" reveals any additional activities below it.
   var _live = [];
   var _liveAt = 0;       // when _live was fetched, to keep running timers ticking
   var _liveOpen = false;
@@ -763,13 +761,13 @@
     var state = it.state === 'paused' ? tt('ah_live_paused', 'Paused') : tt('ah_live_running', 'Running');
     var acts = (it.actions || []).map(function (a, n) {
       var d = LIVE_ACT[a.type];
-      return d ? '<button type="button" class="mvm-live-act" data-i="' + idx + '" data-a="' + n + '">' +
-        '<span>' + d[0] + '</span> ' + esc(tt(d[1], d[2])) + '</button>' : '';
+      return d ? '<button type="button" class="mvm-live-act" data-i="' + idx + '" data-a="' + n +
+        '" title="' + esc(tt(d[1], d[2])) + '" aria-label="' + esc(tt(d[1], d[2])) + '">' + d[0] + '</button>' : '';
     }).join('');
     return '<div class="mvm-live-item"><a class="mvm-live-row" href="/pub/' + esc(it.app) + '/">' +
       '<span class="mvm-live-ico">' + esc(it.icon) + '</span>' +
       '<span class="mvm-live-text"><span class="mvm-live-title">' + esc(it.title) + '</span>' +
-      '<span class="mvm-live-state">' + esc(state) + '</span></span>' +
+      '<span class="mvm-live-state' + (it.state === 'paused' ? ' paused' : '') + '">' + esc(state) + '</span></span>' +
       '<span class="mvm-live-time" data-i="' + idx + '">' + esc(shown) + '</span></a>' +
       (acts ? '<div class="mvm-live-acts">' + acts + '</div>' : '') + '</div>';
   }
@@ -851,23 +849,26 @@
     s.textContent =
       '.mvm-hdr{display:flex;align-items:center;gap:12px;padding:9px 16px;border-bottom:1px solid var(--border,#45475a);' +
       'background:var(--surface1,#181825);font-family:system-ui,sans-serif;flex-shrink:0;order:-1}' +
-      '.mvm-live{order:-1;flex-shrink:0;background:var(--surface2,#313244);border-bottom:1px solid var(--border,#45475a);font-family:system-ui,sans-serif}' +
-      '.mvm-live-main{display:flex;align-items:stretch}' +
+      '.mvm-live{order:-1;flex-shrink:0;box-sizing:border-box;width:min(680px,calc(100% - 20px));margin:6px auto 0;' +
+      'background:var(--surface2,#313244);border:1px solid var(--border,#45475a);border-radius:10px;font-family:system-ui,sans-serif}' +
+      '.mvm-live-main,.mvm-live-item{display:flex;align-items:center;min-width:0}' +
       '.mvm-live-first,.mvm-live-item{flex:1;min-width:0}' +
-      '.mvm-live-acts{display:flex;gap:8px;padding:0 16px 10px}' +
-      '.mvm-live-act{flex:1;min-height:44px;border:1px solid var(--border,#45475a);border-radius:9px;background:var(--surface1,#181825);' +
-      'color:var(--fg,#cdd6f4);font-size:14px;font-weight:600;font-family:inherit;cursor:pointer}' +
+      '.mvm-live-acts{display:flex;gap:3px;padding:0 7px 0 0;flex-shrink:0}' +
+      '.mvm-live-act{display:grid;place-items:center;width:34px;height:34px;border:1px solid var(--border,#45475a);' +
+      'border-radius:8px;background:var(--surface1,#181825);color:var(--fg,#cdd6f4);font-size:16px;line-height:1;font-family:inherit;cursor:pointer}' +
       '.mvm-live-act:hover{border-color:var(--accent,#89b4fa)}.mvm-live-act:disabled{opacity:.5}' +
-      '.mvm-live-row{display:flex;align-items:center;gap:10px;flex:1;min-width:0;min-height:48px;padding:6px 16px;box-sizing:border-box;' +
+      '.mvm-live-row{display:flex;align-items:center;gap:8px;flex:1;min-width:0;min-height:40px;padding:3px 10px;box-sizing:border-box;' +
       'text-decoration:none;color:var(--fg,#cdd6f4)}' +
       '.mvm-live-list .mvm-live-item{border-top:1px solid var(--border,#45475a)}' +
-      '.mvm-live-ico{font-size:20px;flex-shrink:0}' +
-      '.mvm-live-text{display:flex;flex-direction:column;min-width:0;flex:1}' +
-      '.mvm-live-title{font-size:14px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}' +
-      '.mvm-live-state{font-size:11.5px;color:var(--green,#a6e3a1)}' +
-      '.mvm-live-time{font-size:16px;font-weight:700;font-variant-numeric:tabular-nums;flex-shrink:0}' +
-      '.mvm-live-more{flex-shrink:0;min-width:48px;border:none;border-left:1px solid var(--border,#45475a);background:none;' +
-      'color:var(--accent,#89b4fa);font-size:14px;font-weight:700;font-family:inherit;cursor:pointer}' +
+      '.mvm-live-ico{font-size:17px;line-height:1;flex-shrink:0}' +
+      '.mvm-live-text{display:flex;align-items:center;gap:8px;min-width:0;flex:1}' +
+      '.mvm-live-title{min-width:0;font-size:12.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}' +
+      '.mvm-live-state{display:flex;align-items:center;gap:4px;flex-shrink:0;font-size:10px;color:var(--green,#a6e3a1)}' +
+      '.mvm-live-state:before{content:"";width:5px;height:5px;border-radius:50%;background:currentColor}' +
+      '.mvm-live-state.paused{color:var(--yellow,#f9e2af)}' +
+      '.mvm-live-time{font-size:12.5px;font-weight:700;font-variant-numeric:tabular-nums;flex-shrink:0}' +
+      '.mvm-live-more{align-self:stretch;flex-shrink:0;min-width:36px;border:none;border-left:1px solid var(--border,#45475a);background:none;' +
+      'color:var(--accent,#89b4fa);font-size:12px;font-weight:700;font-family:inherit;cursor:pointer}' +
       '.mvm-crumbs{display:flex;align-items:center;min-width:0;font-family:system-ui,sans-serif}' +
       '.mvm-sw-btn{display:flex;align-items:center;gap:7px;min-width:0;max-width:100%;height:34px;padding:0 10px 0 8px;' +
       'background:var(--surface2,#313244);border:1px solid var(--border,#45475a);border-radius:9px;cursor:pointer;' +
@@ -943,6 +944,9 @@
       'box-shadow:0 8px 24px rgba(0,0,0,.35);font-family:system-ui,sans-serif;font-size:13px;color:var(--fg,#cdd6f4)}' +
       '.mvm-toast a{color:var(--accent,#89b4fa);font-weight:700;text-decoration:none}' +
       '@media(max-width:600px){.mvm-notif{position:fixed;top:72px;right:12px;left:12px;width:auto;max-width:none;max-height:calc(100dvh - 84px)}.mvm-notif-list{max-height:calc(100dvh - 132px)}}' +
+      '@media(max-width:600px){.mvm-live{width:calc(100% - 12px);margin-top:4px}.mvm-live-row{gap:5px;padding:3px 6px;min-height:42px}' +
+      '.mvm-live-ico{font-size:15px}.mvm-live-text{gap:5px}.mvm-live-state{font-size:0;gap:0}.mvm-live-time{font-size:11.5px}' +
+      '.mvm-live-acts{gap:2px;padding-right:4px}.mvm-live-act{width:38px;height:38px}.mvm-live-more{min-width:38px}}' +
       '.mvm-menu{position:absolute;top:calc(100% + 8px);right:0;min-width:200px;background:var(--surface1,#181825);' +
       'border:1px solid var(--border,#45475a);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.35);' +
       'z-index:1000;display:flex;flex-direction:column;padding:6px}' +
@@ -1194,6 +1198,7 @@
           + '<div class="mvm-menu-hdr">' + renderAvatar(user, 32) + '<span class="mvm-menu-name">' + esc(user.display_name) + '</span></div>'
           + (hasCredits ? '<a class="mvm-menu-item" href="/pub/apphub/?tab=credits" data-tab="credits">🪙 ' + esc(creditsText) + '</a>' : '')
           + '<a class="mvm-menu-item" href="/pub/apphub/?tab=profile" data-tab="profile">👤 ' + esc(tt('ah_pub_tab_profile', 'Profile')) + '</a>'
+          + '<a class="mvm-menu-item" href="/pub/apphub/?tab=favourites" data-tab="favourites">⭐ ' + esc(tt('ah_pub_tab_favourites', 'Favorites')) + '</a>'
           + '<a class="mvm-menu-item" href="/pub/apphub/?tab=settings" data-tab="settings">⚙️ ' + esc(tt('ah_pub_tab_settings', 'Settings')) + '</a>'
           + (user.invitations ? '<a class="mvm-menu-item" href="/pub/apphub/?tab=invitations" data-tab="invitations">✉ ' + esc(tt('ah_invitations_title', 'Invitations')) + '</a>' : '')
           + '<button class="mvm-menu-item mvm-menu-logout" type="button">↪ ' + esc(tt('ah_logout', 'Logout')) + '</button>'
