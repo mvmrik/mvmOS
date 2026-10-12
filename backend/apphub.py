@@ -1101,6 +1101,27 @@ async def live_activity(x_pub_token: Optional[str] = Header(default=None)):
     return JSONResponse({"items": await asyncio.to_thread(_live_items, u["id"])})
 
 
+def _live_sort_key(item: dict, index: int) -> tuple:
+    running_timer = (item.get("state") == "running"
+                     and item.get("elapsed_seconds") is not None)
+    when = (item.get("started_at") if running_timer else None)
+    when = when or item.get("activity_at") or item.get("created_at")
+    try:
+        dt = datetime.fromisoformat(str(when).replace("Z", "+00:00"))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        timestamp = dt.timestamp()
+    except (TypeError, ValueError, OverflowError):
+        timestamp = 0
+    return (running_timer, timestamp, index)
+
+
+def _sort_live_items(items: list) -> list:
+    return [item for index, item in sorted(
+        enumerate(items), key=lambda pair: _live_sort_key(pair[1], pair[0]),
+        reverse=True)]
+
+
 def _live_items(user_id: str) -> list:
     shelf = get_user_apps(user_id)
     apps_dir = os.path.join(os.path.dirname(__file__), "..", "apps")
@@ -1121,20 +1142,24 @@ def _live_items(user_id: str) -> list:
             m = json.load(open(os.path.join(apps_dir, app_id, "manifest.json")))
         except Exception:
             m = {}
-        for r in (rows or [])[:5]:
+        app_items = []
+        for r in (rows or []):
             if not isinstance(r, dict) or not r.get("title"):
                 continue
-            out.append({
+            app_items.append({
                 "app": app_id,
                 "icon": m.get("icon") or "📦",
                 "id": str(r.get("id", "")),
                 "title": str(r["title"])[:120],
                 "state": str(r.get("state", "running")),
                 "elapsed_seconds": r.get("elapsed_seconds"),
+                "started_at": r.get("started_at"),
+                "activity_at": r.get("activity_at") or r.get("created_at"),
                 "due_at": r.get("due_at"),
                 "actions": _live_actions(r.get("actions")),
             })
-    return out[:20]
+        out.extend(_sort_live_items(app_items)[:5])
+    return _sort_live_items(out)[:20]
 
 
 # The kinds of button the strip knows how to draw. An app picks one and names

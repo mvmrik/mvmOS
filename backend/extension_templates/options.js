@@ -163,7 +163,7 @@
   (config.settings || []).forEach(function (setting) {
     var wrap = document.createElement('div');
     wrap.className = 'field' + (setting.type === 'boolean' ? ' check' : '') + (setting.show_if ? ' sub-field' : '');
-    var input = setting.type === 'select' ? document.createElement('select') : document.createElement('input');
+    var input = document.createElement(setting.type === 'select' ? 'select' : setting.type === 'textarea' ? 'textarea' : 'input');
     input.id = 'setting-' + setting.key;
     if (setting.type === 'select') {
       (setting.options || []).forEach(function (option) {
@@ -172,14 +172,21 @@
         item.textContent = label(option.label);
         input.appendChild(item);
       });
-    } else {
+    } else if (setting.type !== 'textarea') {
       input.type = setting.type === 'boolean' ? 'checkbox' : 'text';
     }
+    if (setting.placeholder) input.placeholder = label(setting.placeholder);
     var fieldLabel = document.createElement('label');
     fieldLabel.htmlFor = input.id;
     fieldLabel.textContent = label(setting.label);
     if (setting.type === 'boolean') wrap.append(input, fieldLabel);
     else wrap.append(fieldLabel, input);
+    if (setting.hint) {
+      var hint = document.createElement('div');
+      hint.className = 'hint';
+      hint.textContent = label(setting.hint);
+      wrap.appendChild(hint);
+    }
     input.addEventListener('change', refresh);
     document.getElementById('custom-settings').appendChild(wrap);
     fields[setting.key] = input;
