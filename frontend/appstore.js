@@ -838,7 +838,7 @@ const AppStore = (() => {
     main.innerHTML = `
       <div style="padding:10px 14px;display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--border)">
         <button class="s-btn s-btn-sm" id="as-app-settings-back">${t('as_back')}</button>
-        <span style="font-weight:600;font-size:.9rem">${def.icon || ''} ${def.name} — ${t('wstore_settings_title')}</span>
+        <span style="font-weight:600;font-size:.9rem">${def.icon || ''} ${def.name} — ${t('app_settings_title')}</span>
         <span id="as-app-settings-saved" style="font-size:.75rem;color:var(--accent);margin-left:auto;opacity:0;transition:opacity .3s">${t('users_saved')}</span>
       </div>
       <div id="as-app-settings-content" style="padding:14px;display:flex;flex-direction:column;gap:10px;overflow-y:auto;flex:1"></div>

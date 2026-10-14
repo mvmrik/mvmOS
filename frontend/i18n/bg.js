@@ -374,6 +374,7 @@ window._i18n = {
   'app_appstore':                 'Магазин за приложения',
   'app_apphub':                   'Apps Hub',
   'app_settings':                 'Настройки',
+  'app_settings_title':             "Настройки на приложението",
   'app_sites':                    'Сайтове',
   'app_msc':                      'mvmOS Studio Code',
   'app_notifications':            'Известия',

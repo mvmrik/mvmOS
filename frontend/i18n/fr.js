@@ -374,6 +374,7 @@ window._i18n = {
   'app_appstore':                 "Boutique d'applications",
   'app_apphub':                   'Apps Hub',
   'app_settings':                 'Paramètres',
+  'app_settings_title':             "Paramètres de l’application",
   'app_sites':                    'Sites',
   'app_msc':                      'mvmOS Studio Code',
   'app_notifications':            'Notifications',
