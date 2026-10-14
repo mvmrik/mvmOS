@@ -767,6 +767,7 @@ window._i18n = {
   'ah_tab_apps':                  '🔲 公開アプリ',
   'ah_tab_app_apis':              '🔌 アプリAPI',
   'ah_tab_users':                 '👥 ユーザー',
+  'ah_tab_paid_apps':             '💳 有料アプリ',
   'ah_signin_title':              'Apps Hubにサインイン',
   'ah_login':                     'ログイン',
   'ah_register':                  '登録',

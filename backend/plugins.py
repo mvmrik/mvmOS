@@ -615,13 +615,14 @@ async def install_plugin(body: InstallRequest, session=Depends(require_admin)):
             with get_conn() as conn:
                 conn.execute(
                     """INSERT OR REPLACE INTO plugins
-                       (id, name, icon, category, version, description, store_id, installed_at, open_count)
+                       (id, name, icon, category, version, description, store_id, installed_at, open_count, last_opened_at)
                        VALUES (?, ?, ?, ?, ?, ?, ?, strftime('%s','now'), COALESCE(
-                           (SELECT open_count FROM plugins WHERE id=?), 0))""",
+                           (SELECT open_count FROM plugins WHERE id=?), 0),
+                           (SELECT last_opened_at FROM plugins WHERE id=?))""",
                     (body.id, mf.get("name", body.name), mf.get("icon", body.icon),
                      mf.get("category", body.category),
                      mf.get("version", body.version), mf.get("description", body.description),
-                     body.store_id or None, body.id),
+                     body.store_id or None, body.id, body.id),
                 )
             # Always: clears any premium build left from the previous version,
             # then re-fetches it only if this installation is licensed right
@@ -743,12 +744,13 @@ async def install_plugin(body: InstallRequest, session=Depends(require_admin)):
     with get_conn() as conn:
         conn.execute(
             """INSERT OR REPLACE INTO plugins
-               (id, name, icon, category, version, description, store_id, installed_at, open_count)
+               (id, name, icon, category, version, description, store_id, installed_at, open_count, last_opened_at)
                VALUES (?, ?, ?, ?, ?, ?, ?, strftime('%s','now'), COALESCE(
-                   (SELECT open_count FROM plugins WHERE id=?), 0))""",
+                   (SELECT open_count FROM plugins WHERE id=?), 0),
+                   (SELECT last_opened_at FROM plugins WHERE id=?))""",
             (body.id, mf.get("name", body.name), mf.get("icon", body.icon),
              mf.get("category", body.category),
-             mf.get("version", body.version), mf.get("description", body.description), body.store_id or None, body.id),
+             mf.get("version", body.version), mf.get("description", body.description), body.store_id or None, body.id, body.id),
         )
     await _sync_premium(body.id)
     return JSONResponse({"ok": True, "entry": entry_path})

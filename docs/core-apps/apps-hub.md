@@ -75,7 +75,7 @@ The same Premium module lets an administrator assign a separate public display n
 
 ## Free versus credit-priced features
 
-An app can declare the features or services that it is able to charge for. In Apps Hub, the administrator chooses the price for each declared feature:
+An app can declare the features or services that it is able to charge for. In the **Paid Apps** tab of the Apps Hub window, the administrator sees every installed app that declares such a feature, whether or not the app has a public page, and chooses the price for each one:
 
 - A price of `0` keeps that feature free for public users.
 - A positive price makes the app deduct that number of credits when the user chooses the feature.

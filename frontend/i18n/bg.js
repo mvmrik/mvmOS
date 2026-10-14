@@ -767,6 +767,7 @@ window._i18n = {
   'ah_tab_apps':                  '🔲 Публични приложения',
   'ah_tab_app_apis':              '🔌 API между приложения',
   'ah_tab_users':                 '👥 Потребители',
+  'ah_tab_paid_apps':             '💳 Платени приложения',
   'ah_signin_title':              'Вход в Apps Hub',
   'ah_login':                     'Вход',
   'ah_register':                  'Регистрация',

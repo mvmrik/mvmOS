@@ -767,6 +767,7 @@ window._i18n = {
   'ah_tab_apps':                  '🔲 公开应用',
   'ah_tab_app_apis':              '🔌 应用 API',
   'ah_tab_users':                 '👥 用户',
+  'ah_tab_paid_apps':             '💳 付费应用',
   'ah_signin_title':              '登录 Apps Hub',
   'ah_login':                     '登录',
   'ah_register':                  '注册',

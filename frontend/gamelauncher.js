@@ -21,6 +21,8 @@
 //         id: 'towerdefense', name: …, icon: '🏰',
 //         tagline: …,                             // one line under the title
 //         sections: [{ title, render(el) }],      // optional, owner-side only
+//         appSettings: true,                      // optional: the gear opens the app's
+//                                                 // renderSettingsExtra in the App Store
 //       });
 //     },
 //   });
@@ -239,6 +241,10 @@ const GameLauncher = (() => {
       width: game.width || 460,
       height: game.height || 420,
       onMount(body) { render(body, game); },
+      // A game that has owner-side settings (registered as renderSettingsExtra
+      // on its app) gets the window's gear, which opens them in the App Store.
+      appSettings: game.appSettings ? true : undefined,
+      onAppSettings: game.appSettings ? () => AppStore.openWindow({ section: 'my-apps', appId: game.id }) : undefined,
     });
   }
 

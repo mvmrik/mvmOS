@@ -767,6 +767,7 @@ window._i18n = {
   'ah_tab_apps':                  '🔲 Aplicativos Públicos',
   'ah_tab_app_apis':              '🔌 APIs de Aplicativos',
   'ah_tab_users':                 '👥 Usuários',
+  'ah_tab_paid_apps':             '💳 Apps pagos',
   'ah_signin_title':              'Entrar no Apps Hub',
   'ah_login':                     'Entrar',
   'ah_register':                  'Registrar',
