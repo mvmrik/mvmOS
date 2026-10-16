@@ -19,12 +19,6 @@ Enabling a public page makes the app available to every profile; each person the
 
 Use the app button in the shared header to switch directly between public apps without returning to the portal. It follows your home screen’s apps, category and sorting, shows up to ten plus the current app, and includes Home.
 
-Hydration keeps each completed day’s water goal, offers drink colours and custom emoji icons, and can end the day after midnight. Health plots supplied daily goals, shows only recorded metrics in its overview, and offers an expanded laboratory catalogue and editable results through its enabled API.
-
-mvm2factor encrypts secrets and computes codes in the browser after you unlock it. On the first open after upgrading, choose a password to encrypt existing accounts. Its JSON and CSV exports remain readable backups. The Premium integration in mvmPasswords uses encrypted code data locally, reuses an unlocked session or asks for the mvm2factor password, and can remember its key encrypted under the master key when both passwords match.
-
-mvmAI lets you stop a reply, queue follow-up messages and review several proposed app changes together. Classifieds lets you view a listing over its conversation without closing the chat.
-
 ## App-to-app API
 
 Apps Hub also provides a controlled path for one installed app backend to call another in-process. Access is disabled by default per target app. Enable it only when the two apps need that integration and you understand the permission boundary.

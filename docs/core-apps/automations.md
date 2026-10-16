@@ -7,15 +7,15 @@ order: 187
 ---
 ## Purpose
 
-Automations lets apps act on their own. A rule says when it runs, what has to be true, and what to do: for example, when water is logged in Hydration, add an amount to a Budget category, or every morning at eight send a notification. Apps do not have to be written for it. Automations works with every installed app that offers functions to Apps Hub, the same functions the External APIs in [[Settings]] use.
+Automations lets apps act on their own. A rule says when it runs, what has to be true, and what to do: for example, react to a new entry in an installed app or send a notification every morning at eight. Apps do not have to be written for it. Automations works with every installed app that offers functions to Apps Hub, the same functions the External APIs in [[Settings]] use.
 
 ## Building a rule
 
 Open Automations from the Start menu and choose New rule. A rule is built from top to bottom in three steps.
 
 - **When**: choose the app first, then what happens in it, such as Add entry, or Every day at a time with the time of day. Everything after this starts from the chosen app, so it is never asked for twice.
-- **Only if** (optional): compare a number the app reports right now, such as today's total in Hydration, with a value, or a value the event itself carried, listed under This event: which task was completed, which Budget category was changed, how many millilitres the drink had. Values that point to something in the app are chosen from a list of your own items. With more than one condition, choose whether all of them must be true or at least one, for example to react when either of two tasks is completed. Run now and a time of day carry no event values, so a condition on them does not hold then.
-- **Then**: one or more actions. The chosen app's own functions are listed first, followed by Send me a notification. Each function shows its fields with their names; fields that refer to something in the app, such as a Budget category or a drink, are chosen from a list of your own items.
+- **Only if** (optional): compare a number the app reports right now, such as a daily total, with a value, or a value the event itself carried, listed under This event: which task was completed, which category was changed, how many millilitres the drink had. Values that point to something in the app are chosen from a list of your own items. With more than one condition, choose whether all of them must be true or at least one, for example to react when either of two tasks is completed. Run now and a time of day carry no event values, so a condition on them does not hold then.
+- **Then**: one or more actions. The chosen app's own functions are listed first, followed by Send me a notification. Each function shows its fields with their names; fields that refer to something in the app, such as a category or a recorded entry, are chosen from a list of your own items.
 
 At most once a day keeps a rule from running more than once on the same day. A notification can use `{rule}` for the rule's name and `{day}` for today's date.
 

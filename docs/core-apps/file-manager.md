@@ -22,7 +22,7 @@ File Manager is the desktop file browser for the signed-in user’s permitted fi
 
 ## Opening files and default apps
 
-Double-clicking a file in File Manager or on the desktop opens it with the default app for its type. Out of the box images open in the image viewer, video and audio in the media player, source code in the code editor, plain text in the text editor, `.url` shortcuts in the browser, and archives are extracted in place. Store apps can add file types of their own, so a document saved from mvmOffice opens in mvmOffice.
+Double-clicking a file in File Manager or on the desktop opens it with the default app for its type. Out of the box images open in the image viewer, video and audio in the media player, source code in the code editor, plain text in the text editor, `.url` shortcuts in the browser, and archives are extracted in place. Installed apps can register file types of their own, and the chosen default app opens files with those extensions.
 
 Right-click a file and choose Open with to pick another app for that one file. The code editor and the text editor are always offered, whatever the file is. Tick Always use this app to make the choice the new default for every file with that extension. A file type that no app claims shows the same choice when you double-click it.
 
