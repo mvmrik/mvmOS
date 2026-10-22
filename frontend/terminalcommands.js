@@ -399,7 +399,7 @@ const TerminalCommands = (() => {
       list.innerHTML = rows.map((r, i) => r.typed
         ? `<div class="tcm-row${i === sel ? ' sel' : ''}" data-i="${i}"><span>▶</span><div class="tcm-main"><div class="tcm-name">${esc(T('tc_run_typed', { cmd: r.typed }))}</div></div></div>`
         : r.app
-        ? `<div class="tcm-row${i === sel ? ' sel' : ''}" data-i="${i}"><span>${esc(r.app.icon || '📦')}</span><div class="tcm-main"><div class="tcm-name">${esc(r.app.name || r.app.id)}</div></div><span class="tcm-cwd">${esc(T('tc_app_tag'))}</span></div>`
+        ? `<div class="tcm-row${i === sel ? ' sel' : ''}" data-i="${i}"><span>${window.mvmOS.iconHTML(r.app)}</span><div class="tcm-main"><div class="tcm-name">${esc(r.app.name || r.app.id)}</div></div><span class="tcm-cwd">${esc(T('tc_app_tag'))}</span></div>`
         : `<div class="tcm-row${i === sel ? ' sel' : ''}" data-i="${i}"><div class="tcm-main"><div class="tcm-name">${esc(r.item.name)}</div>
              <div class="tcm-cmd">${esc(r.item.command)}</div></div>
              ${r.item.cwd ? `<span class="tcm-cwd">📁 ${esc(r.item.cwd)}</span>` : ''}

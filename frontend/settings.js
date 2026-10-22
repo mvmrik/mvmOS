@@ -2343,7 +2343,7 @@ const Settings = (() => {
               const app = window.mvmOS?._apps?.[appId];
               if (!app) return '';
               return `<div style="display:flex;align-items:center;gap:8px;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:5px 8px">
-                <span>${app.icon}</span>
+                <span>${mvmOS.iconHTML(app)}</span>
                 <span style="flex:1;font-size:.82rem">${app.name}</span>
                 <button data-remove="${appId}" style="background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:.85rem;padding:0 4px">✕</button>
               </div>`;

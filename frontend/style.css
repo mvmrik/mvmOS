@@ -73,6 +73,9 @@ html, body {
 .icon.selected { background: rgba(42,110,224,0.35); }
 .icon.dragging { opacity: 0.4; }
 .icon.drag-over { background: rgba(42,110,224,0.3); outline: 2px dashed var(--accent); border-radius: var(--radius); }
+.ico-img { width: 1em; height: 1em; object-fit: contain; vertical-align: -0.15em; display: inline-block; }
+.taskbar-item .ico-img { margin-right: .35em; }
+.start-menu-item .emoji .ico-img, .start-submenu-item .emoji .ico-img { margin-right: .22em; }
 .icon .icon-emoji { font-size: var(--icon-emoji-size, 2rem); line-height: 1; }
 .icon .icon-label {
   font-size: var(--icon-label-size, 0.75rem);

@@ -11,7 +11,7 @@ The mvmOS desktop runs in the browser and is designed around windows instead of 
 
 ## What you can do
 
-- Launch Core tools and installed Store apps.
+- Launch Core tools and installed Store apps. Apps that declare their own picture icon show it in desktop shortcuts, Start menu results, window titles, the taskbar and tray; other apps keep their emoji. The App Store and Apps Hub also use the declared picture for installed apps.
 - Work with more than one app window at the same time.
 - Pin a window's size and position with the pin button in its title bar, so that app always opens in the same place on this device. The pin is stored only in this browser, is never synced to other devices, and is released as soon as you move, resize or maximize the window. Pinning is not available on phones, where windows always fill the screen.
 - Keep a window above all others with the always-on-top button in its title bar, next to the pin. Other windows can still take the focus, but they open and move underneath it; press the button again to release it. Like pinning, it is not available on phones.

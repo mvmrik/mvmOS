@@ -164,7 +164,7 @@ const GameLauncher = (() => {
     const tagline = _val(game.tagline);
     return `
       <div style="display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center">
-        <div style="font-size:56px;line-height:1">${_esc(game.icon || '🎮')}</div>
+        <div style="font-size:56px;line-height:1">${mvmOS.iconHTML({ icon: game.icon || '🎮', iconImage: game.iconImage || mvmOS._apps?.[game.id]?.iconImage })}</div>
         <div style="font-size:1.15rem;font-weight:700">${_esc(_val(game.name) || game.id)}</div>
         ${tagline ? `<div style="font-size:.85rem;color:var(--text-dim);max-width:420px;line-height:1.5">${_esc(tagline)}</div>` : ''}
       </div>`;

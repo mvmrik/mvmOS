@@ -14,6 +14,16 @@
   // public-page preference.
   var BROWSER_LANGUAGE_ONLY = !!(window.mvmOS && window.mvmOS.browserLanguageOnly);
 
+  // An app's icon as HTML: its own picture where its manifest declares one,
+  // otherwise its emoji.
+  function iconHTML(a, fb) {
+    var img = a && (a.iconImage || a.icon_image);
+    if (img && /^\/apps\/[A-Za-z0-9_-]+\//.test(img)) {
+      return '<img src="' + esc(img) + '" alt="" draggable="false" style="width:1em;height:1em;object-fit:contain;vertical-align:-.15em">';
+    }
+    return esc((a && a.icon) || fb || '📦');
+  }
+
   function esc(s) {
     return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
   }
@@ -611,7 +621,7 @@
 
   function activityApp(id) {
     var found = (_swApps || []).filter(function (a) { return a.id === id; })[0];
-    return { icon: (found && found.icon) || '📦', name: found ? appLabel(found) : (publicNames[id] || id) };
+    return { icon: (found && found.icon) || '📦', icon_image: found && found.icon_image, name: found ? appLabel(found) : (publicNames[id] || id) };
   }
 
   var _feedLoading = null;
@@ -665,7 +675,7 @@
     var app = activityApp(a.app);
     var chips = (a.chips || []).slice(0, 4).join(' · ');
     return '<div class="mvm-act-row">'
-      + '<span class="mvm-act-ico">' + esc(app.icon) + '</span>'
+      + '<span class="mvm-act-ico">' + iconHTML(app) + '</span>'
       + '<span class="mvm-notif-text">'
         + '<span class="mvm-notif-title">' + esc(app.name) + ' · ' + esc(actionLabel(a.action)) + '</span>'
         + (chips ? '<span class="mvm-notif-body">' + esc(chips) + '</span>' : '')
@@ -1072,7 +1082,7 @@
   function switcherRow(a, isHome) {
     var sel = isHome ? homeIsCurrent() : a.id === APP_ID;
     return '<a class="mvm-sw-item' + (sel ? ' mvm-sw-sel' : '') + (isHome ? ' mvm-sw-home' : '') + '" href="' + esc(a.public_url) + '" data-id="' + esc(a.id) + '"' + (sel ? ' aria-current="page"' : '') + '>'
-      + '<span class="mvm-sw-ico">' + esc(a.icon || '📦') + '</span>'
+      + '<span class="mvm-sw-ico">' + iconHTML(a) + '</span>'
       + '<span class="mvm-sw-name">' + esc(isHome ? a.name : appLabel(a)) + '</span>'
       + (sel ? '<span class="mvm-sw-check">✓</span>' : '')
       + '</a>';
@@ -1158,11 +1168,12 @@
     crumbs.className = 'mvm-crumbs';
     var cur = homeIsCurrent() ? homeEntry() : {
       icon: (appMeta && appMeta.icon) || '📦',
+      icon_image: appMeta && appMeta.icon_image,
       name: appMeta ? appLabel(appMeta) : (publicNames[APP_ID] || APP_ID)
     };
     var swLabel = esc(tt('ah_pub_switch_app', 'Switch app'));
     crumbs.innerHTML = '<button class="mvm-sw-btn" type="button" aria-haspopup="true" aria-expanded="false" title="' + swLabel + '" aria-label="' + swLabel + '">'
-      + '<span class="mvm-sw-ico">' + esc(cur.icon) + '</span>'
+      + '<span class="mvm-sw-ico">' + iconHTML(cur) + '</span>'
       + '<span class="mvm-sw-name">' + esc(cur.name) + '</span>'
       + '<span class="mvm-sw-caret">▼</span></button>';
     crumbs.querySelector('.mvm-sw-btn').onclick = function (e) {

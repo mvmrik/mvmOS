@@ -70,9 +70,12 @@ window instead — this is that.
 
 ## Apps, widgets and themes
 
-The official store currently offers **50 apps, 5 widgets and 4 themes**, sorted into thirteen
+The official store currently offers **51 apps, 5 widgets and 4 themes**, sorted into thirteen
 categories. It is a plain Git repository, so you can point mvmOS at your own store instead,
 or in addition — private apps for your own machines work exactly like public ones.
+
+Apps can supply their own picture icon through `icon_image` in `manifest.json`; mvmOS
+1.16.0 shows it across the desktop and Apps Hub, with the emoji kept as a fallback.
 
 Writing an app takes a `manifest.json` and one JavaScript file. Apps run sandboxed: an app
 can read and write its own folder and nothing else, and anything beyond that goes through a

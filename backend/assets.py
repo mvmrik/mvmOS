@@ -66,6 +66,35 @@ def asset(url: str) -> str:
     return f"{path}?{query + '&' if query else ''}v={stamp}"
 
 
+_ICON_FILE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_./-]{0,100}\.(svg|png|webp|jpe?g)$")
+_ICON_MAX_BYTES = 400 * 1024
+
+
+def icon_image(app_id: str, manifest: dict | None) -> str | None:
+    """The URL of an app's own picture icon, or None to keep its emoji.
+
+    An app names the file in its manifest.json ("icon_image": "icon.svg", a
+    path inside its public/ folder). Only a file that is really there, of a
+    picture type, not too large and inside public/ is accepted, so a manifest
+    can never point the desktop at some other address. The emoji in "icon"
+    stays the fallback everywhere a picture cannot be shown."""
+    if not isinstance(app_id, str) or not re.fullmatch(r"[A-Za-z0-9_-]+", app_id):
+        return None
+    name = (manifest or {}).get("icon_image")
+    if not isinstance(name, str) or not _ICON_FILE.match(name) or ".." in name:
+        return None
+    url = f"/apps/{app_id}/{name}"
+    file = _file_of(url)
+    try:
+        public = os.path.realpath(os.path.join(APPS_DIR, app_id, "public"))
+        if (not file or not os.path.realpath(file).startswith(public + os.sep)
+                or not os.path.isfile(file) or os.path.getsize(file) > _ICON_MAX_BYTES):
+            return None
+    except OSError:
+        return None
+    return asset(url)
+
+
 _cache = {"at": 0.0, "body": "{}"}
 
 

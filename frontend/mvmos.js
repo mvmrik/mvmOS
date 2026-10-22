@@ -147,7 +147,7 @@ var mvmOS = (() => {
     apps.forEach(app => {
       const el = document.createElement('div');
       el.className = 'start-submenu-item';
-      el.innerHTML = `<span class="emoji">${app.icon}</span>${app.name}`;
+      el.innerHTML = `<span class="emoji">${_iconHTML(app)}</span>${app.name}`;
       el.addEventListener('click', e => {
         e.stopPropagation();
         _closeFlyout();
@@ -224,7 +224,7 @@ var mvmOS = (() => {
       items.forEach(app => {
         const el = document.createElement('div');
         el.className = 'start-menu-item';
-        el.innerHTML = `<span class="emoji">${app.icon || '📦'}</span>${app.name}`;
+        el.innerHTML = `<span class="emoji">${_iconHTML(app)}</span>${app.name}`;
         el.addEventListener('click', () => {
           startMenu.classList.remove('open');
           _closeFlyout();
@@ -305,6 +305,8 @@ var mvmOS = (() => {
     const meta = _pluginsCache.find(p => p.id === def.id);
     if (meta?.name_i18n) { def.name_i18n = meta.name_i18n; def.name = window.mvmOS.appName(def); }
     if (!def.category && meta?.category) def.category = meta.category;
+    // The app's own picture icon, if its manifest declares one ("icon_image").
+    if (meta?.icon_image && !def.iconImage) def.iconImage = meta.icon_image;
     _apps[def.id] = def;
     _ensureAppsMenuItem();
   }
@@ -826,6 +828,16 @@ var mvmOS = (() => {
     const app = _apps[actionApp];
     if (app) { _trackOpen(actionApp); app.launch(); }
     else { _loadPlugin(actionApp).then(() => _apps[actionApp]?.launch?.()); }
+  }
+
+  // An app's icon as HTML: its own picture where it has one, otherwise the
+  // emoji. `app` is anything with icon (emoji) and iconImage / icon_image.
+  function _iconHTML(app, fallback = '📦') {
+    const img = app && (app.iconImage || app.icon_image);
+    if (img && /^\/apps\/[A-Za-z0-9_-]+\//.test(img)) {
+      return `<img class="ico-img" src="${_escHtml(img)}" alt="" draggable="false">`;
+    }
+    return _escHtml((app && app.icon) || fallback);
   }
 
   function _escHtml(s) {
@@ -1652,6 +1664,7 @@ var mvmOS = (() => {
     _notifText,
     _ensureNotifI18n,
     _escHtml,
+    iconHTML: _iconHTML,
     markNotifsRead,
     // Notifications app mutates notifications directly via fetch; call this
     // afterwards so the bell badge/panel reflect the change immediately.

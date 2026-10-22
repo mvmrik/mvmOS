@@ -78,6 +78,12 @@ window.addEventListener('appinstalled',()=>installButton.hidden=true);
 if('serviceWorker' in navigator) navigator.serviceWorker.register('/pub/apphub/sw.js').catch(()=>{});
 const BASE = '/api/pub/apphub';
 const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;');
+// An app's icon as HTML: its own picture where its manifest declares one, otherwise its emoji.
+const iconHTML = a => {
+  const img = a && (a.iconImage || a.icon_image);
+  if (img && /^\/apps\/[A-Za-z0-9_-]+\//.test(img)) return '<img src="' + esc(img).replace(/"/g, '&quot;') + '" alt="" draggable="false" style="width:1em;height:1em;object-fit:contain;vertical-align:-.15em">';
+  return esc((a && a.icon) || '📦');
+};
 
 let _me = null;
 const _params = new URLSearchParams(location.search);
@@ -481,7 +487,7 @@ async function renderApps(c) {
     const sorted = _sortApps(filtered, _getSortPref());
     c.querySelector('#apps-grid').innerHTML = sorted.map(a => `
       <a class="app-card" href="${esc(a.public_url)}" data-id="${esc(a.id)}">
-        <div class="app-icon">${esc(a.icon)}${badges[a.id] ? '<span class="app-badge"></span>' : ''}</div>
+        <div class="app-icon">${iconHTML(a)}${badges[a.id] ? '<span class="app-badge"></span>' : ''}</div>
         <div class="app-name">${esc(_appName(a))}</div>
       </a>`).join('');
     c.querySelectorAll('.app-card').forEach(el => {
@@ -591,7 +597,7 @@ async function renderStore(c) {
     const list = content.querySelector('#store-list');
     list.innerHTML = rows.length ? rows.map(a => `
       <div class="st-row">
-        <div class="app-icon">${esc(a.icon)}</div>
+        <div class="app-icon">${iconHTML(a)}</div>
         <div class="st-info">
           <div class="app-name">${esc(_appName(a))}</div>
           <div class="app-desc">${esc(installedView || !showBack ? _catName(categoryOf(a)) : (a.description || ''))}</div>

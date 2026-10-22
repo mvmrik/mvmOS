@@ -18,6 +18,7 @@ from .auth import get_current_session, require_admin
 from .db import get_conn, APPS_DIR, SYSTEM_APPS, safe_id, connect_own_db
 from . import app_backends
 from . import premium
+from .assets import icon_image
 
 router = APIRouter(prefix="/api/plugins", tags=["plugins"])
 
@@ -253,8 +254,16 @@ def _annotate(apps: list, installed: dict) -> list:
     result = []
     for app in apps:
         inst = installed.get(app["id"])
+        picture = None
+        if inst is not None:
+            try:
+                with open(os.path.join(APPS_DIR, app["id"], "manifest.json")) as f:
+                    picture = icon_image(app["id"], json.load(f))
+            except (OSError, ValueError):
+                pass
         result.append({
             **app,
+            "icon_image": picture,
             "installed": inst is not None,
             "update_available": inst is not None and inst["version"] != app.get("version", ""),
         })
@@ -478,6 +487,9 @@ async def list_plugins(session=Depends(get_current_session)):
                 mf = json.load(f)
             item["settings"] = mf.get("settings", [])
             item["name_i18n"] = mf.get("name_i18n")
+            # An app's own picture for its icon (the emoji in "icon" stays the
+            # fallback); None when it declares none or the file is not valid.
+            item["icon_image"] = icon_image(r["id"], mf)
             item["replaces_widget"] = mf.get("replaces_widget")
             # manifest.json sits beside public/, not inside it, so the loader
             # cannot fetch it over HTTP any more — it reads entry/css here.
@@ -491,6 +503,7 @@ async def list_plugins(session=Depends(get_current_session)):
             item["browser_extension"] = _browser_extension(r["id"])
         except Exception:
             item["settings"] = []
+            item["icon_image"] = None
             item["replaces_widget"] = None
             # System apps have no manifest.json, so the lookup above always
             # fails for them — but apphub's public page is core-wired (not

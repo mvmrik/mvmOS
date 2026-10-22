@@ -246,6 +246,8 @@ const Desktop = (() => {
       const BUILTIN_ICONS_MAP = { terminal: '🖥️', filemanager: '🗂️', appstore: '📦', settings: '⚙️' };
       const appDef = window.mvmOS?._apps?.[entry.app_id];
       const icon = appDef?.icon || BUILTIN_ICONS_MAP[entry.app_id] || '📦';
+      // An app with its own picture icon shows it; its emoji is the fallback.
+      if (appDef?.iconImage) return { favicon: appDef.iconImage, fallback: icon };
       return icon.startsWith('/') || icon.startsWith('http') ? { favicon: icon } : { emoji: icon };
     }
     const img = ['jpg','jpeg','png','gif','webp','bmp','svg'];
@@ -347,13 +349,13 @@ const Desktop = (() => {
     return _desktopEntries.some(e => e.type === 'app' && e.app_id === id);
   };
 
-  function createIcon({ id, label, emoji, app, favicon, url, fsEntry }) {
+  function createIcon({ id, label, emoji, app, favicon, fallback, url, fsEntry }) {
     const el = document.createElement('div');
     el.className = 'icon';
     el.dataset.id = id;
     el.dataset.app = app || '';
     const iconHtml = favicon
-      ? `<img src="${favicon}" style="width:2rem;height:2rem;object-fit:contain;" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'icon-emoji',textContent:'🔗'}))">`
+      ? `<img src="${favicon}" style="width:2rem;height:2rem;object-fit:contain;" data-fb="${(fallback || '🔗').replace(/"/g, '&quot;')}" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'icon-emoji',textContent:this.dataset.fb}))">`
       : `<span class="icon-emoji">${emoji}</span>`;
     el.innerHTML = `${iconHtml}<span class="icon-label">${label}</span>`;
 
@@ -639,7 +641,7 @@ const Desktop = (() => {
   // `pinKey` names what the pinned size/position belongs to. It defaults to the
   // window id; windows whose id is per-instance (filemanager-2, terminal-3,
   // a viewer keyed by file path) pass a stable key so a pin survives reopening.
-  function createWindow({ id, pinKey, title, icon, width = 700, height = 450, onMount, onResize, onClose, appSettings, onAppSettings, closeToTray = false }) {
+  function createWindow({ id, pinKey, title, icon, iconImage, width = 700, height = 450, onMount, onResize, onClose, appSettings, onAppSettings, closeToTray = false }) {
     const pinId = pinKey || id;
     // bring existing to front if already open (or restore from tray)
     if (_trayItems[id]) { restoreFromTray(id); return windows[id]?.el; }
@@ -652,6 +654,15 @@ const Desktop = (() => {
     const el = document.createElement('div');
     el.className = 'window';
     el.dataset.winId = id;
+
+    // An app with its own picture icon shows it where its emoji leads the
+    // title (the emoji stays the fallback, and anything else is left alone).
+    const _appDef = window.mvmOS?._apps?.[id];
+    const _img = iconImage || _appDef?.iconImage || null;
+    const _emoji = _appDef?.icon || icon || '';
+    const _lead = (_img && typeof title === 'string' && _emoji && title.startsWith(_emoji)) ? title.slice(_emoji.length) : null;
+    const _imgHtml = _lead != null ? window.mvmOS.iconHTML({ icon: _emoji, iconImage: _img }) : '';
+    const titleHtml = _lead != null ? _imgHtml + _lead : title;
 
     const mobile = isMobile();
     const mobileFullscreen = mobile && window._vosSettings?.mobile_fullscreen !== false;
@@ -690,7 +701,7 @@ const Desktop = (() => {
           <button class="wbtn wbtn-min" title="${t('win_minimize')}"></button>
           ${!mobile ? `<button class="wbtn wbtn-max" title="${t('win_maximize')}"></button>` : ''}
         </div>
-        <div class="window-title">${title}</div>
+        <div class="window-title">${titleHtml}</div>
         ${!mobile ? `<button class="wbtn-ontop" title="${t('win_always_on_top')}"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg"><path d="M5 4h14"/><path d="M12 20V9"/><path d="M7 13l5-5l5 5"/></svg></button>` : ''}
         ${!mobile ? `<button class="wbtn-pin" title="${t('win_pin_size')}"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg"><path d="M9 4h6l-.5 5.5L18 12v2h-5v5l-1 1l-1-1v-5H6v-2l3.5-2.5z"/></svg></button>` : ''}
         ${appSettings ? `<button class="wbtn-appsettings" title="${t('settings_title')}">⚙</button>` : ''}
@@ -813,13 +824,14 @@ const Desktop = (() => {
     el.style.zIndex = zCounter;
     focusWindow(id);
 
-    windows[id] = { el, pinId, title, icon: icon || '📦', minimized: false, onTop: false, origStyle: null, closeToTray, onClose, onAppSettings: appSettings ? (onAppSettings || null) : null };
+    windows[id] = { el, pinId, title, icon: icon || '📦', iconImage: _lead != null ? _img : null, titleText: _lead, minimized: false, onTop: false, origStyle: null, closeToTray, onClose, onAppSettings: appSettings ? (onAppSettings || null) : null };
 
     // taskbar button
     const tbItem = document.createElement('div');
     tbItem.className = 'taskbar-item active';
     tbItem.dataset.winId = id;
-    tbItem.textContent = title;
+    if (_lead != null) tbItem.innerHTML = _imgHtml + window.mvmOS._escHtml(_lead);
+    else tbItem.textContent = title;
     tbItem.addEventListener('click', () => _taskbarItemClick(id));
     tbItem.addEventListener('contextmenu', e => {
       e.preventDefault();
@@ -943,7 +955,8 @@ const Desktop = (() => {
       const btn = document.createElement('button');
       btn.className = 'tray-item';
       btn.title = item.title;
-      btn.textContent = item.icon;
+      if (item.iconImage) btn.innerHTML = window.mvmOS.iconHTML({ icon: item.icon, iconImage: item.iconImage });
+      else btn.textContent = item.icon;
       btn.dataset.winId = id;
       btn.addEventListener('click', () => restoreFromTray(id));
       btn.addEventListener('contextmenu', e => {
@@ -977,7 +990,7 @@ const Desktop = (() => {
   function sendToTray(id) {
     if (!windows[id]) return;
     const w = windows[id];
-    _trayItems[id] = { icon: w.icon || '📦', title: w.title };
+    _trayItems[id] = { icon: w.icon || '📦', iconImage: w.iconImage || null, title: w.title };
     w.el.style.display = 'none';
     taskbarWindows.querySelector(`[data-win-id="${id}"]`)?.remove();
     _renderTray();
@@ -997,7 +1010,9 @@ const Desktop = (() => {
       const tbItem = document.createElement('div');
       tbItem.className = 'taskbar-item active';
       tbItem.dataset.winId = id;
-      tbItem.textContent = windows[id].title;
+      const w = windows[id];
+      if (w.iconImage) tbItem.innerHTML = window.mvmOS.iconHTML(w) + window.mvmOS._escHtml(w.titleText);
+      else tbItem.textContent = w.title;
       tbItem.addEventListener('click', () => _taskbarItemClick(id));
       taskbarWindows.appendChild(tbItem);
     }
@@ -1118,7 +1133,7 @@ const Desktop = (() => {
     startMain.style.display = 'none';
     startResults.style.display = '';
     startResults.innerHTML = '';
-    const matches = (window.mvmOS?.searchApps?.(q) || []).map(a => ({ id: a.id, label: a.name || a.id, emoji: a.icon || '📦' }));
+    const matches = (window.mvmOS?.searchApps?.(q) || []).map(a => ({ id: a.id, label: a.name || a.id, emoji: a.icon || '📦', iconImage: a.iconImage }));
     if (!matches.length) {
       startResults.innerHTML = `<div style="padding:8px 14px;font-size:.8rem;color:var(--text-dim)">${t('no_results')}</div>`;
       return;
@@ -1126,7 +1141,7 @@ const Desktop = (() => {
     matches.forEach(a => {
       const el = document.createElement('div');
       el.className = 'start-menu-item';
-      el.innerHTML = `<span class="emoji">${a.emoji}</span> ${a.label}`;
+      el.innerHTML = `<span class="emoji">${a.iconImage ? window.mvmOS.iconHTML({ icon: a.emoji, iconImage: a.iconImage }) : a.emoji}</span> ${a.label}`;
       el.addEventListener('click', () => {
         openApp(a.id);
         startMenu.classList.remove('open');
@@ -1787,7 +1802,8 @@ const Desktop = (() => {
         if (!w) return;
         const btn = document.createElement('button');
         btn.className = 'fs-tb-btn fs-tb-app' + (w.minimized ? ' fs-tb-app-min' : '');
-        btn.textContent = w.icon || '□';
+        if (w.iconImage) btn.innerHTML = window.mvmOS.iconHTML({ icon: w.icon, iconImage: w.iconImage });
+        else btn.textContent = w.icon || '□';
         btn.title = w.title || wid;
         btn.addEventListener('touchend', e => {
           e.preventDefault();

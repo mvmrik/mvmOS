@@ -452,7 +452,7 @@ const AppHub = (() => {
         const visibleApps = selectedCategory === 'all' ? apps : apps.filter(a => (a.category || 'Utilities') === selectedCategory);
         list.innerHTML = visibleApps.map(a => `
           <div style="display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid var(--border)">
-            <span style="font-size:1.4rem">${esc(a.icon)}</span>
+            <span style="font-size:1.4rem">${mvmOS.iconHTML(a)}</span>
             <div style="flex:1;min-width:0">
               <div style="font-size:.88rem;font-weight:500">${esc(mvmOS.appName(a))}</div>
               ${a.public_name ? `<div style="font-size:.76rem;color:var(--text-dim)">${esc(a.public_name)}</div>` : ''}
@@ -543,7 +543,7 @@ const AppHub = (() => {
       function render(list) {
         list.innerHTML = apps.map(a => `
           <div style="display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid var(--border)">
-            <span style="font-size:1.4rem">${esc(a.icon)}</span>
+            <span style="font-size:1.4rem">${mvmOS.iconHTML(a)}</span>
             <div style="flex:1;min-width:0">
               <div style="font-size:.88rem;font-weight:500">${esc(mvmOS.appName(a))}</div>
               <div style="font-size:.72rem;color:var(--text-dim)">${esc(a.id)}/api.py</div>

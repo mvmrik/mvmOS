@@ -51,6 +51,12 @@ from typing import Optional
 
 get_current_session = sys.modules["backend.auth"].get_current_session
 
+
+def icon_image(app_id, manifest):
+    """The app's own picture icon from its manifest, or None (see assets.py)."""
+    from .assets import icon_image as _icon_image
+    return _icon_image(app_id, manifest)
+
 TOKEN_DAYS = 30
 
 _DB_PATH = os.path.join(os.path.dirname(__file__), "apphub_data", "data.db")
@@ -1367,6 +1373,7 @@ async def list_public_apps(x_pub_token: Optional[str] = Header(default=None)):
             "name_i18n":      None if names.get(app_id) else m.get("name_i18n"),
             "name_key":       None if names.get(app_id) else meta.get("name_key"),
             "icon":           m.get("icon") or meta.get("icon", "📦"),
+            "icon_image":     icon_image(app_id, m),
             "category":       m.get("category") or meta.get("category", "Utilities"),
             "description":    m.get("description") or meta.get("description", ""),
             "public_url":     f"/pub/{app_id}/",
@@ -1471,6 +1478,7 @@ async def list_public_apps_admin(session=Depends(get_current_session)):
             "name_i18n": m.get("name_i18n"),
             "name_key": meta.get("name_key"),
             "icon":    m.get("icon") or meta.get("icon", "📦"),
+            "icon_image": icon_image(app_id, m),
             "category": m.get("category", "Utilities"),
             "enabled": bool(rows.get(app_id, 0)),
             "public_name": names.get(app_id, ""),
@@ -1539,6 +1547,7 @@ async def list_app_apis_admin(session=Depends(get_current_session)):
             "name_i18n": m.get("name_i18n"),
             "name_key": meta.get("name_key"),
             "icon":    m.get("icon") or meta.get("icon", "📦"),
+            "icon_image": icon_image(app_id, m),
             "enabled": bool(rows.get(app_id, 0)),
             "actions": _introspect_app_api_actions(app_id),
         })

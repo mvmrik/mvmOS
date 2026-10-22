@@ -660,7 +660,7 @@ const AppStore = (() => {
       ].join('');
       row.innerHTML = `
         <button class="as-app-card-main" type="button" aria-label="${mvmOS.appName(app)}">
-          <span class="as-app-icon">${app.icon || '📦'}</span>
+          <span class="as-app-icon">${mvmOS.iconHTML({ icon: app.icon, iconImage: app.icon_image })}</span>
           <span class="as-app-copy"><span class="as-app-name">${mvmOS.appName(app)}${app.premium ? premiumMark() : ''}${badge ? sourceMark(app) : ''}</span><span class="as-app-desc">${app.description || ''}</span></span>
         </button>
         ${actions ? `<div class="as-app-actions">${actions}</div>` : ''}
@@ -701,7 +701,7 @@ const AppStore = (() => {
     body.querySelector('.as-wrap').classList.add('as-app-detail-open');
     detail.style.display = 'flex';
     detail.classList.add('as-app-detail');
-    detailBody.innerHTML = `<div class="as-app-detail-head"><span class="as-app-icon">${app.icon || '📦'}</span><div><div class="as-detail-name">${mvmOS.appName(app)}</div><div class="as-detail-ver">v${app.version || '—'}</div><div class="as-detail-source"></div></div></div><p class="as-detail-short">${app.description || ''}</p><div class="as-app-detail-actions"></div>${app.premium ? '<section class="as-premium-section"></section>' : ''}<a class="as-site-link" target="_blank" rel="noopener" href="https://mvmos.org/app/${encodeURIComponent(app.id)}">${reviewText.siteLink}</a><section class="as-review-section"><h3>${reviewText.title}</h3><div class="as-review-loading">${reviewText.loading}</div></section>`;
+    detailBody.innerHTML = `<div class="as-app-detail-head"><span class="as-app-icon">${mvmOS.iconHTML({ icon: app.icon, iconImage: app.icon_image })}</span><div><div class="as-detail-name">${mvmOS.appName(app)}</div><div class="as-detail-ver">v${app.version || '—'}</div><div class="as-detail-source"></div></div></div><p class="as-detail-short">${app.description || ''}</p><div class="as-app-detail-actions"></div>${app.premium ? '<section class="as-premium-section"></section>' : ''}<a class="as-site-link" target="_blank" rel="noopener" href="https://mvmos.org/app/${encodeURIComponent(app.id)}">${reviewText.siteLink}</a><section class="as-review-section"><h3>${reviewText.title}</h3><div class="as-review-loading">${reviewText.loading}</div></section>`;
     const reviewsEl = detailBody.querySelector('.as-review-section');
     const premiumEl = detailBody.querySelector('.as-premium-section');
     if (premiumEl) loadPremiumSection(premiumEl, app);
