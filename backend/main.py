@@ -301,7 +301,7 @@ async def auth_middleware(request: Request, call_next):
     # /api/platform/ is reachable with an Apps Hub token instead of a desktop
     # session — a public page has no session cookie at all. Each endpoint
     # checks the identity it needs and 401s on its own.
-    if path in public or path.startswith("/api/scheduler/") or path.startswith("/api/platform/") or path.startswith("/static") or path.startswith("/pub/") or path.startswith("/api/pub/") or path.endswith((".js", ".css", ".ico", ".png", ".svg", ".woff", ".woff2", ".webmanifest")) or "/public/" in path or path.endswith("/public"):
+    if path in public or path.startswith("/api/scheduler/") or path.startswith("/api/platform/") or path.startswith("/static") or path.startswith("/pub/") or path.startswith("/api/pub/") or path.endswith((".js", ".css", ".ico", ".png", ".svg", ".webp", ".jpg", ".jpeg", ".woff", ".woff2", ".webmanifest")) or "/public/" in path or path.endswith("/public"):
         return await call_next(request)
 
     # Generic opt-out for app-backend routes that are already protected by
@@ -328,7 +328,7 @@ async def domain_middleware(request: Request, call_next):
 
     # Check subpath-mapped sites first
     req_path = request.url.path
-    if not req_path.endswith((".js", ".css", ".ico", ".png", ".svg", ".woff", ".woff2", ".json", ".html", ".txt", ".map")):
+    if not req_path.endswith((".js", ".css", ".ico", ".png", ".svg", ".webp", ".jpg", ".jpeg", ".woff", ".woff2", ".json", ".html", ".txt", ".map")):
         with get_conn() as conn:
             rows = conn.execute(
                 "SELECT app_id, path FROM domains WHERE path IS NOT NULL ORDER BY length(path) DESC"
