@@ -25,3 +25,9 @@ Anonymous usage statistics are optional and disabled until someone switches them
 ## Troubleshooting
 
 If an error-report dialog appears, you choose whether to send a technical report. Review its details before sending it. See the site [[Privacy Notice|Privacy Notice]] for the exact diagnostic fields that can be included.
+
+## Shared date and time controls
+
+Core provides a shared calendar and time picker on the desktop and public app pages. Apps can use a date, a time, or a combined date and time control. The picker follows the installation's date format, 12/24-hour clock, first day of the week and time zone. A public profile's saved date and time formats override the installation defaults for that profile. The browser's native calendar and clock settings do not determine this control's layout.
+
+An app must opt in to the shared picker; existing native fields are not replaced automatically. See the developer example in the repository README. Times skipped by the spring daylight saving transition are rejected. A repeated autumn time resolves to its first occurrence.

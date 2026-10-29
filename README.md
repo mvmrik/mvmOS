@@ -53,6 +53,8 @@ through Apps Hub and never touch your Linux users or your desktop. The mvmOS App
 extension for Chrome and Firefox brings those public apps into the browser toolbar. The
 public header lets visitors switch directly between their apps, and a closed Community feed lets profiles of the same server share posts, photos and what they did in an app with everyone, their favourites or chosen people.
 
+Public apps can opt into access checks per Apps Hub profile with `public_profile_access: true` and their own private `_can_access_public(user_id)` hook in `app_api.py`. Core filters discovery; ownership, sharing roles and route authorization remain in the app. See [Apps Hub documentation](docs/core-apps/apps-hub.md#profile-specific-app-visibility) and the Store developer guide for the contract.
+
 ---
 
 ## Who it's for
@@ -153,6 +155,47 @@ can serve an old copy.
 
 It is being adopted step by step: use it in everything new, and replace the old `Date.now()`,
 hand-made `?v=` numbers and bare paths with it whenever you touch that code.
+
+---
+
+## For developers: regional date and time picker
+
+`mvmOS.dateTimePicker` is loaded by Core on the desktop and public app HTML pages.
+Use `create(host, options)` instead of native date/time fields when a control must
+follow mvmOS regional settings. It does not automatically alter other inputs.
+
+```js
+const picker = mvmOS.dateTimePicker;
+await picker.ready();
+const field = picker.create(host, {
+  type: 'datetime', // 'date', 'time', or 'datetime'
+  name: 'departure',
+  label: t('departure'),
+  required: true,
+  value: picker.fromEpoch(departureSeconds),
+  onChange(value) { /* canonical wall time, e.g. 2026-10-29T15:07 */ },
+});
+const departure = picker.toEpoch(field.value); // seconds, or null if invalid
+field.destroy(); // remove control, any open dialog and event listeners
+```
+
+`value`, `min` and `max` use `YYYY-MM-DD`, `HH:mm` or `YYYY-MM-DDTHH:mm` according
+to `type`. The returned handle provides `value`, `setValue(value)`, `validate()`,
+`open()`, `button` and the hidden canonical form `input`. Optional fields support
+clearing. `lang` controls localized calendar names and 12-hour day periods;
+`labels` can override the active Core UI labels. Explicit `dateFormat`,
+`timeFormat`, `weekStarts` and `timeZone` override regional defaults. Otherwise
+Core reads `/api/settings/display`, the public profile's date/time preferences
+when applicable, and the desktop's current settings. Defaults are refreshed from
+desktop settings events; a language change refreshes existing controls.
+
+`format(value, options)`, `fromEpoch(seconds, options)` and `toEpoch(value, options)`
+use the same regional rules; conversion options accept `type` and `timeZone` too.
+Date and datetime conversion reject invalid dates. Nonexistent local times during
+the spring DST transition return `null`; repeated autumn times select the first
+occurrence. Time-only values represent a wall clock and cannot be converted to an
+epoch without a date. Preserve an existing epoch when its minute value is unchanged
+if exact seconds or the second occurrence of a repeated local minute must be kept.
 
 ---
 

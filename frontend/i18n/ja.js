@@ -1,5 +1,21 @@
 // mvmOS UI — 日本語
 window._i18n = {
+  "picker_date": "日付",
+  "picker_time": "時刻",
+  "picker_datetime": "日付と時刻",
+  "picker_today": "今日",
+  "picker_now": "現在",
+  "picker_apply": "適用",
+  "picker_cancel": "キャンセル",
+  "picker_clear": "クリア",
+  "picker_previous": "前の月",
+  "picker_next": "次の月",
+  "picker_month": "月",
+  "picker_year": "年",
+  "picker_hour": "時",
+  "picker_minute": "分",
+  "picker_period": "時間帯",
+  "picker_invalid": "許可された範囲内の有効な値を選択してください。",
   // ── Desktop / Start menu ─────────────────────────────────────────────────
   'search_placeholder':           '検索…',
   'start_applications':           'アプリケーション',

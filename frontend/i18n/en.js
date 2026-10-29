@@ -1,5 +1,21 @@
 // mvmOS UI — English
 window._i18n = {
+  "picker_date": "Date",
+  "picker_time": "Time",
+  "picker_datetime": "Date and time",
+  "picker_today": "Today",
+  "picker_now": "Now",
+  "picker_apply": "Apply",
+  "picker_cancel": "Cancel",
+  "picker_clear": "Clear",
+  "picker_previous": "Previous month",
+  "picker_next": "Next month",
+  "picker_month": "Month",
+  "picker_year": "Year",
+  "picker_hour": "Hour",
+  "picker_minute": "Minute",
+  "picker_period": "Period",
+  "picker_invalid": "Choose a valid value within the allowed range.",
   // ── Desktop / Start menu ─────────────────────────────────────────────────
   'search_placeholder':           'Search…',
   'start_applications':           'Applications',

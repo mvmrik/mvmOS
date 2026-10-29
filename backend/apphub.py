@@ -1133,7 +1133,7 @@ def _live_items(user_id: str) -> list:
     apps_dir = os.path.join(os.path.dirname(__file__), "..", "apps")
     out = []
     for app_id in _detect_app_apis():
-        if not shelf.get(app_id) or not is_app_public(app_id):
+        if not shelf.get(app_id) or not is_app_public(app_id) or not can_access_public_app(app_id, user_id):
             continue
         try:
             mod = _load_app_api(app_id)
@@ -1331,6 +1331,38 @@ async def remove_favourite_pub(fav_id: str, x_pub_token: Optional[str] = Header(
     return JSONResponse({"ok": True})
 
 
+def can_access_public_app(app_id: str, user_id: Optional[str], manifest=None) -> bool:
+    """Opt-in profile visibility. Restricted apps fail closed if their hook fails.
+
+    This controls discovery, shelf changes and live activity. Apps still enforce
+    read/write access on their own routes; hiding a card is not authorization.
+    """
+    if manifest is None:
+        path = os.path.join(os.path.dirname(__file__), '..', 'apps', app_id, 'manifest.json')
+        try:
+            with open(path) as f:
+                manifest = json.load(f)
+        except FileNotFoundError:
+            manifest = {}
+        except (OSError, ValueError):
+            return False
+    if not isinstance(manifest, dict):
+        return False
+    if manifest.get('public_profile_access') is not True:
+        return True
+    if not user_id:
+        return False
+    try:
+        mod = _load_app_api(app_id)
+        checker = getattr(mod, '_can_access_public', None)
+        if not callable(checker):
+            return False
+        with _confine_app(app_id):
+            return checker(user_id) is True
+    except Exception:
+        return False
+
+
 @_pub.get("/apps")
 async def list_public_apps(x_pub_token: Optional[str] = Header(default=None)):
     """Return enabled public apps (have public.py + enabled in DB)."""
@@ -1358,10 +1390,17 @@ async def list_public_apps(x_pub_token: Optional[str] = Header(default=None)):
             continue
         mpath = os.path.join(apps_dir, app_id, "manifest.json")
         try:
-            m = json.load(open(mpath)) if os.path.isfile(mpath) else {}
-        except Exception:
             m = {}
+            if os.path.isfile(mpath):
+                with open(mpath) as f:
+                    m = json.load(f)
+        except Exception:
+            continue
+        if not isinstance(m, dict):
+            continue
         if m.get("public_directory") is False:
+            continue
+        if not can_access_public_app(app_id, u["id"] if u else None, m):
             continue
         meta = _CORE_APP_META.get(app_id, {})
         au = usage.get(app_id, {})
@@ -1402,6 +1441,8 @@ async def set_app_installed_pub(app_id: str, body: InstalledBody,
         raise HTTPException(401)
     if app_id == "apphub" or app_id not in _detect_public_apps() or not is_app_public(app_id):
         raise HTTPException(404)
+    if not can_access_public_app(app_id, u["id"]):
+        raise HTTPException(404)
     set_user_app(u["id"], app_id, body.installed)
     return JSONResponse({"ok": True, "installed": body.installed})
 
@@ -1438,7 +1479,7 @@ async def record_app_open(app_id: str, x_pub_token: Optional[str] = Header(defau
         raise HTTPException(401)
     # Only apps the grid can actually offer. Without this any logged-in account
     # could fill app_usage with rows for ids that will never be listed again.
-    if app_id not in _detect_public_apps():
+    if app_id not in _detect_public_apps() or not is_app_public(app_id) or not can_access_public_app(app_id, u["id"]):
         raise HTTPException(404)
     now = datetime.now(timezone.utc).isoformat()
     with _db() as conn:

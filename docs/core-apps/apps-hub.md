@@ -21,7 +21,7 @@ The administrator can separately allow invitations. Each signed-in public user c
 
 ## Public app directory and PWA
 
-The Apps Hub public portal lists the apps that the administrator has enabled for public access. It is installable as a PWA, so it can be added to a phone or desktop home screen. Public app pages can also have their own standalone PWA; this is intentionally separate from the main mvmOS desktop PWA described in [[Mobile and PWA]].
+The Apps Hub public portal lists the apps that the administrator has enabled for public access and that are available to the visitor’s profile. It is installable as a PWA, so it can be added to a phone or desktop home screen. Public app pages can also have their own standalone PWA; this is intentionally separate from the main mvmOS desktop PWA described in [[Mobile and PWA]].
 
 An app whose public endpoint only answers requests from another page, such as statistics fetched by another application, is not offered as a public page to switch on. Its author marks it with `"public_api_only": true` in the app's manifest, and it keeps working wherever that other page uses it.
 
@@ -29,7 +29,7 @@ The Clipboard is a built-in app with a public page of its own, so it appears in 
 
 ## Each profile chooses its own home screen
 
-The public portal has two views of the same list. **Apps** is the profile’s own home screen; **Store** is everything the administrator has published, grouped by category, with a description for each app. Search in Store finds apps across all categories. Adding an app from the Store puts it on the home screen, removing it takes it off again.
+The public portal has two views of the same list. **Apps** is the profile’s own home screen; **Store** is everything the administrator has published and made available to this profile, grouped by category, with a description for each app. Search in Store finds apps across all categories. Adding an app from the Store puts it on the home screen, removing it takes it off again.
 
 Removing is only hiding: nothing the app stored for that profile is deleted, and adding the app back returns it exactly as it was. A brand-new profile starts with an empty home screen and builds it from the Store; profiles that were already using apps keep the ones they had opened.
 
@@ -37,7 +37,7 @@ The chosen apps, the sort order and the selected category belong to the profile 
 
 ## Switching public apps
 
-The app button in the shared public header opens Home and up to ten apps from your own home screen, following its selected category and alphabetical, recent or frequent order. The current app is also shown when it falls outside that list. Visitors without a profile see published apps alphabetically. Opening an app here updates its usage history, and the menu closes with Escape or a tap outside.
+The app button in the shared public header opens Home and up to ten apps from your own home screen, following its selected category and alphabetical, recent or frequent order. The current app is also shown when it falls outside that list. Visitors without a profile see published apps that do not require profile-specific access, alphabetically. Opening an app here updates its usage history, and the menu closes with Escape or a tap outside.
 
 Profile searches match names without case differences in any script, including Cyrillic.
 
@@ -50,6 +50,16 @@ Each post has an audience: everyone with a profile, only the profile's favourite
 Every public app page has a New post button in the shared header. It opens the composer from inside the app, and offers the recent things the visitor did in that app, such as adding a listing or logging a drink, as values to put into the text, so a post can be written in a moment. The list of recent activity is kept only in the visitor's own browser, is shown only to them and can be cleared. Texts can be saved as templates for an app, up to 50 for each app. Apps do not have to be written for this and none is named in it.
 
 The public Settings page is split into sections: Appearance, Apps, Language and formats, Sharing, and, for profiles that have it, the API. Links to the API open that section.
+
+## Profile-specific app visibility
+
+Apps may opt in with `"public_profile_access": true` in their manifest and a synchronous private `_can_access_public(user_id)` hook in their own `app_api.py`. Core supplies the authenticated Apps Hub profile ID and permits visibility only when the hook returns exactly `True`. Without a profile, a callable hook or a successful check, a restricted app is hidden. Apps without the flag keep their existing visibility.
+
+The same check applies to the public catalogue, adding an app to a profile’s home screen, recording an open and showing live activity. A previously saved home-screen entry does not override a revoked grant. This concerns the public Apps Hub catalogue, not the administrator’s installed-app list. The App API enable/disable switch controls app-to-app calls; it does not need to be enabled for this internal visibility hook.
+
+Core contains no app IDs or app-specific sharing rules. Ownership, membership, roles and revocation belong to the app and its own database. The hook reads current permissions without writing data or calling external services. `public_directory: false` hides an app from the directory for everyone; profile-specific access decides separately for each visitor.
+
+Hiding a card is not authorization. Each app must also check its own pages and API routes, enforce access to individual records and reject writes from viewers. Roles such as view and admin are defined by the app, not imposed by Apps Hub. Authors must test direct API requests, revoked access and failure of the hook, as well as the visible catalogue. Before releasing an app that requires this feature, its `min_core_version` must require a Core release that implements it.
 
 ## What is happening now
 

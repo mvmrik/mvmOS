@@ -1,5 +1,21 @@
 // mvmOS UI — 简体中文
 window._i18n = {
+  "picker_date": "日期",
+  "picker_time": "时间",
+  "picker_datetime": "日期和时间",
+  "picker_today": "今天",
+  "picker_now": "现在",
+  "picker_apply": "应用",
+  "picker_cancel": "取消",
+  "picker_clear": "清除",
+  "picker_previous": "上个月",
+  "picker_next": "下个月",
+  "picker_month": "月",
+  "picker_year": "年",
+  "picker_hour": "小时",
+  "picker_minute": "分钟",
+  "picker_period": "时段",
+  "picker_invalid": "请选择允许范围内的有效值。",
   // ── Desktop / Start menu ─────────────────────────────────────────────────
   'search_placeholder':           '搜索…',
   'start_applications':           '应用程序',

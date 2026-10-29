@@ -524,6 +524,8 @@ async def layout_inject_middleware(request: Request, call_next):
     html, n = re.subn(r"<head\b[^>]*>", lambda h: h.group(0) + boot, html, count=1)
     if not n:
         html = boot + html
+    picker_snippet = f'<script src="{asset("/datetime-picker.js")}"></script>'
+    html = html.replace("</head>", picker_snippet + "</head>", 1) if "</head>" in html else picker_snippet + html
     keyboard_snippet = f'<script src="{asset("/keyboard-preference.js")}" data-mvm-keyboard-scope="public"></script>'
     html = html.replace("</head>", keyboard_snippet + "</head>", 1) if "</head>" in html else keyboard_snippet + html
 

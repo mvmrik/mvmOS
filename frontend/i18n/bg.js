@@ -1,5 +1,21 @@
 // mvmOS UI — Български
 window._i18n = {
+  "picker_date": "Дата",
+  "picker_time": "Час",
+  "picker_datetime": "Дата и час",
+  "picker_today": "Днес",
+  "picker_now": "Сега",
+  "picker_apply": "Приложи",
+  "picker_cancel": "Отказ",
+  "picker_clear": "Изчисти",
+  "picker_previous": "Предишен месец",
+  "picker_next": "Следващ месец",
+  "picker_month": "Месец",
+  "picker_year": "Година",
+  "picker_hour": "Час",
+  "picker_minute": "Минута",
+  "picker_period": "Част от деня",
+  "picker_invalid": "Избери валидна стойност в разрешения диапазон.",
   // ── Desktop / Start menu ─────────────────────────────────────────────────
   'search_placeholder':           'Търсене…',
   'start_applications':           'Приложения',
