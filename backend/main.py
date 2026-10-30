@@ -7,7 +7,6 @@ from fastapi import FastAPI, Request
 from fastapi.responses import RedirectResponse, HTMLResponse, FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from starlette.responses import PlainTextResponse
-from starlette.routing import Match
 
 
 class _MvmStaticFiles(StaticFiles):
@@ -307,11 +306,8 @@ async def auth_middleware(request: Request, call_next):
     # Generic opt-out for app-backend routes that are already protected by
     # their own secret (e.g. webhook callbacks from a third-party server that
     # can never carry an mvmOS session cookie). See app_backends.py.
-    for route in request.app.routes:
-        if getattr(getattr(route, "endpoint", None), "no_session_auth", False):
-            match, _ = route.matches(request.scope)
-            if match == Match.FULL:
-                return await call_next(request)
+    if app_backends.allows_no_session(request.app.routes, request.scope):
+        return await call_next(request)
     token = request.cookies.get("session")
     if not token:
         return RedirectResponse(url="/login")

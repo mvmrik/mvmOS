@@ -19,6 +19,21 @@ BACKENDS_DIR = os.path.join(os.path.dirname(__file__), "apps")
 _app_ref: FastAPI | None = None
 
 
+def allows_no_session(routes, scope):
+    """Match explicit public endpoints, including lazy included FastAPI routers."""
+    from starlette.routing import Match
+    for route in routes:
+        candidates = getattr(route, "effective_candidates", None)
+        if callable(candidates):
+            if allows_no_session(candidates(), scope):
+                return True
+        elif getattr(getattr(route, "endpoint", None), "no_session_auth", False):
+            match, _ = route.matches(scope)
+            if match == Match.FULL:
+                return True
+    return False
+
+
 def reposition_before_mounts(app: FastAPI, new_routes: list) -> None:
     """include_router appends at the end of app.routes — after the catch-all
     "/" static mount, which shadows everything behind it. Move the freshly
