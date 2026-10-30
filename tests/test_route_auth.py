@@ -23,7 +23,7 @@ sys.path.insert(0, ROOT)
 
 from fastapi.routing import APIRoute, APIWebSocketRoute  # noqa: E402
 from backend import auth  # noqa: E402
-from backend import db, plugins, scheduler  # noqa: E402
+from backend import db, plugins, scheduler, shared_files  # noqa: E402
 from fastapi import HTTPException  # noqa: E402
 from starlette.requests import Request  # noqa: E402
 
@@ -32,6 +32,8 @@ SESSION_CHECKS = {
     auth.get_current_session_optional,
     auth.require_admin,
     auth.require_root_session,
+    shared_files.grant_identity,  # revocable folder capability, validated at source
+    shared_files.file_identity,   # signed, expiring file ticket, validated at source
 }
 
 # Routes without a desktop session dependency, each with the reason it is safe.

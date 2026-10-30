@@ -878,7 +878,7 @@ html, body {
 .fm-preview-close:hover { color: var(--text); }
 .fm-list.fm-drop-hover { outline: 2px dashed var(--accent); outline-offset: -4px; background: rgba(42,110,224,0.05); }
 .fm-places {
-  width: 130px;
+  width: 230px;
   flex-shrink: 0;
   background: var(--surface2);
   border-right: 1px solid var(--border);
@@ -902,6 +902,11 @@ html, body {
 .fm-place:hover { background: var(--surface3, rgba(255,255,255,0.06)); color: var(--text); }
 .fm-place.active { color: var(--accent); border-left-color: var(--accent); background: var(--surface3, rgba(255,255,255,0.06)); }
 .fm-place-icon { font-size: 0.95rem; flex-shrink: 0; }
+.fm-place > span:not(.fm-place-icon):not(.fm-bookmark-remove) {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .fm-places-user {
   padding: 10px 12px 6px;
   font-size: 0.75rem;

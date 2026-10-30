@@ -23,7 +23,12 @@ running but one small service. It installs in about a minute and idles at almost
 **Work on the machine.** A real terminal (full colour, so `vim`, `htop`, `nano` and anything
 else interactive works properly), a file manager with upload, download, search, copy/paste
 and rename, a code editor, an image and video viewer, and an APT package manager for
-installing software without touching the command line.
+installing software without touching the command line. File Manager can also connect folders
+shared by another mvmOS server, with revocable invitations and separate permissions.
+Browse and transfer files directly between your browser and the source server,
+including copying whole folders between local and remote storage. These are virtual
+File Manager locations, not Linux mounts or automatic app file-picker entries.
+See the [File Manager guide](docs/core-apps/file-manager.md#shared-folders-between-servers).
 
 **Run the machine.** Manage Linux users, cron jobs, systemd services, nginx sites and
 domains, SSH keys, and scheduled backups you can download or restore. Watch CPU, memory and

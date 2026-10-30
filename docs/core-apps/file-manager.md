@@ -40,6 +40,62 @@ A user who may use sudo can right-click a folder, or the empty space in a folder
 
 Administrator access ends after 15 minutes without use, the same way sudo asks again after a while. The badge counts down the remaining time, and every action in the window, or in an editor opened from it, starts the count again. When the time runs out, the next action asks for the password again and then continues. Click the badge to leave administrator mode at any time. Deleting in an administrator window is always permanent, because root cannot put items into your Trash, so File Manager asks you to confirm it first. Your password is checked on the server for every administrator key, and a key only works with the session it was issued for.
 
+## Shared folders between servers
+
+Both servers need Core with shared-folder support. On the computer that stores the
+files, right-click a local folder and choose **Share folder**. Enter the receiving
+server's HTTPS origin (for example `https://home.example.com`), give the folder a
+name, and choose permissions. Browsing names is always allowed; opening/downloading,
+uploading/creating folders, renaming, and deleting are separate permissions.
+Sharing uses the signed-in Linux user's filesystem access, even from a temporary
+administrator window. Symbolic links and special files are excluded.
+
+Copy the invitation immediately; the source only stores a hash of its access key
+and cannot display it again. On the receiving server, open **Shared folders** in
+File Manager's sidebar, choose **Connect folder**, and paste the invitation. The
+address must exactly match the receiving server's origin, including a non-default
+port. Invitations are access credentials: give them only to the intended recipient.
+Connections are private to the Linux account that adds them, and survive signing
+out or using another browser with that account.
+
+The manager lists folders received and folders shared by your account. It checks
+received folders directly from the browser and shows when they are unavailable or
+access has been revoked. Open a connected folder from the manager or sidebar to
+browse it in the same File Manager window, with selection, sorting, name filtering,
+breadcrumbs and Back/Up navigation. Double-click files to preview supported images,
+audio, video and small text files, or download individual files. Deep search,
+terminal access, local application associations, Linux ownership changes and ZIP
+creation are unavailable for remote folders.
+
+Copy/Paste supports files and whole folders between local and remote locations,
+and between connected folders. Cut/Paste removes the source only after the whole
+copy completes. Reading is required at the source, uploading at the destination,
+and deleting at the source for Cut. Existing destination names are refused instead
+of merging or replacing them. Transfers use 4 MiB chunks and can be cancelled;
+completed files and folders may remain at the destination after cancellation or
+failure. Copying is limited to 10000 items and 64 folder levels per operation.
+Files dropped from your computer can include whole folders.
+
+Remote uploads and renames refuse to overwrite an existing destination. Deleting
+is permanent and includes a folder's contents after confirmation; there is no
+remote Trash. Use the source server to change permissions by revoking the old grant
+and issuing a new invitation.
+
+The receiving server stores references and access credentials, not copies of the
+shared files. Listings, previews, downloads and uploads travel directly between
+the browser and the source server. Copies between locations pass through the
+browser: copying to or from local server storage also consumes that server’s
+traffic. Merely browsing or playing remote files does not relay their bytes through
+the receiving server. A tunnel or reverse proxy on that source's own
+address still participates in its traffic. The source must be reachable from the
+user's device. Disconnecting removes the local reference; **Revoke access** on the
+source invalidates the grant and previously issued file tickets for new requests.
+An already running transfer may finish. File tickets expire after one hour.
+
+These folders are virtual entries in File Manager, not Linux mounts. Existing app
+file pickers and apps do not automatically accept them; app integration is a
+separate step.
+
 ## Good practice
 
 Deleting or changing permissions affects the real server filesystem. Keep backups of important content and apply restrictive permissions only when you understand the effect on the relevant app or service. Use administrator mode only for the change you need and leave it when you are done.

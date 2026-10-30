@@ -136,6 +136,7 @@ const FileManager = (() => {
       });
 
       const deepSearch = async () => {
+        if (SharedFiles.parse(this.currentPath)) return;
         const q = this.searchEl.value.trim();
         if (!q) return;
         this.footerStatus.textContent = t('fm_searching');
@@ -157,7 +158,7 @@ const FileManager = (() => {
           const relPath = entry.path.replace(this.currentPath, '').replace(/^\//, '');
           row.innerHTML = `
             <span class="fm-icon">${icon}</span>
-            <span class="fm-name">${entry.name}</span>
+            <span class="fm-name">${_escHtml(entry.name)}</span>
             <span class="fm-size" style="flex:1;color:var(--text-dim);font-size:.75rem;">${relPath}</span>
           `;
           row.addEventListener('dblclick', () => {
@@ -192,6 +193,7 @@ const FileManager = (() => {
       this.trashEmptyBtn.addEventListener('click', () => this.trashEmpty());
 
       this.loadPlaces();
+      window.addEventListener('shared-folders-changed', () => { if (this.body.isConnected) this.loadPlaces(); });
 
       const uploadBtn   = body.querySelector('.fm-upload-btn');
       const uploadInput = body.querySelector('.fm-upload-input');
@@ -229,16 +231,26 @@ const FileManager = (() => {
       // right-click context menu on list
       this.listEl.addEventListener('contextmenu', e => this.onContextMenu(e));
 
+      // Keep keyboard file actions scoped to this window after selecting a row.
+      this.listEl.tabIndex = 0;
+      this.listEl.addEventListener('mousedown', e => {
+        if (!e.target.closest('input,button,textarea')) this.listEl.focus({preventScroll: true});
+      });
+
       // keyboard copy/cut/paste
       body.addEventListener('keydown', e => {
+        if (this._transfer || e.target.closest('input,textarea,[contenteditable=true]')) return;
         const names = this.selectedSet.size > 0 ? [...this.selectedSet] : (this.selected ? [this.selected.name] : []);
         if (e.key === 'c' && (e.ctrlKey || e.metaKey) && names.length) {
-          window._fmClipboard = { paths: names.map(n => this.joinPath(this.currentPath, n)), cut: false };
+          e.preventDefault();
+          window._fmClipboard = { paths: names.map(n => this.joinPath(this.currentPath, n)), cut: false, adminKey: this.adminKey };
         }
         if (e.key === 'x' && (e.ctrlKey || e.metaKey) && names.length) {
-          window._fmClipboard = { paths: names.map(n => this.joinPath(this.currentPath, n)), cut: true };
+          e.preventDefault();
+          window._fmClipboard = { paths: names.map(n => this.joinPath(this.currentPath, n)), cut: true, adminKey: this.adminKey };
         }
         if (e.key === 'v' && (e.ctrlKey || e.metaKey) && window._fmClipboard) {
+          e.preventDefault();
           this.paste();
         }
         if (e.key === 'a' && (e.ctrlKey || e.metaKey)) {
@@ -299,6 +311,7 @@ const FileManager = (() => {
         addBtn.addEventListener('click', () => this._addCurrentAsBookmark());
         this.placesEl.appendChild(addBtn);
 
+        if (window.SharedFiles || typeof SharedFiles !== 'undefined') await SharedFiles.attachPlaces(this.placesEl, path => this.navigate(path));
         this.updateActivePlacea(this.currentPath);
       } catch (_) {}
     }
@@ -351,7 +364,7 @@ const FileManager = (() => {
       const el = document.createElement('div');
       el.className = 'fm-place';
       el.dataset.path = path;
-      el.innerHTML = `<span class="fm-place-icon">🔖</span><span style="flex:1;overflow:hidden;text-overflow:ellipsis;">${name}</span><span class="fm-bookmark-remove" title="Remove">✕</span>`;
+      el.innerHTML = `<span class="fm-place-icon">🔖</span><span style="flex:1;overflow:hidden;text-overflow:ellipsis;">${_escHtml(name)}</span><span class="fm-bookmark-remove" title="Remove">✕</span>`;
       el.querySelector('.fm-bookmark-remove').addEventListener('click', e => {
         e.stopPropagation();
         this._removeBookmark(path);
@@ -386,17 +399,7 @@ const FileManager = (() => {
         };
         if (window._fmClipboard) {
           addItem('📋 Paste', async () => {
-            const cb = window._fmClipboard;
-            const paths = cb.paths || [cb.path];
-            for (const src of paths) {
-              await this.api('/api/files/copy', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ src, dst_dir: path, move: cb.cut }),
-              });
-            }
-            if (cb.cut) window._fmClipboard = null;
-            this.navigate(this.currentPath);
+            await this.paste(path);
           });
         }
         addItem('⬛ Open in Terminal', () => {
@@ -412,7 +415,10 @@ const FileManager = (() => {
 
     updateActivePlacea(path) {
       this.placesEl.querySelectorAll('.fm-place').forEach(el => {
-        el.classList.toggle('active', el.dataset.path === path);
+        const placePath = el.dataset.path;
+        const active = typeof placePath === 'string' && placePath.length > 0 &&
+          (placePath === path || (Boolean(SharedFiles.parse(path)) && path.startsWith(placePath + '/')));
+        el.classList.toggle('active', active);
       });
     }
 
@@ -425,7 +431,7 @@ const FileManager = (() => {
     }
 
     async navigate(path, opts = {}) {
-      if (this._navigating) return;
+      if (this._navigating || this._transfer) return;
       this._navigating = true;
       // Reloading the same folder is not a step Back should return to.
       if (this._visited && !opts.fromHistory && path !== this.currentPath) {
@@ -466,6 +472,36 @@ const FileManager = (() => {
       }
 
       this._setTrashMode(false);
+      const remotePath = SharedFiles.parse(path);
+      this._remote = null;
+      this.mkdirBtn.disabled = this.uploadBtn2.disabled = !!remotePath;
+      this.body.querySelector('.fm-search-deep').disabled = !!remotePath;
+      if (remotePath) {
+        this.breadEl.replaceChildren();
+        this.listEl.replaceChildren(); this._lastEntries = [];
+        try {
+          const data = await SharedFiles.listing(path);
+          this._remote = {folder: data.folder, permissions: data.permissions};
+          this.mkdirBtn.disabled = this.uploadBtn2.disabled = !data.permissions.includes('upload');
+          const segments = [{name: '🌐 ' + data.folder.name, path: SharedFiles.virtualPath(remotePath.id)}];
+          let relative = '';
+          for (const part of remotePath.path.split('/').filter(Boolean)) {
+            relative = this.joinPath(relative, part).replace(/^\//, '');
+            segments.push({name: part, path: SharedFiles.virtualPath(remotePath.id, relative)});
+          }
+          for (const segment of segments) {
+            if (this.breadEl.childNodes.length) this.breadEl.append(document.createTextNode(' / '));
+            const crumb = document.createElement('span'); crumb.className = 'fm-bread-btn'; crumb.textContent = segment.name;
+            crumb.addEventListener('click', () => this.navigate(segment.path)); this.breadEl.append(crumb);
+          }
+          this.body.querySelector('.fm-up').disabled = !remotePath.path;
+          this.render(data.entries);
+          this.footerStatus.textContent = t('sf_ready') + ' · ' + t('sf_direct_hint');
+        } catch (error) { this.showError(t('sf_unavailable') + ' ' + error.message); }
+        finally { this._navigating = false; }
+        return;
+      }
+      this.body.querySelector('.fm-up').disabled = path === '/';
       // breadcrumb buttons
       this.breadEl.innerHTML = '';
       const parts = path.split('/').filter(p => p);
@@ -503,6 +539,18 @@ const FileManager = (() => {
     // mode it carries the key. An expired key asks for the password again
     // and repeats the request; declining closes administrator mode.
     async api(url, opts) {
+      const parsedURL = new URL(url, location.origin);
+      const data = typeof opts?.body === 'string' ? JSON.parse(opts.body) : {};
+      const virtual = [parsedURL.searchParams.get('path'), data.path, data.src, data.dst_dir, data.dest, ...(data.paths || [])].some(p => p && SharedFiles.parse(p));
+      if (virtual) {
+        try {
+          let result;
+          if (parsedURL.pathname === '/api/files/mkdir') result = await SharedFiles.operation(data.path, 'mkdir');
+          else if (parsedURL.pathname === '/api/files/rename') result = await SharedFiles.operation(data.path, 'rename', {new_name: data.new_name});
+          else throw new Error(t('sf_unsupported'));
+          return Response.json(result);
+        } catch (error) { return Response.json({detail: error.message}, {status: 400}); }
+      }
       let res = await fetch(adminUrl(url, this.adminKey), opts);
       if (this.adminKey && res.status === 403) {
         const data = await res.clone().json().catch(() => ({}));
@@ -733,7 +781,7 @@ const FileManager = (() => {
         const size = entry.type === 'dir' ? '—' : this.formatSize(entry.size);
         const date = entry.modified ? entry.modified.slice(0, 16).replace('T', ' ') : '';
 
-        const isRoot = window._effectiveUser === 'root' || !!this.adminKey;
+        const isRoot = !SharedFiles.parse(this.currentPath) && (window._effectiveUser === 'root' || !!this.adminKey);
         const permsHtml = prefs.showPerms
           ? `<span class="fm-perms${isRoot ? ' fm-editable' : ''}" title="${isRoot ? t('fm_perms_title') : ''}">${entry.permissions || ''}</span>` : '';
         const ownerHtml = prefs.showOwner
@@ -741,7 +789,7 @@ const FileManager = (() => {
 
         row.innerHTML = `
           <span class="fm-icon">${icon}</span>
-          <span class="fm-name">${entry.name}</span>
+          <span class="fm-name">${_escHtml(entry.name)}</span>
           <span class="fm-size">${size}</span>
           ${permsHtml}
           ${ownerHtml}
@@ -793,7 +841,8 @@ const FileManager = (() => {
           row.addEventListener('dblclick', e => {
             if (e.target.classList.contains('fm-editable')) return;
             const fullPath = this.joinPath(this.currentPath, entry.name);
-            FileAssoc.open(fullPath, this._assocCtx());
+            if (SharedFiles.parse(fullPath)) this.remoteAction(() => SharedFiles.openFile(fullPath, entry));
+            else FileAssoc.open(fullPath, this._assocCtx());
           });
         }
 
@@ -858,6 +907,7 @@ const FileManager = (() => {
 
     onContextMenu(e) {
       e.preventDefault();
+      if (this._transfer) return;
       e.stopPropagation();
       const row = e.target.closest('.fm-entry');
 
@@ -871,14 +921,33 @@ const FileManager = (() => {
       `;
 
       const items = [];
-      if (row) {
+      if (SharedFiles.parse(this.currentPath)) {
+        const permissions = this._remote?.permissions || [];
+        const names = row ? (this.selectedSet.has(row.dataset.name) ? [...this.selectedSet] : [row.dataset.name]) : [];
+        if (row) {
+          const entry = this._lastEntries.find(item => item.name === row.dataset.name);
+          if (entry?.type === 'dir') items.push({label: '📂 ' + t('sf_open'), action: () => this.navigate(this.joinPath(this.currentPath, entry.name))});
+          else if (permissions.includes('read')) items.push({label: '📄 ' + t('sf_open'), action: () => SharedFiles.openFile(this.joinPath(this.currentPath, entry.name), entry)});
+          if (names.length === 1 && permissions.includes('edit')) items.push({label: '✏️ ' + t('sf_rename'), action: () => this.renamePrompt(names[0])});
+          if (permissions.includes('read')) {
+            items.push({label: '📋 ' + t('sf_copy_files'), action: () => { window._fmClipboard = {paths: names.map(n => this.joinPath(this.currentPath, n)), cut: false}; }});
+            if (permissions.includes('delete')) items.push({label: '✂️ ' + t('sf_cut'), action: () => { window._fmClipboard = {paths: names.map(n => this.joinPath(this.currentPath, n)), cut: true}; }});
+            if (names.every(n => this._lastEntries.find(en => en.name === n)?.type === 'file')) items.push({label: '⬇️ ' + t('sf_download'), action: () => this.download(names)});
+          }
+          if (permissions.includes('delete')) items.push({label: '🗑️ ' + t('sf_delete_action'), action: () => this.deleteEntries(names), danger: true});
+        } else {
+          if (window._fmClipboard && permissions.includes('upload')) items.push({label: '📋 ' + t('sf_paste'), action: () => this.paste()});
+          if (permissions.includes('upload')) items.push({label: '📁 ' + t('sf_new_folder'), action: () => this.mkdirPrompt()});
+          items.push({label: '🔄 ' + t('sf_refresh'), action: () => this.navigate(this.currentPath)});
+        }
+      } else if (row) {
         const name = row.dataset.name;
         const names = this.selectedSet.size > 1 ? [...this.selectedSet] : [name];
         if (names.length === 1 && row.dataset.type !== 'dir')
           items.push({ label: t('fa_open_with_menu'), action: () => FileAssoc.openWith(this.joinPath(this.currentPath, name), this._assocCtx()) });
         if (names.length === 1) items.push({ label: '✏️ Rename', action: () => this.renamePrompt(name) });
-        items.push({ label: `📋 Copy${names.length > 1 ? ' ('+names.length+')' : ''}`, action: () => { window._fmClipboard = { paths: names.map(n => this.joinPath(this.currentPath, n)), cut: false }; } });
-        items.push({ label: `✂️ Cut${names.length > 1 ? ' ('+names.length+')' : ''}`,  action: () => { window._fmClipboard = { paths: names.map(n => this.joinPath(this.currentPath, n)), cut: true  }; } });
+        items.push({ label: `📋 Copy${names.length > 1 ? ' ('+names.length+')' : ''}`, action: () => { window._fmClipboard = { paths: names.map(n => this.joinPath(this.currentPath, n)), cut: false, adminKey: this.adminKey }; } });
+        items.push({ label: `✂️ Cut${names.length > 1 ? ' ('+names.length+')' : ''}`,  action: () => { window._fmClipboard = { paths: names.map(n => this.joinPath(this.currentPath, n)), cut: true, adminKey: this.adminKey }; } });
         items.push({ label: `🗑️ Delete${names.length > 1 ? ' ('+names.length+')' : ''}`, action: () => this.deleteEntries(names), danger: true });
         items.push({ label: `⬇️ Download${names.length > 1 ? ' ('+names.length+')' : ''}`, action: () => this.download(names) });
         items.push({ label: `🗜️ Compress to zip`, action: () => this.compressToZip(names) });
@@ -899,6 +968,11 @@ const FileManager = (() => {
           items.push({ label: t('fm_open_as_root'), action: () => openAsRoot(this.currentPath) });
       }
 
+      if (!this._inTrash && !SharedFiles.parse(this.currentPath)) {
+        const sharePath = row && row.dataset.type === 'dir' ? this.joinPath(this.currentPath, row.dataset.name) : (!row ? this.currentPath : null);
+        if (sharePath) items.push({ label: '🌐 ' + t('sf_share'), action: () => SharedFiles.share(sharePath) });
+      }
+
       items.forEach(item => {
         const el = document.createElement('div');
         el.style.cssText = 'padding:8px 14px;cursor:pointer;font-size:.85rem;transition:background .1s;';
@@ -906,7 +980,7 @@ const FileManager = (() => {
         el.textContent = item.label;
         el.addEventListener('mouseenter', () => el.style.background = 'var(--surface2)');
         el.addEventListener('mouseleave', () => el.style.background = '');
-        el.addEventListener('click', () => { item.action(); menu.remove(); });
+        el.addEventListener('click', () => { menu.remove(); this.remoteAction(item.action); });
         menu.appendChild(el);
       });
 
@@ -930,13 +1004,18 @@ const FileManager = (() => {
       return !this.adminKey && window._effectiveUser !== 'root';
     }
 
-    async paste() {
+    async remoteAction(action) {
+      try { await action(); } catch (error) { await SharedFiles.dialog(t('sf_failed') + '\n' + error.message, {notice: true}); }
+    }
+
+    async paste(destination = this.currentPath) {
       const cb = window._fmClipboard;
       if (!cb) return;
       const paths = cb.paths || [cb.path];
+      if (SharedFiles.parse(destination) || paths.some(path => SharedFiles.parse(path))) return SharedFiles.copyPaths(this, cb, destination);
       const failures = [];
       for (const src of paths) {
-        await collect(failures, '/api/files/copy', 'POST', { src, dst_dir: this.currentPath, move: cb.cut }, this);
+        await collect(failures, '/api/files/copy', 'POST', { src, dst_dir: destination, move: cb.cut }, this);
       }
       if (cb.cut) window._fmClipboard = null;
       await this.navigate(this.currentPath);
@@ -970,6 +1049,11 @@ const FileManager = (() => {
     }
 
     async deleteEntries(names) {
+      if (this._transfer) return;
+      if (SharedFiles.parse(this.currentPath)) {
+        if (!await SharedFiles.dialog(t('sf_delete_confirm') + '\n' + names.join(', '))) return;
+        return SharedFiles.removeSelection(this, names.map(name => this.joinPath(this.currentPath, name)));
+      }
       const prefs = loadPrefs();
       const trashAsk = prefs.trashAsk !== false;
       let choice;
@@ -1011,8 +1095,13 @@ const FileManager = (() => {
     }
 
     async renamePrompt(name) {
-      const newName = prompt(`Rename "${name}" to:`, name);
+      if (this._transfer) return;
+      const newName = await SharedFiles.dialog(t('sf_new_name'), {value: name});
       if (!newName || newName === name) return;
+      if (SharedFiles.parse(this.currentPath)) return this.remoteAction(async () => {
+        await SharedFiles.operation(this.joinPath(this.currentPath, name), 'rename', {new_name: newName});
+        await this.navigate(this.currentPath);
+      });
       const failures = [];
       await collect(failures, '/api/files/rename', 'POST', { path: this.joinPath(this.currentPath, name), new_name: newName }, this);
       await this.navigate(this.currentPath);
@@ -1028,6 +1117,10 @@ const FileManager = (() => {
     }
 
     async download(names) {
+      if (SharedFiles.parse(this.currentPath)) {
+        for (const name of names) await SharedFiles.downloadPath(this.joinPath(this.currentPath, name));
+        return;
+      }
       const paths = names.map(n => this.joinPath(this.currentPath, n));
       const entry = this._lastEntries.find(e => e.name === names[0]);
       const isSingleFile = names.length === 1 && entry?.type === 'file';
@@ -1076,17 +1169,20 @@ const FileManager = (() => {
     }
 
     async mkdirPrompt() {
-      const name = prompt('New folder name:');
+      if (this._transfer) return;
+      const name = await SharedFiles.dialog(t('sf_folder_name'), {value: ''});
       if (!name) return;
-      await this.api('/api/files/mkdir', {
+      const response = await this.api('/api/files/mkdir', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ path: this.joinPath(this.currentPath, name) }),
       });
+      if (!response.ok) return this.remoteAction(async () => { throw new Error((await response.json()).detail); });
       this.navigate(this.currentPath);
     }
 
     async uploadEntries(entries) {
+      if (SharedFiles.parse(this.currentPath)) return SharedFiles.uploadEntries(this, entries);
       // collect all files recursively with their relative paths
       const collected = []; // {file, destDir}
       const readEntry = async (entry, parentDir) => {
@@ -1119,6 +1215,7 @@ const FileManager = (() => {
     }
 
     uploadFileList(list) {
+      if (SharedFiles.parse(this.currentPath)) return SharedFiles.uploadList(this, list);
       const MAX_SIZE = 2 * 1024 * 1024 * 1024;
       let remaining = [...list];
       const total = list.length;
@@ -1164,11 +1261,13 @@ const FileManager = (() => {
     }
 
     goBack() {
-      if (this._navigating || !this._history.length) return;
+      if (this._navigating || this._transfer || !this._history.length) return;
       this.navigate(this._history.pop(), { fromHistory: true });
     }
 
     goUp() {
+      const remote = SharedFiles.parse(this.currentPath);
+      if (remote) { if (remote.path) this.navigate(SharedFiles.virtualPath(remote.id, remote.path.split('/').slice(0, -1).join('/'))); return; }
       if (this.currentPath === '/') return;
       const parts = this.currentPath.replace(/\/$/, '').split('/');
       parts.pop();
@@ -1258,6 +1357,7 @@ const FileManager = (() => {
     }
 
     updatePreview(entry) {
+      if (SharedFiles.parse(this.currentPath)) { this.previewEl.style.display = 'none'; this.previewImg.src = ''; return; }
       const imgExts = ['jpg','jpeg','png','gif','webp','bmp','svg'];
       if (!entry || entry.type === 'dir' || !imgExts.includes(entry.name.split('.').pop().toLowerCase())) {
         if (!this._previewClosed) this.previewEl.style.display = 'none';
@@ -1294,7 +1394,7 @@ const FileManager = (() => {
     }
 
     showError(msg) {
-      this.listEl.innerHTML = `<div class="fm-empty" style="color:#e05555">${msg}</div>`;
+      this.listEl.innerHTML = `<div class="fm-empty" style="color:#e05555">${_escHtml(msg)}</div>`;
     }
 
     formatSize(bytes) {

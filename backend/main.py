@@ -56,6 +56,7 @@ from .auth import router as auth_router, get_current_session
 from .terminal import router as terminal_router
 from .savedcommands import router as savedcommands_router
 from .files import router as files_router
+from . import shared_files
 from .desktop import router as desktop_router
 from .settings import router as settings_router
 from .premium import router as premium_router
@@ -89,6 +90,7 @@ from . import app_backends, app_isolation, public_loader, projects
 app = FastAPI(title="mvmOS", redirect_slashes=False)
 
 init_db()
+shared_files.init_db()
 _purge_clipboard()
 init_ssh_access_db()
 _init_startup_db()
@@ -99,6 +101,7 @@ app.include_router(auth_router)
 app.include_router(terminal_router)
 app.include_router(savedcommands_router)
 app.include_router(files_router)
+app.include_router(shared_files.router)
 app.include_router(desktop_router)
 app.include_router(settings_router)
 app.include_router(premium_router)
@@ -458,7 +461,8 @@ async def extension_bridge_middleware(request: Request, call_next):
     response = await call_next(request)
     path = request.url.path
     if (not (path.startswith("/pub/") or path.startswith("/api/pub/"))
-            or not response.headers.get("content-type", "").startswith("text/html")):
+            or not response.headers.get("content-type", "").startswith("text/html")
+            or response.headers.get("X-Mvm-No-Public-Chrome") == "1"):
         return response
     body = b""
     async for chunk in response.body_iterator:
@@ -639,3 +643,6 @@ app.mount("/apps", _AppStaticFiles(directory=APPS_DIR, html=True), name="apps")
 app.mount("/widgets", StaticFiles(directory=WIDGETS_DIR), name="widgets")
 app.mount("/themes", StaticFiles(directory=THEMES_DIR), name="themes")
 app.mount("/", _MvmStaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")
+
+
+app.middleware("http")(shared_files.cors_middleware)
