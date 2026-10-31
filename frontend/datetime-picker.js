@@ -92,9 +92,7 @@
   function showDialog(d) {
     // Resolve the actual accent, including public-page overrides, rather than
     // assuming that the page background contrasts with an accent button.
-    const canvas=document.createElement('canvas');canvas.width=canvas.height=1;
-    const ctx=canvas.getContext('2d');
-    const rgb=color=>{ctx.clearRect(0,0,1,1);ctx.fillStyle=color;ctx.fillRect(0,0,1,1);return ctx.getImageData(0,0,1,1).data;};
+    const rgb=color=>(String(color).match(/[\d.]+/g)||[255,255,255]).slice(0,3).map(Number);
     const bg=rgb(getComputedStyle(d).backgroundColor);
     d.style.colorScheme=(bg[0]*.299+bg[1]*.587+bg[2]*.114)>140?'light':'dark';
     const accent=rgb(getComputedStyle(d.querySelector('[data-apply]')).backgroundColor);

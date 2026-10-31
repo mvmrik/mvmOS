@@ -4,19 +4,34 @@ var mvmOS = (() => {
 
   // An accent can be dark blue in a dark theme or pale blue in another one.
   // Derive its foreground from the actual color, independently of wallpaper.
-  const _themePixel = document.createElement('canvas');
-  _themePixel.width = _themePixel.height = 1;
-  const _themeContext = _themePixel.getContext('2d', { willReadFrequently: true });
+  // Colours are resolved by the style engine, never by reading canvas pixels:
+  // some browsers randomise or block canvas readback, which made every accent
+  // look black and its text white.
+  const _themeProbe = document.createElement('span');
+  _themeProbe.style.cssText = 'position:absolute;visibility:hidden;pointer-events:none';
+  function _resolveRgb(value) {
+    value = (value || '').trim();
+    if (!value) return null;
+    _themeProbe.style.color = '';
+    _themeProbe.style.color = value;
+    if (!_themeProbe.style.color) return null;
+    document.documentElement.appendChild(_themeProbe);
+    const text = getComputedStyle(_themeProbe).color;
+    _themeProbe.remove();
+    const m = text.match(/^rgba?\(\s*([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)(?:[,\s/]+([\d.]+%?))?\s*\)$/)
+      || text.match(/^color\(srgb\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)(?:\s*\/\s*([\d.]+%?))?\s*\)$/);
+    if (!m) return null;
+    const k = text.startsWith('color(') ? 255 : 1;
+    let alpha = m[4] === undefined ? 1 : m[4].endsWith('%') ? parseFloat(m[4]) / 100 : parseFloat(m[4]);
+    return [m[1] * k, m[2] * k, m[3] * k, alpha];
+  }
   function _syncAccentInk() {
-    if (!_themeContext) return;
     const root = document.documentElement;
     const colors = getComputedStyle(root);
-    _themeContext.fillStyle = '#ffffff';
-    _themeContext.fillStyle = colors.getPropertyValue('--surface').trim();
-    _themeContext.fillRect(0, 0, 1, 1);
-    _themeContext.fillStyle = colors.getPropertyValue('--accent').trim();
-    _themeContext.fillRect(0, 0, 1, 1);
-    const rgb = _themeContext.getImageData(0, 0, 1, 1).data;
+    const accent = _resolveRgb(colors.getPropertyValue('--accent'));
+    if (!accent) return;
+    const surface = _resolveRgb(colors.getPropertyValue('--surface')) || [255, 255, 255, 1];
+    const rgb = accent.slice(0, 3).map((v, i) => v * accent[3] + surface[i] * (1 - accent[3]));
     const linear = v => { v /= 255; return v <= .04045 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4; };
     const luminance = linear(rgb[0]) * .2126 + linear(rgb[1]) * .7152 + linear(rgb[2]) * .0722;
     const ink = (luminance + .05) / .05 > 1.05 / (luminance + .05) ? '#000000' : '#ffffff';
