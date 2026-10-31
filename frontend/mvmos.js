@@ -2,6 +2,32 @@
 var mvmOS = (() => {
   const _apps = {};
 
+  // An accent can be dark blue in a dark theme or pale blue in another one.
+  // Derive its foreground from the actual color, independently of wallpaper.
+  const _themePixel = document.createElement('canvas');
+  _themePixel.width = _themePixel.height = 1;
+  const _themeContext = _themePixel.getContext('2d', { willReadFrequently: true });
+  function _syncAccentInk() {
+    if (!_themeContext) return;
+    const root = document.documentElement;
+    const colors = getComputedStyle(root);
+    _themeContext.fillStyle = '#ffffff';
+    _themeContext.fillStyle = colors.getPropertyValue('--surface').trim();
+    _themeContext.fillRect(0, 0, 1, 1);
+    _themeContext.fillStyle = colors.getPropertyValue('--accent').trim();
+    _themeContext.fillRect(0, 0, 1, 1);
+    const rgb = _themeContext.getImageData(0, 0, 1, 1).data;
+    const linear = v => { v /= 255; return v <= .04045 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4; };
+    const luminance = linear(rgb[0]) * .2126 + linear(rgb[1]) * .7152 + linear(rgb[2]) * .0722;
+    const ink = (luminance + .05) / .05 > 1.05 / (luminance + .05) ? '#000000' : '#ffffff';
+    if (root.style.getPropertyValue('--on-accent') !== ink) root.style.setProperty('--on-accent', ink);
+  }
+  _syncAccentInk();
+  const _themeContrastObserver = new MutationObserver(_syncAccentInk);
+  _themeContrastObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['class', 'style'] });
+  _themeContrastObserver.observe(document.head, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['href', 'media'] });
+  document.addEventListener('load', e => { if (e.target instanceof HTMLLinkElement) _syncAccentInk(); }, true);
+
   // System actions (Linux users, packages, services, installing apps, core
   // update...) need root. For a sudo user the server answers 403
   // admin_required; then the password is asked once and the same request is
@@ -1495,7 +1521,7 @@ var mvmOS = (() => {
           ov.innerHTML = `
             <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius,6px);padding:24px;max-width:380px;width:90%;box-shadow:var(--shadow)">
               <div style="font-size:1.05rem;font-weight:700;margin-bottom:8px">🔐 ${title || _t('require_root_title') || 'Confirmation required'}</div>
-              <div style="font-size:.85rem;color:#f38ba8;margin-bottom:16px">${_t('require_root_no_sudo') || 'Your account does not have the necessary privileges to perform this action.'}</div>
+              <div style="font-size:.85rem;color:color-mix(in srgb,#f38ba8 35%,var(--text,#c9d1d9));margin-bottom:16px">${_t('require_root_no_sudo') || 'Your account does not have the necessary privileges to perform this action.'}</div>
               <div style="display:flex;justify-content:flex-end">
                 <button id="_rr-close" class="s-btn s-btn-sm">${_t('close') || 'Close'}</button>
               </div>
@@ -1512,7 +1538,7 @@ var mvmOS = (() => {
             ${message ? `<div style="font-size:.85rem;color:var(--text-dim);margin-bottom:12px">${message}</div>` : ''}
             <label style="font-size:.82rem;color:var(--text-dim);display:block;margin-bottom:4px">${_t('require_root_password') || 'Your password'}</label>
             <input type="password" id="_rr-pw" style="width:100%;box-sizing:border-box;padding:7px 10px;border:1px solid var(--border);border-radius:4px;background:var(--surface2);color:var(--text);font-size:.85rem;margin-bottom:6px" placeholder="${_t('require_root_ph') || 'Enter your password…'}">
-            <div id="_rr-err" style="font-size:.78rem;color:#f38ba8;min-height:16px;margin-bottom:12px"></div>
+            <div id="_rr-err" style="font-size:.78rem;color:color-mix(in srgb,#f38ba8 35%,var(--text,#c9d1d9));min-height:16px;margin-bottom:12px"></div>
             <div style="display:flex;gap:8px;justify-content:flex-end">
               <button id="_rr-cancel" class="s-btn s-btn-sm">${_t('cancel') || 'Cancel'}</button>
               <button id="_rr-ok" class="s-btn s-btn-sm s-btn-primary">${_t('confirm') || 'Confirm'}</button>
@@ -1551,7 +1577,7 @@ var mvmOS = (() => {
       return new Promise(resolve => {
         const ov = document.createElement('div');
         ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;';
-        ov.innerHTML = `<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius,6px);padding:24px;max-width:380px;width:90%;box-shadow:var(--shadow)"><div style="font-size:1.05rem;font-weight:700;margin-bottom:8px">🔐 ${title}</div><div style="font-size:.85rem;color:var(--text-dim);margin-bottom:12px">${message}</div><input type="password" id="_cp-pw" autocomplete="current-password" placeholder="${_t('require_root_ph')}" style="width:100%;box-sizing:border-box;padding:7px 10px;border:1px solid var(--border);border-radius:4px;background:var(--surface2);color:var(--text);font-size:.85rem"><div id="_cp-err" style="font-size:.78rem;color:#f38ba8;min-height:16px;margin:6px 0 12px"></div><div style="display:flex;gap:8px;justify-content:flex-end"><button id="_cp-cancel" class="s-btn s-btn-sm">${_t('cancel')}</button><button id="_cp-ok" class="s-btn s-btn-sm s-btn-primary">${_t('confirm')}</button></div></div>`;
+        ov.innerHTML = `<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius,6px);padding:24px;max-width:380px;width:90%;box-shadow:var(--shadow)"><div style="font-size:1.05rem;font-weight:700;margin-bottom:8px">🔐 ${title}</div><div style="font-size:.85rem;color:var(--text-dim);margin-bottom:12px">${message}</div><input type="password" id="_cp-pw" autocomplete="current-password" placeholder="${_t('require_root_ph')}" style="width:100%;box-sizing:border-box;padding:7px 10px;border:1px solid var(--border);border-radius:4px;background:var(--surface2);color:var(--text);font-size:.85rem"><div id="_cp-err" style="font-size:.78rem;color:color-mix(in srgb,#f38ba8 35%,var(--text,#c9d1d9));min-height:16px;margin:6px 0 12px"></div><div style="display:flex;gap:8px;justify-content:flex-end"><button id="_cp-cancel" class="s-btn s-btn-sm">${_t('cancel')}</button><button id="_cp-ok" class="s-btn s-btn-sm s-btn-primary">${_t('confirm')}</button></div></div>`;
         document.body.appendChild(ov);
         const input = ov.querySelector('#_cp-pw'), error = ov.querySelector('#_cp-err'), button = ov.querySelector('#_cp-ok');
         input.focus();
@@ -1577,7 +1603,7 @@ var mvmOS = (() => {
           <div style="font-size:.92rem;line-height:1.5">${message}</div>
           <div style="display:flex;gap:8px;justify-content:flex-end">
             <button id="_mc-cancel" class="s-btn s-btn-sm">${opts.cancel || _t('cancel') || 'Cancel'}</button>
-            <button id="_mc-ok" class="s-btn s-btn-sm" style="${opts.danger !== false ? 'background:#f38ba8;color:#1e1e2e;border-color:#f38ba8' : 'background:var(--accent);color:#fff;border-color:var(--accent)'}">${opts.ok || _t('confirm') || 'Confirm'}</button>
+            <button id="_mc-ok" class="s-btn s-btn-sm" style="${opts.danger !== false ? 'background:#f38ba8;color:#1e1e2e;border-color:#f38ba8' : 'background:var(--accent);color:var(--on-accent,#fff);border-color:var(--accent)'}">${opts.ok || _t('confirm') || 'Confirm'}</button>
           </div></div>`;
         document.body.appendChild(ov);
         ov.querySelector('#_mc-cancel').onclick = () => { ov.remove(); resolve(false); };

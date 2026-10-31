@@ -28,6 +28,6 @@ If an error-report dialog appears, you choose whether to send a technical report
 
 ## Shared date and time controls
 
-Core provides a shared calendar and time picker on the desktop and public app pages. Apps can use a date, a time, or a combined date and time control. The picker follows the installation's date format, 12/24-hour clock, first day of the week and time zone. A public profile's saved date and time formats override the installation defaults for that profile. The browser's native calendar and clock settings do not determine this control's layout.
+Core provides a shared calendar and time picker on the desktop and public app pages. Apps can use a date, a time, or a combined date and time control. The picker follows the installation's date format, 12/24-hour clock, first day of the week and time zone. A public profile's saved date and time formats override the installation defaults for that profile. The browser's native calendar and clock settings do not determine this control's layout. Date periods can be selected in one calendar: choose the start and end dates, review the highlighted range, then apply it. Recurring annual periods show day and month in the regional order, omit the year and allow periods that continue into the next year. Cancel keeps the original dates.
 
 An app must opt in to the shared picker; existing native fields are not replaced automatically. See the developer example in the repository README. Times skipped by the spring daylight saving transition are rejected. A repeated autumn time resolves to its first occurrence.

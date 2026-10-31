@@ -133,7 +133,7 @@ const AppStore = (() => {
               <div style="display:flex;gap:6px">
                 <button class="s-btn" id="as-store-submit">${t('as_add_btn')}</button>
                 <button class="s-btn-sm" id="as-store-cancel">${t('as_cancel_btn')}</button>
-                <span id="as-store-err" style="font-size:.78rem;color:#f38ba8;align-self:center"></span>
+                <span id="as-store-err" style="font-size:.78rem;color:color-mix(in srgb,#f38ba8 35%,var(--text,#c9d1d9));align-self:center"></span>
               </div>
             </div>
             <div class="as-list" id="as-stores-list"><div class="as-loading"\>${t('loading')}</div></div>
@@ -160,7 +160,7 @@ const AppStore = (() => {
               <div style="display:flex;gap:6px">
                 <button class="s-btn" id="as-wstore-submit">${t('as_add_btn')}</button>
                 <button class="s-btn-sm" id="as-wstore-cancel">${t('as_cancel_btn')}</button>
-                <span id="as-wstore-err" style="font-size:.78rem;color:#f38ba8;align-self:center"></span>
+                <span id="as-wstore-err" style="font-size:.78rem;color:color-mix(in srgb,#f38ba8 35%,var(--text,#c9d1d9));align-self:center"></span>
               </div>
             </div>
             <div class="as-list" id="as-wstores-list"><div class="as-loading"\>${t('loading')}</div></div>
@@ -187,7 +187,7 @@ const AppStore = (() => {
               <div style="display:flex;gap:6px">
                 <button class="s-btn" id="as-tstore-submit">${t('as_add_btn')}</button>
                 <button class="s-btn-sm" id="as-tstore-cancel">${t('as_cancel_btn')}</button>
-                <span id="as-tstore-err" style="font-size:.78rem;color:#f38ba8;align-self:center"></span>
+                <span id="as-tstore-err" style="font-size:.78rem;color:color-mix(in srgb,#f38ba8 35%,var(--text,#c9d1d9));align-self:center"></span>
               </div>
             </div>
             <div class="as-list" id="as-tstores-list"><div class="as-loading"\>${t('loading')}</div></div>
@@ -786,7 +786,7 @@ const AppStore = (() => {
 
   function _backendConfirmDialog(body, appName) {
     return mvmOS.confirm(
-      `"${mvmOS._escHtml(appName)}" ${t('appstore_backend_msg')}<br><span style="color:#f38ba8;font-size:.8rem">${t('appstore_backend_warn')}</span>`
+      `"${mvmOS._escHtml(appName)}" ${t('appstore_backend_msg')}<br><span style="color:color-mix(in srgb,#f38ba8 35%,var(--text,#c9d1d9));font-size:.8rem">${t('appstore_backend_warn')}</span>`
     );
   }
 
@@ -1693,12 +1693,12 @@ const UpdateManager = (() => {
             </div>
             <div class="as-pkg-desc">${u.description || ''}</div>
             <div class="as-pkg-ver">${u.current_version} → <span style="color:var(--accent)">${u.new_version}</span></div>
-            ${!u.compatible && u.min_core_version ? `<div style="font-size:.7rem;color:#ffb86c;margin-top:2px">⚠ ${t('um_incompatible')}</div>` : ''}
+            ${!u.compatible && u.min_core_version ? `<div style="font-size:.7rem;color:color-mix(in srgb,#ffb86c 35%,var(--text,#c9d1d9));margin-top:2px">⚠ ${t('um_incompatible')}</div>` : ''}
           </div>
           <div class="as-pkg-actions">
             ${u.compatible !== false
               ? `<button class="s-btn s-btn-sm um-update-btn">${t('um_update_btn')}</button>`
-              : `<span style="font-size:.72rem;color:#ffb86c" title="${t('appstore_requires_core').replace('{min}', u.min_core_version).replace('{cur}', '')}">⚠ ${t('um_incompatible')}</span>`}
+              : `<span style="font-size:.72rem;color:color-mix(in srgb,#ffb86c 35%,var(--text,#c9d1d9))" title="${t('appstore_requires_core').replace('{min}', u.min_core_version).replace('{cur}', '')}">⚠ ${t('um_incompatible')}</span>`}
           </div>
         `;
         if (u.compatible !== false) row.querySelector('.um-update-btn').addEventListener('click', async e => {
@@ -1831,7 +1831,7 @@ const UpdateManager = (() => {
         if (result.needs_backend_confirm) {
           if (!batch?.backendConfirmed) {
             const confirmed = await mvmOS.confirm(batch ? t('um_backend_batch_confirm') :
-              `"${mvmOS._escHtml(u.name)}" ${t('appstore_backend_msg')}<br><span style="color:#f38ba8;font-size:.8rem">${t('appstore_backend_warn')}</span>`);
+              `"${mvmOS._escHtml(u.name)}" ${t('appstore_backend_msg')}<br><span style="color:color-mix(in srgb,#f38ba8 35%,var(--text,#c9d1d9));font-size:.8rem">${t('appstore_backend_warn')}</span>`);
             if (!confirmed) { if (batch) batch.cancelled = true; return false; }
             if (batch) batch.backendConfirmed = true;
           }

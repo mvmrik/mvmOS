@@ -29,7 +29,7 @@ const Sites = (() => {
           <div style="font-size:.95rem;font-weight:600;">${t('sites_projects')}</div>
           <div style="display:flex;gap:6px">
             <button class="s-btn" id="sites-webserver-btn" style="font-size:.8rem">⏸ Web Server</button>
-            <button class="s-btn" id="sites-new-btn" style="background:var(--accent);color:#fff;border-color:var(--accent);">+ ${t('sites_new_project')}</button>
+            <button class="s-btn" id="sites-new-btn" style="background:var(--accent);color:var(--on-accent,#fff);border-color:var(--accent);">+ ${t('sites_new_project')}</button>
           </div>
         </div>
 
@@ -60,7 +60,7 @@ const Sites = (() => {
             </div>
             <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:4px;">
               <button class="s-btn" id="sites-cancel-btn">${t('cancel')}</button>
-              <button class="s-btn" id="sites-create-btn" style="background:var(--accent);color:#fff;border-color:var(--accent);">${t('sites_create')}</button>
+              <button class="s-btn" id="sites-create-btn" style="background:var(--accent);color:var(--on-accent,#fff);border-color:var(--accent);">${t('sites_create')}</button>
             </div>
           </div>
         </div>
@@ -116,7 +116,7 @@ const Sites = (() => {
       btn._wsActive = s.active;
       if (s.active) {
         btn.textContent = `🟢 Web Server :${s.port}`;
-        btn.style.cssText = 'font-size:.8rem;color:#50fa7b;border-color:#50fa7b';
+        btn.style.cssText = 'font-size:.8rem;color:color-mix(in srgb,#50fa7b 35%,var(--text,#c9d1d9));border-color:#50fa7b';
       } else {
         btn.textContent = '⏸ Web Server';
         btn.style.cssText = 'font-size:.8rem';
@@ -143,7 +143,7 @@ const Sites = (() => {
         <div id="ws-error" style="display:none;font-size:.78rem;color:#ff5555"></div>
         <div style="display:flex;gap:8px;justify-content:flex-end">
           <button class="s-btn" id="ws-cancel">${t('cancel')}</button>
-          <button class="s-btn" id="ws-start" style="background:var(--accent);color:#fff;border-color:var(--accent)">${t('sites_start')}</button>
+          <button class="s-btn" id="ws-start" style="background:var(--accent);color:var(--on-accent,#fff);border-color:var(--accent)">${t('sites_start')}</button>
         </div>
       </div>`;
     el.style.position = 'relative';
@@ -216,9 +216,9 @@ const Sites = (() => {
             <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:6px;">
               ${p.has_app ? `<button class="s-btn sites-open-app" data-id="${p.id}" style="padding:3px 10px;font-size:.78rem">▶ ${t('sites_open_app')}</button>` : ''}
               ${watching
-                ? `<span style="font-size:.72rem;color:#50fa7b;background:rgba(80,250,123,.1);border:1px solid rgba(80,250,123,.3);border-radius:4px;padding:2px 7px">● ${t('sites_watching')}</span>
+                ? `<span style="font-size:.72rem;color:color-mix(in srgb,#50fa7b 35%,var(--text,#c9d1d9));background:rgba(80,250,123,.1);border:1px solid rgba(80,250,123,.3);border-radius:4px;padding:2px 7px">● ${t('sites_watching')}</span>
                    <button class="s-btn sites-stop" data-id="${p.id}" style="padding:3px 10px;font-size:.78rem">${t('sites_stop')}</button>`
-                : `<button class="s-btn sites-build" data-id="${p.id}" style="background:var(--accent);color:#fff;border-color:var(--accent);padding:3px 10px;font-size:.78rem">${t('sites_build')}</button>`
+                : `<button class="s-btn sites-build" data-id="${p.id}" style="background:var(--accent);color:var(--on-accent,#fff);border-color:var(--accent);padding:3px 10px;font-size:.78rem">${t('sites_build')}</button>`
               }
               <button class="s-btn sites-edit" data-id="${p.id}" data-dir="${p.project_dir}" style="padding:3px 10px;font-size:.78rem">✏️ ${t('sites_edit')}</button>
               <button class="s-btn sites-settings" data-id="${p.id}" data-name="${p.name}" data-domain="${p.domain || ''}" data-path="${p.path || ''}" style="padding:3px 10px;font-size:.78rem">⚙ ${t('settings')}</button>
@@ -336,7 +336,7 @@ const Sites = (() => {
         </div>
         <div style="display:flex;gap:8px;justify-content:flex-end">
           <button class="s-btn" id="cfg-cancel">${t('cancel')}</button>
-          <button class="s-btn" id="cfg-save" style="background:var(--accent);color:#fff;border-color:var(--accent)">${t('save')}</button>
+          <button class="s-btn" id="cfg-save" style="background:var(--accent);color:var(--on-accent,#fff);border-color:var(--accent)">${t('save')}</button>
         </div>
       </div>`;
 

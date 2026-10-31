@@ -184,6 +184,40 @@ const departure = picker.toEpoch(field.value); // seconds, or null if invalid
 field.destroy(); // remove control, any open dialog and event listeners
 ```
 
+Use `createRange(host, options)` for an inclusive date period selected in one calendar:
+
+```js
+const period = picker.createRange(host, {
+  label: t('period'), required: true,
+  value: { from: '2026-04-01', to: '2026-10-31' },
+  onChange(value) { /* a copy of {from, to}, in canonical date format */ },
+});
+const season = picker.createRange(seasonHost, {
+  label: t('annual_season'), required: true, annual: true,
+  value: { from: '11-01', to: '03-31' },
+});
+period.destroy();
+season.destroy();
+```
+
+Ranges expose the same handle methods as individual controls. Their `value` is
+`{from, to}`; the hidden named `input` contains its JSON representation, or an
+empty string when cleared. Both endpoints must be present for a required range.
+Normal endpoints use `YYYY-MM-DD` and require `from <= to`. With `annual: true`,
+endpoints use `MM-DD`, omit the year in the calendar and display, support
+February 29, and may cross New Year (`from > to`). Annual dates are recurring
+month/day values, not instants: do not convert them to epoch timestamps.
+`min`/`max`, when supplied, constrain each endpoint in the same canonical format.
+Changes are committed only with Apply; Cancel and Escape keep the original value.
+The start and end buttons let the user edit either endpoint; arrows move calendar
+focus, and Enter/Space select a date. Destroy handles when their view closes.
+
+Use `formatRange({from, to}, options)` for regional range text and
+`formatAnnual('MM-DD', options)` for a recurring date without a year. These use
+the configured day/month order, including day first for a DD/MM/YYYY preference.
+The range component has no app-specific or billing rules; callers decide how an
+inclusive date period maps to their API or storage boundaries.
+
 `value`, `min` and `max` use `YYYY-MM-DD`, `HH:mm` or `YYYY-MM-DDTHH:mm` according
 to `type`. The returned handle provides `value`, `setValue(value)`, `validate()`,
 `open()`, `button` and the hidden canonical form `input`. Optional fields support
@@ -217,3 +251,7 @@ Bug reports and ideas are welcome in [Issues](https://github.com/mvmrik/mvmOS/is
 mvmOS is open-source software provided "as-is", without warranty of any kind. The authors are
 not liable for damage to your system, data loss, security incidents or anything else arising
 from its use. Securing your server and your data is your responsibility.
+
+## Theme contrast
+
+Core derives `--on-accent` from the active `--accent` color, choosing black or white for the stronger contrast and refreshing it when the theme changes. Use it for text and icons on an accent background. The desktop background may be a wallpaper color and must not be used as contrasting text. Theme-aware panels use `--text`/`--text-dim` with `--surface`/`--surface2`; public apps use the corresponding `--pub-*` variables. Fixed dark canvases, game boards and media viewers must set their own light foreground, including overlays and secondary labels. Check result dialogs, bonus breakdowns, status messages, selected states and hover states in light and dark themes when changing an interface.

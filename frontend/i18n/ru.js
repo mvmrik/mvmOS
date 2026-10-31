@@ -1,5 +1,13 @@
 // mvmOS UI — Русский
 window._i18n = {
+  "picker_range_ready": "Период выбран. Нажмите «Применить» для подтверждения.",
+  "picker_range": "Период",
+  "picker_from": "С",
+  "picker_to": "По включительно",
+  "picker_annual": "Повторяется каждый год",
+  "picker_cross_year": "Продолжается в следующем году",
+  "picker_choose_start": "Выберите начальную дату",
+  "picker_choose_end": "Выберите конечную дату",
   "picker_date": "Дата",
   "picker_time": "Время",
   "picker_datetime": "Дата и время",

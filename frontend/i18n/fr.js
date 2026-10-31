@@ -1,5 +1,13 @@
 // mvmOS UI — Français
 window._i18n = {
+  "picker_range_ready": "Période sélectionnée. Appuyez sur Appliquer pour confirmer.",
+  "picker_range": "Période",
+  "picker_from": "Du",
+  "picker_to": "Au inclus",
+  "picker_annual": "Se répète chaque année",
+  "picker_cross_year": "Continue l’année suivante",
+  "picker_choose_start": "Choisissez la date de début",
+  "picker_choose_end": "Choisissez la date de fin",
   "picker_date": "Date",
   "picker_time": "Heure",
   "picker_datetime": "Date et heure",

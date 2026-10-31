@@ -287,7 +287,7 @@ const Settings = (() => {
                   ${isPremium ? t('subscription_active_until', {date: expiry}) : t('subscription_free_desc')}
                 </div>
               </div>
-              ${premium.reason === 'duplicate' ? `<div style="font-size:.82rem;color:#e0a355;line-height:1.5;margin-top:12px">${t('subscription_duplicate')}</div>` : ''}
+              ${premium.reason === 'duplicate' ? `<div style="font-size:.82rem;color:color-mix(in srgb,#e0a355 35%,var(--text,#c9d1d9));line-height:1.5;margin-top:12px">${t('subscription_duplicate')}</div>` : ''}
               <div style="font-size:.8rem;color:var(--text-dim);line-height:1.5;margin-top:12px">${t('subscription_keeps_working')}</div>
 
               <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border)">
@@ -317,7 +317,7 @@ const Settings = (() => {
                     <button class="s-btn-sm" id="btc-copy">${t('btc_pay_copy')}</button>
                   </div>
                   <div id="btc-status" style="margin-top:10px;font-size:.85rem;font-weight:600;color:var(--text-dim);text-align:left"></div>
-                  <div id="btc-received" style="margin-top:4px;font-size:.78rem;color:#e0a355;text-align:left"></div>
+                  <div id="btc-received" style="margin-top:4px;font-size:.78rem;color:color-mix(in srgb,#e0a355 35%,var(--text,#c9d1d9));text-align:left"></div>
                   <div id="btc-waiting-elapsed" style="margin-top:4px;font-size:.78rem;color:var(--text-dim);text-align:left"></div>
                   <div id="btc-payment-reference" style="margin-top:7px;font-size:.75rem;color:var(--text-dim);text-align:left;font-family:var(--mono,monospace)"></div>
                   <div id="btc-transaction" style="display:none;margin-top:4px;font-size:.75rem;color:var(--text-dim);text-align:left;font-family:var(--mono,monospace);word-break:break-all"></div>
@@ -909,7 +909,7 @@ const Settings = (() => {
             <div style="flex:1;min-width:150px">
               <div style="font-size:.88rem">${name}${here ? ` <span style="color:var(--accent);font-size:.76rem;white-space:nowrap">${t('subscription_device_this')}</span>` : ''}</div>
               <div style="font-size:.75rem;color:var(--text-dim);margin-top:2px">${t('subscription_device_last_seen', {date: formatDate(d.last_seen, s.date_format, s.timezone)})}</div>
-              ${flagged ? `<div style="font-size:.75rem;color:#e0a355;margin-top:2px">${t('subscription_device_conflicts', {count: d.duplicates})}</div>` : ''}
+              ${flagged ? `<div style="font-size:.75rem;color:color-mix(in srgb,#e0a355 35%,var(--text,#c9d1d9));margin-top:2px">${t('subscription_device_conflicts', {count: d.duplicates})}</div>` : ''}
             </div>
             ${here ? '' : `<button class="s-btn-sm prem-release" data-device="${d.device_id}">${t('subscription_device_release')}</button>`}
           </div>`;
@@ -1759,7 +1759,7 @@ const Settings = (() => {
           <button id="totp-copy-secret" class="s-btn-sm" style="flex-shrink:0;white-space:nowrap">${t('settings_copy')}</button>
         </div>
 
-        <div style="background:rgba(255,184,108,.08);border:1px solid rgba(255,184,108,.3);border-radius:6px;padding:10px 12px;font-size:.82rem;margin-bottom:16px;color:#ffb86c;line-height:1.5">
+        <div style="background:rgba(255,184,108,.08);border:1px solid rgba(255,184,108,.3);border-radius:6px;padding:10px 12px;font-size:.82rem;margin-bottom:16px;color:color-mix(in srgb,#ffb86c 35%,var(--text,#c9d1d9));line-height:1.5">
           &#9888; ${t('users_2fa_backup_warning')}
         </div>
 
@@ -1887,7 +1887,7 @@ const Settings = (() => {
             <label>${t('users_2fa')}</label>
             <div style="display:flex;align-items:center;gap:10px">
               <label class="toggle"><input type="checkbox" class="user-totp-chk"><span class="toggle-slider"></span></label>
-              <span class="user-totp-label" style="font-size:.82rem;color:#50fa7b"></span>
+              <span class="user-totp-label" style="font-size:.82rem;color:color-mix(in srgb,#50fa7b 35%,var(--text,#c9d1d9))"></span>
             </div>
           </div>
           <div class="settings-row">

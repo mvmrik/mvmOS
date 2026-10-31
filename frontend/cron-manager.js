@@ -90,11 +90,11 @@ const CronManager = (() => {
         <div style="display:flex;align-items:center;gap:8px;padding:10px 16px;border-bottom:1px solid var(--border);font-size:.82rem">
           <span style="color:${a.file_exists?'#a6e3a1':'#f38ba8'}">${a.file_exists ? '✓' : '⚠'}</span>
           <span style="flex:1">${a.name}</span>
-          <span style="font-family:var(--mono);font-size:.72rem;color:var(--text-dim)">${a.scheduler}${!a.file_exists?' <span style="color:#f38ba8">'+_t('scheduler_file_missing')+'</span>':''}</span>
+          <span style="font-family:var(--mono);font-size:.72rem;color:var(--text-dim)">${a.scheduler}${!a.file_exists?' <span style="color:color-mix(in srgb,#f38ba8 35%,var(--text,#c9d1d9))">'+_t('scheduler_file_missing')+'</span>':''}</span>
         </div>`),
       ...systemApps.map(a => `
         <div style="display:flex;align-items:center;gap:8px;padding:10px 16px;border-bottom:1px solid var(--border);font-size:.82rem">
-          <span style="color:#a6e3a1">✓</span>
+          <span style="color:color-mix(in srgb,#a6e3a1 35%,var(--text,#c9d1d9))">✓</span>
           <span style="flex:1">${a.name}</span>
           <span style="font-size:.72rem;color:var(--text-dim)">${schedLabels[a.config?.schedule] || '—'}</span>
         </div>`),
@@ -238,7 +238,7 @@ const CronManager = (() => {
       <div style="font-size:.8rem;color:var(--text-dim);margin-bottom:14px">${_t('sudo_msg').replace('{user}', targetUser)}</div>
       <input id="sudo-pw" type="password" placeholder="${_t('sudo_placeholder')}" autocomplete="current-password"
         style="width:100%;padding:6px 8px;background:var(--surface);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:.85rem;box-sizing:border-box;margin-bottom:8px">
-      <div id="sudo-err" style="color:#f38ba8;font-size:.78rem;margin-bottom:8px;min-height:1.2em"></div>
+      <div id="sudo-err" style="color:color-mix(in srgb,#f38ba8 35%,var(--text,#c9d1d9));font-size:.78rem;margin-bottom:8px;min-height:1.2em"></div>
       <div style="display:flex;justify-content:flex-end;gap:8px">
         <button class="s-btn-sm" id="sudo-cancel">${_t('cancel')}</button>
         <button class="s-btn" id="sudo-ok">${_t('sudo_confirm')}</button>
@@ -298,7 +298,7 @@ const CronManager = (() => {
         <textarea id="cf-command" rows="3" placeholder="/path/to/script.sh >> /dev/null 2>&1"
           style="width:100%;padding:6px 8px;background:var(--surface);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:.8rem;font-family:var(--mono);box-sizing:border-box;resize:vertical;line-height:1.5">${isEdit ? entry.command.replace(/&/g,'&amp;').replace(/</g,'&lt;') : ''}</textarea>
       </div>
-      <div id="cf-err" style="color:#f38ba8;font-size:.78rem;margin-bottom:8px;display:none"></div>
+      <div id="cf-err" style="color:color-mix(in srgb,#f38ba8 35%,var(--text,#c9d1d9));font-size:.78rem;margin-bottom:8px;display:none"></div>
       <div style="display:flex;justify-content:flex-end;gap:8px">
         <button class="s-btn-sm" id="cf-cancel">${_t('cancel')}</button>
         <button class="s-btn" id="cf-save">${isEdit ? _t('save') : _t('add')}</button>

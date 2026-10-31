@@ -201,7 +201,7 @@ const AppHub = (() => {
         <div style="padding:20px;display:flex;flex-direction:column;gap:16px;max-width:340px">
           <div style="font-weight:600;font-size:.95rem">${t('ah_signin_title')}</div>
           ${regAllowed ? `<div style="display:flex;gap:0;background:var(--surface2);border-radius:8px;padding:3px">
-            <button id="ah-tab-login" style="flex:1;border:none;border-radius:6px;padding:6px;font-size:.82rem;font-family:inherit;cursor:pointer;background:var(--accent);color:#1e1e2e;font-weight:600">${t('ah_login')}</button>
+            <button id="ah-tab-login" style="flex:1;border:none;border-radius:6px;padding:6px;font-size:.82rem;font-family:inherit;cursor:pointer;background:var(--accent);color:var(--on-accent,#fff);font-weight:600">${t('ah_login')}</button>
             <button id="ah-tab-reg"   style="flex:1;border:none;border-radius:6px;padding:6px;font-size:.82rem;font-family:inherit;cursor:pointer;background:none;color:var(--text-dim)">${t('ah_register')}</button>
           </div>` : ''}
           <div id="ah-login-form"></div>
@@ -213,7 +213,7 @@ const AppHub = (() => {
 
       function showLogin() {
         const tl = c.querySelector('#ah-tab-login'), tr = c.querySelector('#ah-tab-reg');
-        if (tl) tl.style.cssText = 'flex:1;border:none;border-radius:6px;padding:6px;font-size:.82rem;font-family:inherit;cursor:pointer;background:var(--accent);color:#1e1e2e;font-weight:600';
+        if (tl) tl.style.cssText = 'flex:1;border:none;border-radius:6px;padding:6px;font-size:.82rem;font-family:inherit;cursor:pointer;background:var(--accent);color:var(--on-accent,#fff);font-weight:600';
         if (tr) tr.style.cssText = 'flex:1;border:none;border-radius:6px;padding:6px;font-size:.82rem;font-family:inherit;cursor:pointer;background:none;color:var(--text-dim)';
         loginForm.style.display = '';
         regForm.style.display   = 'none';
@@ -221,8 +221,8 @@ const AppHub = (() => {
           <div style="display:flex;flex-direction:column;gap:10px">
             <input class="s-inp" id="ah-un" placeholder="${t('ah_username_ph')}" autocomplete="username">
             <input class="s-inp" id="ah-pw" type="password" placeholder="${t('ah_password_ph')}" autocomplete="current-password">
-            <div class="s-err" id="ah-err" style="color:#f38ba8;font-size:.82rem;min-height:16px"></div>
-            <button class="s-btn" id="ah-login-btn" style="background:var(--accent);color:#1e1e2e;font-weight:600">${t('ah_login')}</button>
+            <div class="s-err" id="ah-err" style="color:color-mix(in srgb,#f38ba8 35%,var(--text,#c9d1d9));font-size:.82rem;min-height:16px"></div>
+            <button class="s-btn" id="ah-login-btn" style="background:var(--accent);color:var(--on-accent,#fff);font-weight:600">${t('ah_login')}</button>
           </div>`;
         const btn = loginForm.querySelector('#ah-login-btn');
         const err = loginForm.querySelector('#ah-err');
@@ -253,15 +253,15 @@ const AppHub = (() => {
 
       function showReg() {
         c.querySelector('#ah-tab-login').style.cssText = 'flex:1;border:none;border-radius:6px;padding:6px;font-size:.82rem;font-family:inherit;cursor:pointer;background:none;color:var(--text-dim)';
-        c.querySelector('#ah-tab-reg').style.cssText   = 'flex:1;border:none;border-radius:6px;padding:6px;font-size:.82rem;font-family:inherit;cursor:pointer;background:var(--accent);color:#1e1e2e;font-weight:600';
+        c.querySelector('#ah-tab-reg').style.cssText   = 'flex:1;border:none;border-radius:6px;padding:6px;font-size:.82rem;font-family:inherit;cursor:pointer;background:var(--accent);color:var(--on-accent,#fff);font-weight:600';
         loginForm.style.display = 'none';
         regForm.style.display   = 'flex';
         regForm.innerHTML = `
           <input class="s-inp" id="ah-r-dn" placeholder="${t('ah_display_name_ph')}">
           <input class="s-inp" id="ah-r-un" placeholder="${t('ah_username_ph')}" autocomplete="username">
           <input class="s-inp" id="ah-r-pw" type="password" placeholder="${t('ah_password_min_ph')}" autocomplete="new-password">
-          <div style="color:#f38ba8;font-size:.82rem;min-height:16px" id="ah-r-err"></div>
-          <button class="s-btn" id="ah-reg-btn" style="background:var(--accent);color:#1e1e2e;font-weight:600">${t('ah_create_account')}</button>`;
+          <div style="color:color-mix(in srgb,#f38ba8 35%,var(--text,#c9d1d9));font-size:.82rem;min-height:16px" id="ah-r-err"></div>
+          <button class="s-btn" id="ah-reg-btn" style="background:var(--accent);color:var(--on-accent,#fff);font-weight:600">${t('ah_create_account')}</button>`;
         const btn = regForm.querySelector('#ah-reg-btn');
         const err = regForm.querySelector('#ah-r-err');
         btn.onclick = async () => {
@@ -426,7 +426,7 @@ const AppHub = (() => {
     async function renderApps(c) {
       c.innerHTML = '<div style="padding:20px;color:var(--text-dim);font-size:.85rem">…</div>';
       const r = await fetch('/api/apphub/public-apps').catch(()=>null);
-      if (!r?.ok) { c.innerHTML = `<div style="padding:20px;color:#f38ba8;font-size:.85rem">${t('ah_error_loading_apps')}</div>`; return; }
+      if (!r?.ok) { c.innerHTML = `<div style="padding:20px;color:color-mix(in srgb,#f38ba8 35%,var(--text,#c9d1d9));font-size:.85rem">${t('ah_error_loading_apps')}</div>`; return; }
       const apps = await r.json();
       const features = await fetch('/api/apphub/features').then(r => r.ok ? r.json() : {}).catch(() => ({}));
       if (!apps.length) { c.innerHTML = `<div style="padding:20px;color:var(--text-dim);font-size:.85rem;text-align:center">${t('ah_no_public_apps')}</div>`; return; }
@@ -527,7 +527,7 @@ const AppHub = (() => {
     async function renderAppApis(c) {
       c.innerHTML = '<div style="padding:20px;color:var(--text-dim);font-size:.85rem">…</div>';
       const r = await fetch('/api/apphub/app-apis').catch(()=>null);
-      if (!r?.ok) { c.innerHTML = `<div style="padding:20px;color:#f38ba8;font-size:.85rem">${t('ah_error_loading_apps')}</div>`; return; }
+      if (!r?.ok) { c.innerHTML = `<div style="padding:20px;color:color-mix(in srgb,#f38ba8 35%,var(--text,#c9d1d9));font-size:.85rem">${t('ah_error_loading_apps')}</div>`; return; }
       const apps = await r.json();
       if (!apps.length) { c.innerHTML = `<div style="padding:20px;color:var(--text-dim);font-size:.85rem;text-align:center">${t('ah_no_app_apis')}</div>`; return; }
 
@@ -601,7 +601,7 @@ const AppHub = (() => {
 
       let stats = null;
       if (statsRes?.ok) stats = await statsRes.json();
-      if (!usersRes?.ok) { c.innerHTML = `<div style="padding:20px;color:#f38ba8;font-size:.85rem">${t('ah_error_loading_users')}</div>`; return; }
+      if (!usersRes?.ok) { c.innerHTML = `<div style="padding:20px;color:color-mix(in srgb,#f38ba8 35%,var(--text,#c9d1d9));font-size:.85rem">${t('ah_error_loading_users')}</div>`; return; }
       const users = await usersRes.json();
       const settings = setRes?.ok ? await setRes.json() : null;
 
@@ -629,7 +629,7 @@ const AppHub = (() => {
           </div>
         </div>` : ''}
         <div style="padding:10px 16px;border-bottom:1px solid var(--border)">
-          <button id="ah-add-user" class="s-btn s-btn-sm" style="background:var(--accent);color:#1e1e2e;font-weight:600;cursor:pointer">＋ ${t('ah_add_user')}</button>
+          <button id="ah-add-user" class="s-btn s-btn-sm" style="background:var(--accent);color:var(--on-accent,#fff);font-weight:600;cursor:pointer">＋ ${t('ah_add_user')}</button>
         </div>
         <div id="ah-users-list"></div>`;
 
@@ -685,7 +685,7 @@ const AppHub = (() => {
           <button class="ah-edit" data-id="${u.id}"
                   style="border:none;background:none;color:var(--accent);font-size:.78rem;cursor:pointer;padding:4px 8px;border-radius:6px">${t('ah_edit')}</button>
           <button class="ah-del" data-id="${u.id}" data-name="${esc(u.display_name)}"
-                  style="border:none;background:none;color:#f38ba8;font-size:.78rem;cursor:pointer;padding:4px 8px;border-radius:6px">${t('ah_delete')}</button>
+                  style="border:none;background:none;color:color-mix(in srgb,#f38ba8 35%,var(--text,#c9d1d9));font-size:.78rem;cursor:pointer;padding:4px 8px;border-radius:6px">${t('ah_delete')}</button>
         </div>`).join('');
 
       c.querySelectorAll('.ah-edit').forEach(btn => {
@@ -735,7 +735,7 @@ const AppHub = (() => {
     async function renderCreditServices(c) {
       c.innerHTML = '<div style="padding:20px;color:var(--text-dim);font-size:.85rem">…</div>';
       const r = await fetch('/api/apphub/credit-services').catch(() => null);
-      if (!r?.ok) { c.innerHTML = `<div style="padding:22px;color:#f38ba8">${t('ah_credits_load_failed')}</div>`; return; }
+      if (!r?.ok) { c.innerHTML = `<div style="padding:22px;color:color-mix(in srgb,#f38ba8 35%,var(--text,#c9d1d9))">${t('ah_credits_load_failed')}</div>`; return; }
       const data = await r.json();
       const services = data.services || [];
       c.innerHTML = `
@@ -796,11 +796,11 @@ const AppHub = (() => {
             <input class="s-inp" id="um-dn" placeholder="${t('ah_display_name_ph')}" value="${isEdit?esc(user.display_name):''}">
             <input class="s-inp" id="um-un" placeholder="${t('ah_username_ph')}" autocomplete="off" value="${isEdit?esc(user.username):''}">
             <input class="s-inp" id="um-pw" type="password" placeholder="${isEdit?t('ah_password_keep_ph'):t('ah_password_min_ph')}" autocomplete="new-password">
-            <div class="s-err" id="um-err" style="color:#f38ba8;font-size:.8rem;min-height:16px"></div>
+            <div class="s-err" id="um-err" style="color:color-mix(in srgb,#f38ba8 35%,var(--text,#c9d1d9));font-size:.8rem;min-height:16px"></div>
           </div>
           <div style="padding:10px 16px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px">
             <button id="um-cancel" class="s-btn s-btn-sm" style="cursor:pointer">${t('ah_cancel')}</button>
-            <button id="um-save" class="s-btn s-btn-sm" style="background:var(--accent);color:#1e1e2e;font-weight:600;cursor:pointer">${t('ah_save')}</button>
+            <button id="um-save" class="s-btn s-btn-sm" style="background:var(--accent);color:var(--on-accent,#fff);font-weight:600;cursor:pointer">${t('ah_save')}</button>
           </div>
         </div>`;
       document.body.appendChild(overlay);
@@ -851,7 +851,7 @@ const AppHub = (() => {
               <button id="cp-sub" style="border:none;border-radius:8px;padding:8px 14px;font-size:.85rem;font-weight:600;background:#f38ba8;color:#1e1e2e;cursor:pointer">${t('ah_credits_remove')}</button>
             </div>
             <input id="cp-reason" type="text" placeholder="${t('ah_credits_reason_ph')}" style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 10px;color:inherit;font-size:.82rem">
-            <div id="cp-err" style="color:#f38ba8;font-size:.8rem;min-height:16px"></div>
+            <div id="cp-err" style="color:color-mix(in srgb,#f38ba8 35%,var(--text,#c9d1d9));font-size:.8rem;min-height:16px"></div>
           </div>
           <div style="padding:10px 16px;font-size:.78rem;font-weight:600;color:var(--text-dim)">${t('ah_credits_history')}</div>
           <div id="cp-history" style="flex:1;overflow-y:auto;padding:0 16px 16px;display:flex;flex-direction:column;gap:6px"></div>

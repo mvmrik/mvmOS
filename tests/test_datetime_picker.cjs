@@ -41,3 +41,21 @@ test('public preferences override installation formats while desktop settings ta
   assert.equal(api.format('2026-10-29T15:07'),'2026-10-29 15:07');
   await api.ready();assert.equal(requests.length,2);
 });
+test('annual dates follow regional order without inventing a display year',()=>{
+  const {api}=picker({date_format:'DD/MM/YYYY'});
+  assert.equal(api.formatAnnual('04-01'),'01/04');
+  assert.equal(api.formatAnnual('04-01',{monthNames:true,lang:'en'}),'April 1');
+  assert.match(api.formatAnnual('01-31',{monthNames:true,lang:'bg'}),/31 януари/);
+  assert.equal(api.formatAnnual('11-01',{dateFormat:'MM/DD/YYYY'}),'11/01');
+  assert.equal(api.formatAnnual('03-31',{dateFormat:'YYYY-MM-DD'}),'03-31');
+  assert.equal(api.formatAnnual('02-29',{dateFormat:'DD.MM.YYYY'}),'29.02');
+  for(const value of ['02-30','04-31','13-01','2026-04-01',''])assert.equal(api.formatAnnual(value),'');
+});
+test('range formatting supports normal dates, recurring seasons and unfinished selection',()=>{
+  const {api}=picker({date_format:'DD/MM/YYYY'});
+  assert.equal(api.formatRange({from:'2026-04-01',to:'2026-10-31'}),'01/04/2026 – 31/10/2026');
+  assert.equal(api.formatRange({from:'11-01',to:'03-31'},{annual:true}),'01/11 – 31/03');
+  assert.equal(api.formatRange({from:'02-29',to:'03-01'},{annual:true,dateFormat:'MM/DD/YYYY'}),'02/29 – 03/01');
+  assert.equal(api.formatRange({from:'2026-04-01',to:''}),'01/04/2026 – …');
+  assert.equal(api.formatRange({from:'',to:''}),'');
+});

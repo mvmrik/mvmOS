@@ -101,7 +101,7 @@ const TerminalCommands = (() => {
 .tcm-chip:hover{border-color:var(--accent)}
 .tcm-preview{font:.78rem Consolas,Menlo,monospace;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:7px 9px;margin-bottom:12px;word-break:break-all;color:var(--text-dim)}
 .tcm-btns{display:flex;gap:8px;justify-content:flex-end;align-items:center;margin-top:14px}
-.tcm-err{color:#f38ba8;font-size:.78rem;min-height:16px;margin-top:6px}
+.tcm-err{color:color-mix(in srgb,#f38ba8 35%,var(--text,#c9d1d9));font-size:.78rem;min-height:16px;margin-top:6px}
 .tcm-help{border:1px solid var(--border);border-radius:6px;margin:0 0 10px;overflow:hidden}
 .tcm-help-top{display:flex;gap:8px;align-items:center;padding:6px 8px;border-bottom:1px solid var(--border);font-size:.72rem;color:var(--text-dim)}
 .tcm-help-body{max-height:230px;overflow:auto;font:.74rem/1.5 Consolas,Menlo,monospace;padding:4px 0}

@@ -1,5 +1,13 @@
 // mvmOS UI — 日本語
 window._i18n = {
+  "picker_range_ready": "期間を選択しました。「適用」で確定してください。",
+  "picker_range": "日付範囲",
+  "picker_from": "開始",
+  "picker_to": "終了（当日を含む）",
+  "picker_annual": "毎年繰り返す",
+  "picker_cross_year": "翌年まで続く",
+  "picker_choose_start": "開始日を選択してください",
+  "picker_choose_end": "終了日を選択してください",
   "picker_date": "日付",
   "picker_time": "時刻",
   "picker_datetime": "日付と時刻",

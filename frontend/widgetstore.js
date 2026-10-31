@@ -27,7 +27,7 @@ const WidgetStore = (() => {
       const match = b.dataset.wtype === wt;
       b.classList.toggle('active', match);
       b.style.background = match ? 'var(--accent)' : '';
-      b.style.color = match ? '#fff' : '';
+      b.style.color = match ? 'var(--on-accent,#fff)' : '';
       b.style.borderColor = match ? 'var(--accent)' : '';
     });
   }
@@ -68,7 +68,7 @@ const WidgetStore = (() => {
               <div style="display:flex;gap:6px">
                 <button class="s-btn" id="ws-store-submit">${t('ws_add')}</button>
                 <button class="s-btn-sm" id="ws-store-cancel">${t('ws_cancel')}</button>
-                <span id="ws-store-err" style="font-size:.78rem;color:#f38ba8;align-self:center"></span>
+                <span id="ws-store-err" style="font-size:.78rem;color:color-mix(in srgb,#f38ba8 35%,var(--text,#c9d1d9));align-self:center"></span>
               </div>
             </div>
             <div class="as-list" id="ws-stores-list"><div class="as-loading">${t('ws_loading')}</div></div>
@@ -138,7 +138,7 @@ const WidgetStore = (() => {
             <span style="font-size:.78rem;color:var(--text-dim);margin-right:4px">${t('ws_show_label')}</span>
             ${['','desktop','taskbar'].map(v => `
               <button class="s-btn-sm ws-wtype-btn${v===filterType ? ' active' : ''}" data-wtype="${v}"
-                style="${v===filterType ? 'background:var(--accent);color:#fff;border-color:var(--accent)' : ''}"
+                style="${v===filterType ? 'background:var(--accent);color:var(--on-accent,#fff);border-color:var(--accent)' : ''}"
               >${v === '' ? t('ws_filter_all') : v.charAt(0).toUpperCase() + v.slice(1)}</button>
             `).join('')}
           </div>
@@ -153,7 +153,7 @@ const WidgetStore = (() => {
               b.style.background = ''; b.style.color = ''; b.style.borderColor = '';
             });
             btn.classList.add('active');
-            btn.style.background = 'var(--accent)'; btn.style.color = '#fff'; btn.style.borderColor = 'var(--accent)';
+            btn.style.background = 'var(--accent)'; btn.style.color = 'var(--on-accent,#fff)'; btn.style.borderColor = 'var(--accent)';
             const wt = btn.dataset.wtype;
             loadStoreCategories(body, store, wt);
             body._ws.refreshCurrent = () => loadStoreCategories(body, store, wt);

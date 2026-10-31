@@ -1,5 +1,13 @@
 // mvmOS UI — 简体中文
 window._i18n = {
+  "picker_range_ready": "已选择日期范围。点击“应用”以确认。",
+  "picker_range": "日期范围",
+  "picker_from": "开始",
+  "picker_to": "结束（含当天）",
+  "picker_annual": "每年重复",
+  "picker_cross_year": "延续至下一年",
+  "picker_choose_start": "选择开始日期",
+  "picker_choose_end": "选择结束日期",
   "picker_date": "日期",
   "picker_time": "时间",
   "picker_datetime": "日期和时间",

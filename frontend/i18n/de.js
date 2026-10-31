@@ -1,5 +1,13 @@
 // mvmOS UI — Deutsch
 window._i18n = {
+  "picker_range_ready": "Zeitraum ausgewählt. Zum Bestätigen auf „Übernehmen“ klicken.",
+  "picker_range": "Datumsbereich",
+  "picker_from": "Von",
+  "picker_to": "Bis einschließlich",
+  "picker_annual": "Wiederholt sich jedes Jahr",
+  "picker_cross_year": "Reicht ins nächste Jahr",
+  "picker_choose_start": "Startdatum auswählen",
+  "picker_choose_end": "Enddatum auswählen",
   "picker_date": "Datum",
   "picker_time": "Uhrzeit",
   "picker_datetime": "Datum und Uhrzeit",
