@@ -31,10 +31,17 @@ var mvmOS = (() => {
     const accent = _resolveRgb(colors.getPropertyValue('--accent'));
     if (!accent) return;
     const surface = _resolveRgb(colors.getPropertyValue('--surface')) || [255, 255, 255, 1];
-    const rgb = accent.slice(0, 3).map((v, i) => v * accent[3] + surface[i] * (1 - accent[3]));
     const linear = v => { v /= 255; return v <= .04045 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4; };
-    const luminance = linear(rgb[0]) * .2126 + linear(rgb[1]) * .7152 + linear(rgb[2]) * .0722;
-    const ink = (luminance + .05) / .05 > 1.05 / (luminance + .05) ? '#000000' : '#ffffff';
+    // The same foreground is used while hovering. Prefer the colour whose
+    // weakest contrast across both backgrounds is strongest.
+    const hover = _resolveRgb(colors.getPropertyValue('--accent-hover')) || accent;
+    const luminances = [accent, hover].map(color => {
+      const rgb = color.slice(0, 3).map((v, i) => v * color[3] + surface[i] * (1 - color[3]));
+      return linear(rgb[0]) * .2126 + linear(rgb[1]) * .7152 + linear(rgb[2]) * .0722;
+    });
+    const darkContrast = Math.min(...luminances.map(l => (l + .05) / .05));
+    const lightContrast = Math.min(...luminances.map(l => 1.05 / (l + .05)));
+    const ink = darkContrast > lightContrast ? '#000000' : '#ffffff';
     if (root.style.getPropertyValue('--on-accent') !== ink) root.style.setProperty('--on-accent', ink);
   }
   _syncAccentInk();

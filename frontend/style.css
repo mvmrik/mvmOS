@@ -211,6 +211,7 @@ html, body {
   font-weight: 700;
   border-radius: 50%;
 }
+.cal-today:hover { background: var(--accent-hover); }
 
 #notif-btn {
   position: relative;

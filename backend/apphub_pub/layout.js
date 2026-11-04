@@ -166,6 +166,7 @@
       document.head.appendChild(s);
     }
     s.textContent = css;
+    if (window.MvmAccentContrast) window.MvmAccentContrast.sync();
   }
 
   // Keep public pages in sync when the OS/browser changes appearance while
