@@ -41,7 +41,6 @@ PUBLIC = {
     ("GET", "/login"): "login page",
     ("POST", "/login"): "login itself, rate limited",
     ("POST", "/login/totp"): "second login step, needs the pending token",
-    ("GET", "/api/auth/login-users"): "user names shown on the login page",
     ("POST", "/api/auth/switch"): "checks the session cookie and the target user's password itself",
     ("POST", "/logout"): "only ends the caller's own session",
     ("GET", "/api/scheduler/tick"): "accepts only the local crontab, see _from_local_cron",

@@ -12,6 +12,23 @@ from .db import get_conn
 
 router = APIRouter(prefix="/api/notifications", tags=["notifications"])
 
+# Modules that want to hear about every notification the moment it is stored
+# (Telegram Hub forwards them to a person's bot). Keyed by name so a module that
+# is reloaded replaces its own listener instead of adding a second one.
+_listeners: dict = {}
+
+
+def register_listener(name: str, fn) -> None:
+    """Call fn(row: dict) after every notification row is created. The row is
+    the stored notification, as create_notification() returns it. fn runs in the
+    caller's thread, so it must return quickly and hand slow work elsewhere; an
+    error in it never reaches the code that created the notification."""
+    _listeners[name] = fn
+
+
+def unregister_listener(name: str) -> None:
+    _listeners.pop(name, None)
+
 
 def create_notification(username: str, title: str, body: str = "", kind: str = "persistent",
                          source: str = "system", action_app: str = None, ref: str = None,
@@ -53,7 +70,13 @@ def create_notification(username: str, title: str, body: str = "", kind: str = "
         )
         conn.commit()
         row = conn.execute("SELECT * FROM notifications WHERE id = ?", (cur.lastrowid,)).fetchone()
-    return dict(row)
+    row = dict(row)
+    for fn in list(_listeners.values()):
+        try:
+            fn(dict(row))
+        except Exception as e:
+            print(f"[notifications] listener failed: {e}")
+    return row
 
 
 def notify(app_id: str, *, to: str, title: str = "", body: str = "", sender: str = None,

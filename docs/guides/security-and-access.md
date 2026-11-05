@@ -26,4 +26,8 @@ Browser SQL for apps and widgets cannot attach another database or create a sepa
 
 ## Built-in protections
 
-The login flow rate-limits repeated failed attempts. Two-factor authentication uses time-based one-time codes. These controls reduce risk but do not replace server hardening, firewall rules, backups, or careful account administration.
+The login page never lists the server's accounts to a visitor. A new browser asks for the username and password; with "Remember this user" ticked (the default) it keeps the names that signed in from it in its own local storage and offers them next time, and unticking it forgets that user in that browser. Wrong usernames and wrong passwords get the same answer. The login flow rate-limits repeated failed attempts. Two-factor authentication uses time-based one-time codes. These controls reduce risk but do not replace server hardening, firewall rules, backups, or careful account administration.
+
+## Domains that show only public pages
+
+A domain can be set to open only Apps Hub or only one public app. On such a domain every route outside the public pages answers "Not Found", so the desktop and the server sign-in cannot be reached and nothing reveals that they exist. On a single-app domain the Apps Hub header has no switcher to other apps, the app list contains only that app, and the other apps are not reachable. Apps Hub stays reachable there because profiles sign in through it.

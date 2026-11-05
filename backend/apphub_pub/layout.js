@@ -1028,6 +1028,7 @@
   // screen shows — its shelf, its category and its sort order — capped at
   // SWITCHER_LIMIT. Anything further down is a trip home away, as before.
   var SWITCHER_LIMIT = 10;
+  var _singleApp = false; // this address serves one app only: nothing to switch to
   var _swApps = null;    // /apps as last fetched, with this account's usage
   var _swPrefs = {};     // the home screen's sort + category
 
@@ -1042,6 +1043,7 @@
   async function fetchApps() {
     try {
       var r = await fetch('/api/pub/apphub/apps', { headers: pubHeaders() });
+      if (r.headers.get('X-Mvm-Single-App')) _singleApp = true;
       return r.ok ? await r.json() : [];
     } catch (e) { return []; }
   }
@@ -1177,7 +1179,15 @@
       + '<span class="mvm-sw-ico">' + iconHTML(cur) + '</span>'
       + '<span class="mvm-sw-name">' + esc(cur.name) + '</span>'
       + '<span class="mvm-sw-caret">▼</span></button>';
-    crumbs.querySelector('.mvm-sw-btn').onclick = function (e) {
+    if (_singleApp) {
+      var swBtn = crumbs.querySelector('.mvm-sw-btn');
+      swBtn.removeAttribute('aria-haspopup');
+      swBtn.removeAttribute('aria-expanded');
+      swBtn.removeAttribute('title');
+      swBtn.style.cursor = 'default';
+      swBtn.style.pointerEvents = 'none';
+      swBtn.querySelector('.mvm-sw-caret').style.display = 'none';
+    } else crumbs.querySelector('.mvm-sw-btn').onclick = function (e) {
       e.stopPropagation();
       if (switcherOpen()) closeSwitcher(); else openSwitcher(this);
     };

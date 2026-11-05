@@ -13,6 +13,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from pydantic import BaseModel
 from typing import Optional
 from .db import get_conn
+from .assets import asset
 
 _MAX_ATTEMPTS = 5
 _BLOCK_SECONDS = 15 * 60
@@ -146,25 +147,25 @@ LOGIN_HTML = """<!DOCTYPE html>
 <title>mvmOS &mdash; Login</title>
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
-  body{background:#0f0f0f;color:#e0e0e0;font-family:'Segoe UI',sans-serif;display:flex;align-items:center;justify-content:center;height:100vh}
-  .card{background:#1a1a1a;border:1px solid #333;border-radius:10px;padding:2.2rem 2rem;width:360px;box-shadow:0 8px 32px #000a}
-  h1{font-size:1.4rem;margin-bottom:.25rem;letter-spacing:.05em}
-  p.sub{color:#666;font-size:.85rem;margin-bottom:1.6rem}
+  body{background:radial-gradient(ellipse at 50% 0%,#17233d 0%,#0f0f0f 60%);color:#e0e0e0;font-family:'Segoe UI',sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;padding:1rem}
+  .card{background:linear-gradient(180deg,#1d1d1d,#161616);border:1px solid #2c2c2c;border-radius:16px;padding:2.4rem 2.2rem 2rem;width:100%;max-width:380px;box-shadow:0 16px 48px #000c,0 0 0 1px #ffffff08 inset}
+  .brand{display:flex;flex-direction:column;align-items:center;margin-bottom:1.6rem;text-align:center}
+  .brand img{width:160px;height:160px;object-fit:contain;filter:drop-shadow(0 8px 24px #2a6ee055);margin-bottom:.6rem}
+  p.sub{color:#8a8a8a;font-size:.88rem;margin-top:.3rem}
   .users{display:flex;flex-direction:column;gap:6px;margin-bottom:1.2rem}
-  .user-btn{display:flex;align-items:center;gap:10px;background:#111;border:2px solid #333;border-radius:8px;padding:.6rem .9rem;cursor:pointer;transition:border-color .15s,background .15s;text-align:left;color:#e0e0e0;width:100%}
+  .user-btn{display:flex;align-items:center;gap:12px;background:#111;border:2px solid #2c2c2c;border-radius:10px;padding:.6rem .9rem;cursor:pointer;transition:border-color .15s,background .15s;text-align:left;color:#e0e0e0;width:100%}
   .user-btn:hover{background:#1e1e1e;border-color:#555}
   .user-btn.active{border-color:#2a6ee0;background:#0d1a30}
   .user-avatar{width:36px;height:36px;border-radius:50%;background:#2a6ee0;display:flex;align-items:center;justify-content:center;font-size:1.1rem;flex-shrink:0}
-  .user-info{display:flex;flex-direction:column}
-  .user-name{font-size:.92rem;font-weight:600}
-  .user-uid{font-size:.72rem;color:#666}
-  .pass-wrap{display:none;flex-direction:column;gap:.5rem;margin-bottom:1rem}
-  .pass-wrap.show{display:flex}
+  .user-name{font-size:.92rem;font-weight:600;word-break:break-all}
+  .field{display:flex;flex-direction:column;gap:.5rem;margin-bottom:1rem}
+  .hidden{display:none!important}
   label{font-size:.8rem;color:#aaa}
-  input{width:100%;background:#111;border:1px solid #333;border-radius:5px;color:#e0e0e0;padding:.5rem .75rem;font-size:.95rem;outline:none;transition:border-color .2s}
-  input:focus{border-color:#2a6ee0}
-  button.submit{width:100%;background:#2a6ee0;color:#fff;border:none;border-radius:5px;padding:.6rem;font-size:.95rem;cursor:pointer;transition:background .2s;display:none}
-  button.submit.show{display:block}
+  input[type=text],input[type=password]{width:100%;background:#111;border:1px solid #333;border-radius:8px;color:#e0e0e0;padding:.65rem .8rem;font-size:.95rem;outline:none;transition:border-color .2s,box-shadow .2s}
+  input[type=text]:focus,input[type=password]:focus{border-color:#2a6ee0;box-shadow:0 0 0 3px #2a6ee033}
+  .remember{display:flex;align-items:flex-start;gap:.5rem;margin-bottom:1rem;font-size:.8rem;color:#aaa;line-height:1.35;cursor:pointer}
+  .remember input{margin-top:.15rem;flex-shrink:0;cursor:pointer}
+  button.submit{width:100%;background:#2a6ee0;color:#fff;border:none;border-radius:8px;padding:.75rem;font-size:1rem;font-weight:600;cursor:pointer;transition:background .2s}
   button.submit:hover{background:#1a5ec0}
   button.submit:disabled{opacity:.5;cursor:not-allowed}
   .error{color:#e05555;font-size:.83rem;margin-bottom:.7rem;display:none}
@@ -179,100 +180,191 @@ LOGIN_HTML = """<!DOCTYPE html>
 </head>
 <body>
 <div class="card">
-  <h1>mvmOS</h1>
-  <p class="sub" id="card-sub">Select your account</p>
+  <div class="brand">
+    <img src="__LOGO__" alt="mvmOS">
+    <p class="sub" id="card-sub"></p>
+  </div>
 
   <div id="login-step">
     <div class="error" id="err"></div>
-    <div class="users" id="user-list"></div>
-    <div class="pass-wrap" id="pass-wrap">
-      <label for="password">Password for <strong id="sel-name"></strong></label>
-      <input id="password" type="password" autocomplete="current-password" placeholder="Enter password" autofocus>
+    <div class="users hidden" id="user-list"></div>
+    <div class="field hidden" id="name-wrap">
+      <label for="username" data-t="username"></label>
+      <input id="username" type="text" autocomplete="username" autocapitalize="none" spellcheck="false">
     </div>
-    <button class="submit" id="submit-btn">Sign in</button>
-    <div class="other-link" id="other-link" style="display:none">&#8592; Choose a different user</div>
+    <div class="field">
+      <label for="password" data-t="password"></label>
+      <input id="password" type="password" autocomplete="current-password">
+    </div>
+    <label class="remember"><input type="checkbox" id="remember"><span data-t="remember"></span></label>
+    <button class="submit" id="submit-btn" data-t="signin"></button>
+    <div class="other-link hidden" id="other-link" data-t="other"></div>
+    <div class="other-link hidden" id="saved-link" data-t="saved"></div>
   </div>
 
   <div id="totp-step">
     <div class="totp-icon">&#128272;</div>
-    <div class="totp-hint">Enter the 6-digit code from your authenticator app for <strong id="totp-username"></strong></div>
+    <div class="totp-hint"><span data-t="totpHint"></span> <strong id="totp-username"></strong></div>
     <div class="error" id="totp-err"></div>
-    <label for="totp-input" style="display:block;margin-bottom:.4rem">Authenticator code</label>
+    <label for="totp-input" style="display:block;margin-bottom:.4rem" data-t="totpLabel"></label>
     <input id="totp-input" type="text" inputmode="numeric" pattern="[0-9 ]*" maxlength="7"
            placeholder="000 000" autocomplete="one-time-code" style="margin-bottom:.8rem">
-    <button class="submit show" id="totp-submit">Verify</button>
-    <div class="other-link" id="totp-back">&#8592; Back to password</div>
+    <button class="submit" id="totp-submit" data-t="verify"></button>
+    <div class="other-link" id="totp-back" data-t="back"></div>
   </div>
 </div>
 <script>
-let selectedUser = null;
-let totpPendingToken = null;
+const I18N = {
+  en: {select:'Select your account', signIn:'Sign in to continue', username:'Username', password:'Password', signin:'Sign in',
+       remember:'Remember this user and show them automatically on the next sign-in from this browser',
+       other:'Use a different account', saved:'Choose a saved account', invalid:'Invalid username or password. Please try again.',
+       totpTitle:'Two-factor authentication', totpHint:'Enter the 6-digit code from your authenticator app for', totpLabel:'Authenticator code',
+       verify:'Verify', back:'Back to password', enter6:'Enter 6-digit code.', invalidCode:'Invalid code. Please try again.'},
+  bg: {select:'Изберете профил', signIn:'Влезте, за да продължите', username:'Потребител', password:'Парола', signin:'Вход',
+       remember:'Запомни потребителя и го показвай автоматично при следващ вход от този браузър',
+       other:'Друг профил', saved:'Избор от запомнените профили', invalid:'Грешно потребителско име или парола. Опитайте отново.',
+       totpTitle:'Двуфакторна автентикация', totpHint:'Въведете 6-цифрения код от приложението за автентикация за', totpLabel:'Код за автентикация',
+       verify:'Потвърди', back:'Обратно към паролата', enter6:'Въведете 6-цифрен код.', invalidCode:'Грешен код. Опитайте отново.'},
+  de: {select:'Konto auswählen', signIn:'Zum Fortfahren anmelden', username:'Benutzername', password:'Passwort', signin:'Anmelden',
+       remember:'Benutzer merken und beim nächsten Anmelden in diesem Browser automatisch anzeigen',
+       other:'Anderes Konto verwenden', saved:'Gespeichertes Konto wählen', invalid:'Benutzername oder Passwort ist falsch. Bitte erneut versuchen.',
+       totpTitle:'Zwei-Faktor-Authentifizierung', totpHint:'Geben Sie den 6-stelligen Code Ihrer Authenticator-App ein für', totpLabel:'Authenticator-Code',
+       verify:'Bestätigen', back:'Zurück zum Passwort', enter6:'6-stelligen Code eingeben.', invalidCode:'Ungültiger Code. Bitte erneut versuchen.'},
+  es: {select:'Selecciona tu cuenta', signIn:'Inicia sesión para continuar', username:'Usuario', password:'Contraseña', signin:'Iniciar sesión',
+       remember:'Recordar al usuario y mostrarlo automáticamente en el próximo inicio de sesión desde este navegador',
+       other:'Usar otra cuenta', saved:'Elegir una cuenta guardada', invalid:'Usuario o contraseña incorrectos. Inténtalo de nuevo.',
+       totpTitle:'Autenticación en dos pasos', totpHint:'Introduce el código de 6 dígitos de tu aplicación de autenticación para', totpLabel:'Código de autenticación',
+       verify:'Verificar', back:'Volver a la contraseña', enter6:'Introduce el código de 6 dígitos.', invalidCode:'Código incorrecto. Inténtalo de nuevo.'},
+  fr: {select:'Choisissez votre compte', signIn:'Connectez-vous pour continuer', username:'Nom d\\'utilisateur', password:'Mot de passe', signin:'Se connecter',
+       remember:'Mémoriser l\\'utilisateur et l\\'afficher automatiquement à la prochaine connexion depuis ce navigateur',
+       other:'Utiliser un autre compte', saved:'Choisir un compte enregistré', invalid:'Nom d\\'utilisateur ou mot de passe incorrect. Veuillez réessayer.',
+       totpTitle:'Authentification à deux facteurs', totpHint:'Saisissez le code à 6 chiffres de votre application d\\'authentification pour', totpLabel:'Code d\\'authentification',
+       verify:'Vérifier', back:'Retour au mot de passe', enter6:'Saisissez le code à 6 chiffres.', invalidCode:'Code incorrect. Veuillez réessayer.'},
+  ja: {select:'アカウントを選択', signIn:'続行するにはサインインしてください', username:'ユーザー名', password:'パスワード', signin:'サインイン',
+       remember:'ユーザーを記憶し、このブラウザーでの次回サインイン時に自動的に表示する',
+       other:'別のアカウントを使う', saved:'保存済みのアカウントを選ぶ', invalid:'ユーザー名またはパスワードが正しくありません。もう一度お試しください。',
+       totpTitle:'2 段階認証', totpHint:'認証アプリの 6 桁のコードを入力してください:', totpLabel:'認証コード',
+       verify:'確認', back:'パスワード入力に戻る', enter6:'6 桁のコードを入力してください。', invalidCode:'コードが正しくありません。もう一度お試しください。'},
+  'pt-BR': {select:'Selecione sua conta', signIn:'Entre para continuar', username:'Usuário', password:'Senha', signin:'Entrar',
+       remember:'Lembrar o usuário e mostrá-lo automaticamente no próximo login neste navegador',
+       other:'Usar outra conta', saved:'Escolher uma conta salva', invalid:'Usuário ou senha inválidos. Tente novamente.',
+       totpTitle:'Autenticação em duas etapas', totpHint:'Digite o código de 6 dígitos do seu app autenticador para', totpLabel:'Código do autenticador',
+       verify:'Verificar', back:'Voltar à senha', enter6:'Digite o código de 6 dígitos.', invalidCode:'Código inválido. Tente novamente.'},
+  ru: {select:'Выберите учётную запись', signIn:'Войдите, чтобы продолжить', username:'Имя пользователя', password:'Пароль', signin:'Войти',
+       remember:'Запомнить пользователя и автоматически показывать его при следующем входе из этого браузера',
+       other:'Другая учётная запись', saved:'Выбрать сохранённую учётную запись', invalid:'Неверное имя пользователя или пароль. Попробуйте ещё раз.',
+       totpTitle:'Двухфакторная аутентификация', totpHint:'Введите 6-значный код из приложения-аутентификатора для', totpLabel:'Код аутентификатора',
+       verify:'Подтвердить', back:'Назад к паролю', enter6:'Введите 6-значный код.', invalidCode:'Неверный код. Попробуйте ещё раз.'},
+  'zh-CN': {select:'选择账户', signIn:'登录以继续', username:'用户名', password:'密码', signin:'登录',
+       remember:'记住该用户，并在此浏览器下次登录时自动显示',
+       other:'使用其他账户', saved:'选择已保存的账户', invalid:'用户名或密码错误，请重试。',
+       totpTitle:'双重身份验证', totpHint:'请输入身份验证器应用中的 6 位验证码，账户：', totpLabel:'验证码',
+       verify:'验证', back:'返回密码', enter6:'请输入 6 位验证码。', invalidCode:'验证码错误，请重试。'}
+};
+function pickLang() {
+  const list = navigator.languages && navigator.languages.length ? navigator.languages : [navigator.language || 'en'];
+  for (const l of list) {
+    if (I18N[l]) return l;
+    const base = String(l).split('-')[0];
+    if (I18N[base]) return base;
+  }
+  return 'en';
+}
+const LANG = pickLang();
+const T = k => (I18N[LANG] && I18N[LANG][k]) || I18N.en[k];
+document.documentElement.lang = LANG;
+document.querySelectorAll('[data-t]').forEach(el => { el.textContent = T(el.dataset.t); });
+document.getElementById('password').placeholder = T('password');
 
-async function loadUsers() {
-  const res = await fetch('/api/auth/login-users');
-  const data = await res.json();
-  const list = document.getElementById('user-list');
-  const lastUser = data.last_user;
-
-  data.users.forEach(u => {
-    const btn = document.createElement('button');
-    btn.className = 'user-btn';
-    btn.dataset.username = u.username;
-    btn.innerHTML = `
-      <div class="user-avatar">&#128100;</div>
-      <div class="user-info">
-        <span class="user-name">${u.username}</span>
-        <span class="user-uid">uid: ${u.uid}</span>
-      </div>`;
-    btn.addEventListener('click', () => selectUser(u.username));
-    list.appendChild(btn);
-    if (u.username === lastUser) selectUser(u.username);
-  });
+// The server never lists accounts. This browser only knows the users that
+// signed in here with "remember" ticked, kept in localStorage.
+const KEY_USERS = 'mvmos_login_users';
+const KEY_REMEMBER = 'mvmos_login_remember';
+function store(fn, fallback) { try { return fn(); } catch (e) { return fallback; } }
+function savedUsers() {
+  return store(() => {
+    const v = JSON.parse(localStorage.getItem(KEY_USERS) || '[]');
+    return Array.isArray(v) ? v.filter(x => typeof x === 'string' && x) : [];
+  }, []);
+}
+function writeUsers(list) { store(() => localStorage.setItem(KEY_USERS, JSON.stringify(list.slice(0, 8)))); }
+function rememberWanted() { return store(() => localStorage.getItem(KEY_REMEMBER) !== '0', true); }
+function applyRemember(username) {
+  const on = document.getElementById('remember').checked;
+  store(() => localStorage.setItem(KEY_REMEMBER, on ? '1' : '0'));
+  const rest = savedUsers().filter(u => u !== username);
+  writeUsers(on ? [username, ...rest] : rest);
 }
 
-function selectUser(username) {
-  selectedUser = username;
-  document.querySelectorAll('.user-btn').forEach(b =>
-    b.classList.toggle('active', b.dataset.username === username));
-  document.getElementById('sel-name').textContent = username;
-  document.getElementById('pass-wrap').classList.add('show');
-  document.getElementById('submit-btn').classList.add('show');
-  document.getElementById('other-link').style.display = 'block';
-  document.getElementById('password').focus();
-  document.getElementById('err').classList.remove('show');
+let selectedUser = null;   // chosen from the saved list
+let manual = false;        // typing the username by hand
+let totpPendingToken = null;
+let totpUser = null;
+
+function currentUser() {
+  return manual ? document.getElementById('username').value.trim() : selectedUser;
+}
+
+function render() {
+  const list = savedUsers();
+  manual = manual || list.length === 0;
+  const box = document.getElementById('user-list');
+  box.textContent = '';
+  list.forEach(name => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'user-btn' + (name === selectedUser ? ' active' : '');
+    const av = document.createElement('div');
+    av.className = 'user-avatar';
+    av.textContent = '\\u{1F464}';
+    const nm = document.createElement('span');
+    nm.className = 'user-name';
+    nm.textContent = name;
+    btn.append(av, nm);
+    btn.addEventListener('click', () => { selectedUser = name; render(); document.getElementById('password').focus(); });
+    box.appendChild(btn);
+  });
+  box.classList.toggle('hidden', manual);
+  document.getElementById('name-wrap').classList.toggle('hidden', !manual);
+  document.getElementById('other-link').classList.toggle('hidden', manual);
+  document.getElementById('saved-link').classList.toggle('hidden', !(manual && list.length));
+  document.getElementById('card-sub').textContent = manual ? T('signIn') : T('select');
 }
 
 document.getElementById('other-link').addEventListener('click', () => {
-  selectedUser = null;
-  document.querySelectorAll('.user-btn').forEach(b => b.classList.remove('active'));
-  document.getElementById('pass-wrap').classList.remove('show');
-  document.getElementById('submit-btn').classList.remove('show');
-  document.getElementById('other-link').style.display = 'none';
-  document.getElementById('password').value = '';
+  manual = true; selectedUser = null; render();
+  document.getElementById('username').focus();
+});
+document.getElementById('saved-link').addEventListener('click', () => {
+  manual = false; selectedUser = savedUsers()[0] || null; render();
+  document.getElementById('password').focus();
 });
 
 async function doLogin() {
-  if (!selectedUser) return;
-  const password = document.getElementById('password').value;
+  const username = currentUser();
   const err = document.getElementById('err');
   err.classList.remove('show');
+  const password = document.getElementById('password').value;
+  if (!username) { err.textContent = T('invalid'); err.classList.add('show'); return; }
   const res = await fetch('/login', {
     method: 'POST',
     headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-    body: `username=${encodeURIComponent(selectedUser)}&password=${encodeURIComponent(password)}`,
+    body: `username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`,
     redirect: 'manual',
   });
   if (res.status === 202) {
     const data = await res.json();
     totpPendingToken = data.pending_token;
-    document.getElementById('totp-username').textContent = selectedUser;
+    totpUser = username;
+    document.getElementById('totp-username').textContent = username;
     document.getElementById('login-step').style.display = 'none';
     document.getElementById('totp-step').style.display = 'block';
-    document.getElementById('card-sub').textContent = 'Two-factor authentication';
+    document.getElementById('card-sub').textContent = T('totpTitle');
     document.getElementById('totp-input').value = '';
     document.getElementById('totp-err').classList.remove('show');
     setTimeout(() => document.getElementById('totp-input').focus(), 50);
   } else if (res.type === 'opaqueredirect' || res.status === 303 || res.ok) {
+    applyRemember(username);
     window.location.href = '/';
   } else if (res.status === 429) {
     const msg = await res.text();
@@ -281,7 +373,7 @@ async function doLogin() {
     document.getElementById('password').value = '';
     document.getElementById('submit-btn').disabled = true;
   } else {
-    err.textContent = 'Invalid password. Please try again.';
+    err.textContent = T('invalid');
     err.classList.add('show');
     document.getElementById('password').value = '';
     document.getElementById('password').focus();
@@ -293,7 +385,7 @@ async function doTotpLogin() {
   const err = document.getElementById('totp-err');
   err.classList.remove('show');
   if (code.length !== 6) {
-    err.textContent = 'Enter 6-digit code.';
+    err.textContent = T('enter6');
     err.classList.add('show');
     return;
   }
@@ -307,6 +399,7 @@ async function doTotpLogin() {
   });
   btn.disabled = false;
   if (res.type === 'opaqueredirect' || res.status === 303) {
+    applyRemember(totpUser);
     window.location.href = '/';
   } else if (res.status === 429) {
     const msg = await res.text();
@@ -314,7 +407,7 @@ async function doTotpLogin() {
     err.classList.add('show');
     btn.disabled = true;
   } else {
-    err.textContent = 'Invalid code. Please try again.';
+    err.textContent = T('invalidCode');
     err.classList.add('show');
     document.getElementById('totp-input').value = '';
     document.getElementById('totp-input').focus();
@@ -325,16 +418,20 @@ document.getElementById('totp-back').addEventListener('click', () => {
   totpPendingToken = null;
   document.getElementById('totp-step').style.display = 'none';
   document.getElementById('login-step').style.display = 'block';
-  document.getElementById('card-sub').textContent = 'Select your account';
+  document.getElementById('card-sub').textContent = manual ? T('signIn') : T('select');
   document.getElementById('password').value = '';
   document.getElementById('password').focus();
 });
 
 document.getElementById('submit-btn').addEventListener('click', doLogin);
 document.getElementById('password').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+document.getElementById('username').addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('password').focus(); });
 document.getElementById('totp-submit').addEventListener('click', doTotpLogin);
 document.getElementById('totp-input').addEventListener('keydown', e => { if (e.key === 'Enter') doTotpLogin(); });
-loadUsers();
+document.getElementById('remember').checked = rememberWanted();
+selectedUser = savedUsers()[0] || null;
+render();
+(manual ? document.getElementById('username') : document.getElementById('password')).focus();
 </script>
 </body>
 </html>"""
@@ -342,31 +439,7 @@ loadUsers();
 
 @router.get("/login", response_class=HTMLResponse)
 async def login_page():
-    return LOGIN_HTML
-
-
-def _login_users():
-    nologin = {'/usr/sbin/nologin', '/sbin/nologin', '/bin/false', '/dev/null'}
-    users = []
-    for pw in _pwd.getpwall():
-        if pw.pw_shell in nologin:
-            continue
-        if pw.pw_uid != 0 and pw.pw_uid < 500:
-            continue
-        users.append({"username": pw.pw_name, "uid": pw.pw_uid})
-    return sorted(users, key=lambda u: u["uid"])
-
-
-@router.get("/api/auth/login-users")
-async def login_users():
-    with get_conn() as conn:
-        row = conn.execute("SELECT value FROM settings WHERE key='last_login_user'").fetchone()
-    last = row["value"] if row else None
-    # Never let a browser or an intermediate proxy cache the account list —
-    # over plain HTTP a shared proxy can otherwise serve one server's users
-    # to another.
-    return JSONResponse({"users": _login_users(), "last_user": last},
-                        headers={"Cache-Control": "no-store"})
+    return LOGIN_HTML.replace("__LOGO__", asset("/logo.png"))
 
 
 @router.post("/login")
@@ -405,7 +478,6 @@ async def login(request: Request):
     token = secrets.token_hex(32)
     with get_conn() as conn:
         conn.execute("INSERT INTO sessions (token, effective_user) VALUES (?, ?)", (token, username))
-        conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('last_login_user', ?)", (username,))
 
     resp = RedirectResponse(url="/", status_code=303)
     resp.set_cookie("session", token, httponly=True, samesite="lax", max_age=30*24*3600)
@@ -454,7 +526,6 @@ def login_totp(body: TotpLoginRequest, request: Request):
     token = secrets.token_hex(32)
     with get_conn() as conn:
         conn.execute("INSERT INTO sessions (token, effective_user) VALUES (?, ?)", (token, username))
-        conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('last_login_user', ?)", (username,))
 
     resp = RedirectResponse(url="/", status_code=303)
     resp.set_cookie("session", token, httponly=True, samesite="lax", max_age=30*24*3600)

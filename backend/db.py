@@ -314,6 +314,10 @@ def init_db():
         except Exception:
             pass
         try:
+            conn.execute("ALTER TABLE domains ADD COLUMN public_mode TEXT")
+        except Exception:
+            pass
+        try:
             conn.execute("ALTER TABLE plugins ADD COLUMN is_system INTEGER NOT NULL DEFAULT 0")
         except Exception:
             pass

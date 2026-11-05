@@ -21,8 +21,8 @@ class _MvmStaticFiles(StaticFiles):
             if host:
                 from .db import get_conn as _get_conn
                 with _get_conn() as _conn:
-                    _row = _conn.execute("SELECT id FROM domains WHERE domain = ?", (host,)).fetchone()
-                if _row:
+                    _row = _conn.execute("SELECT id, public_mode FROM domains WHERE domain = ?", (host,)).fetchone()
+                if _row and not (_row["public_mode"] and public_hosts.shared_file(scope.get("path", ""))):
                     await PlainTextResponse("Not Found", status_code=404)(scope, receive, send)
                     return
         await super().__call__(scope, receive, send)
@@ -74,6 +74,7 @@ from .backup import router as backup_router
 from .scheduler import router as scheduler_router
 from .ssh_access import router as ssh_access_router, init_ssh_access_db
 from .startup import router as startup_router, _init_startup_db, run_startup_apps
+from . import public_hosts
 from .apphub import router as apphub_router, public_page_router as apphub_public_router, _init_db as _init_apphub_db, is_app_public
 from .notifications import router as notifications_router
 from .clipboard import router as clipboard_router, purge_on_startup as _purge_clipboard
@@ -299,7 +300,7 @@ async def auth_middleware(request: Request, call_next):
             return await call_next(request)
         return Response(status_code=404)
 
-    public = {"/login", "/login/totp", "/favicon.ico", "/api/auth/login-users"}
+    public = {"/login", "/login/totp", "/favicon.ico"}
     # /api/platform/ is reachable with an Apps Hub token instead of a desktop
     # session — a public page has no session cookie at all. Each endpoint
     # checks the identity it needs and 401s on its own.
@@ -340,9 +341,19 @@ async def domain_middleware(request: Request, call_next):
 
     # Check external domain mapping
     with get_conn() as conn:
-        row = conn.execute("SELECT app_id FROM domains WHERE domain = ?", (host,)).fetchone()
+        row = conn.execute("SELECT app_id, public_mode FROM domains WHERE domain = ?", (host,)).fetchone()
     if not row:
         return await call_next(request)
+
+    # Apps Hub / single-app host: the public pages' own routes and shared files
+    # go to the normal handlers; the page itself and anything else is served below.
+    if row["public_mode"] and request.url.path != "/" and public_hosts.allows(row["public_mode"], row["app_id"], request.url.path):
+        response = await call_next(request)
+        # A single-app host lists only that app on the Apps Hub shelf: the others
+        # are not served here, so a tile for them could only lead to a 404.
+        if row["public_mode"] == "app" and request.url.path == "/api/pub/apphub/apps" and response.status_code == 200:
+            return await public_hosts.only_app(response, row["app_id"])
+        return response
 
     # Block .py files always
     if request.url.path.endswith(".py"):
