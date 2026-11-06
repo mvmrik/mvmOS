@@ -262,7 +262,7 @@ window.AutomationsUI = (() => {
             <select data-k="app">${meta.apps.map(a => opt(a.id, a.icon + ' ' + _an(a), a.id === d.trigger.app)).join('')}</select></div>
           <div class="au-row"><label>${esc(t('auto_event'))}</label>
             <select data-k="event">${opt('', t('auto_choose'), !triggerSel)}${opt('@time', t('auto_every_day'), triggerSel === '@time')}${evOpts}</select></div>
-          ${triggerSel === '@time' ? `<div class="au-row"><label>${esc(t('auto_time'))}</label><input type="time" data-k="time" value="${esc(d.trigger.time)}"></div>` : ''}
+          ${triggerSel === '@time' ? `<div class="au-row"><label>${esc(t('auto_time'))}</label><span data-pk-time data-label="${esc(t('auto_time'))}" data-value="${esc(d.trigger.time)}"></span></div>` : ''}
           ${evSummary ? `<div class="au-hint">${esc(evSummary)}</div>` : ''}
         </div>
 
@@ -286,6 +286,14 @@ window.AutomationsUI = (() => {
           <button class="au-btn pri" data-save>${esc(t('auto_save'))}</button>
         </div>
       </div>`;
+      // The time of day is chosen with the shared mvmOS clock, in the regional 12- or 24-hour format.
+      const clock = el.querySelector('[data-pk-time]');
+      if (clock && window.mvmOS?.dateTimePicker) {
+        const o = { type: 'time', label: clock.dataset.label, required: true };
+        let field;
+        try { field = window.mvmOS.dateTimePicker.create(clock, { ...o, value: clock.dataset.value || '' }); } catch { field = window.mvmOS.dateTimePicker.create(clock, o); }
+        field.input.dataset.k = 'time';
+      }
       wireEditor();
     }
 
