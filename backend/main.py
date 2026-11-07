@@ -515,14 +515,22 @@ async def layout_inject_middleware(request: Request, call_next):
     # popup already shows the app name and its own settings button, and the
     # chrome only costs a visible extra load. The same page opened normally is
     # untouched: the flag is set by the extension shell, not by the app.
-    if request.query_params.get("ext") == "1":
-        return response
+    ext_popup = request.query_params.get("ext") == "1"
 
     body = b""
     async for chunk in response.body_iterator:
         body += chunk if isinstance(chunk, bytes) else chunk.encode()
 
     html = body.decode("utf-8", errors="ignore")
+    if ext_popup:
+        # The popup page stays as the app wrote it, apart from the shared date
+        # and time control, which apps in the popup need as much as anywhere.
+        picker_snippet = f'<script src="{asset("/datetime-picker.js")}"></script>'
+        html = html.replace("</head>", picker_snippet + "</head>", 1) if "</head>" in html else picker_snippet + html
+        headers = dict(response.headers)
+        for h in ("content-length", "etag", "last-modified", "accept-ranges"):
+            headers.pop(h, None)
+        return Response(content=html, status_code=response.status_code, headers=headers, media_type="text/html")
     # Every file the app's page names goes through asset(), whichever route
     # served the page, so a changed script never arrives stale from a cache.
     path = request.url.path
