@@ -350,6 +350,9 @@
     if (!jobs.length) { panel?.remove(); panel = null; return; }
     const p = ensurePanel();
     p.toggleAttribute('data-min', collapsed);
+    // On the desktop the panel sits above the taskbar instead of covering its tray.
+    const bar = document.getElementById('taskbar');
+    p.style.bottom = (bar && bar.offsetHeight < 120 ? bar.offsetHeight + 12 : 16) + 'px';
     const active = jobs.filter(j => ['waiting', 'uploading'].includes(j.state)).length;
     p.innerHTML = `<div class="mvm-up-head"><span>📤 ${esc(tr('title'))}${active ? ' (' + active + ')' : ''}</span>${jobs.some(j => !['waiting', 'uploading'].includes(j.state)) ? `<button type="button" class="mvm-up-link" data-act="clear">${esc(tr('clear'))}</button>` : ''}<button type="button" class="mvm-up-link" data-act="toggle" aria-label="${esc(tr(collapsed ? 'expand' : 'minimize'))}">${collapsed ? '▲' : '▼'}</button></div>
 <div class="mvm-up-list">${jobs.map(j => {
