@@ -63,6 +63,16 @@ Core contains no app IDs or app-specific sharing rules. Ownership, membership, r
 
 Hiding a card is not authorization. Each app must also check its own pages and API routes, enforce access to individual records and reject writes from viewers. Roles such as view and admin are defined by the app, not imposed by Apps Hub. Authors must test direct API requests, revoked access and failure of the hook, as well as the visible catalogue. Before releasing an app that requires this feature, its `min_core_version` must require a Core release that implements it.
 
+## Service keys for outside services
+
+Some apps need a key from an outside service, for example a Google Maps key. The app does not ask for it in its own settings. Its manifest only names the service (`"services": ["google_maps"]`), and the server hands the app the key of whoever is using it.
+
+Each profile can save its own keys in **Apps Hub → Settings → Service keys**, as many as it wants, each with a name. A key is stored for that profile only, and the administrator can neither read nor remove it. By default a key works in every app that uses the service. To keep a different key for each app, tick the apps a key is limited to: it then works only in those apps and wins over the general key there. If two keys apply to the same app, the one added first is used, and the page says so.
+
+The administrator can also add keys in the desktop **Apps Hub → Service keys** tab: pick the service (for example Google Maps), give the key a name and add it. Any number of keys can be added. Opening a key lists the installed apps that use its service; tick the apps the key is valid for, and for each app choose **All people** or **Selected people**, searching profiles by name. One app can use one key and another app a different one. A profile that is not covered, or an app that is not ticked, gets no key from it, and the app tells the person to add their own key or ask the administrator. If several keys fit the same person and app, the one added first is used. A profile's own key that applies to the app always wins over a shared one. Requests made with a shared key are billed to the account that owns it.
+
+The key still reaches the person's browser, because the map is loaded there. Restrict it to your domain and to the services it needs in the service's own console.
+
 ## What is happening now
 
 When an app reports live activity for a profile, a compact panel appears under the header of every public page, for example an app timer with its title and a clock that keeps counting. Tapping it opens the app. A running timer always appears first. If several timers are running, the one most recently started or resumed appears first. When no timer is running, the most recent activity appears first. A +N button reveals the other items. The panel is only there while there is something to show and it belongs to the profile alone; nobody else sees it.

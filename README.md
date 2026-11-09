@@ -60,6 +60,8 @@ public header lets visitors switch directly between their apps, and a closed Com
 
 Public apps can opt into access checks per Apps Hub profile with `public_profile_access: true` and their own private `_can_access_public(user_id)` hook in `app_api.py`. Core filters discovery; ownership, sharing roles and route authorization remain in the app. See [Apps Hub documentation](docs/core-apps/apps-hub.md#profile-specific-app-visibility) and the Store developer guide for the contract.
 
+An app that needs a key for an outside service (today `google_maps`) names it in its manifest with `"services": ["google_maps"]` instead of a key setting, and its server code asks `hub.resolve_service_key(user_id, "google_maps", "<app id>")`. The profile's own keys (Apps Hub → Settings → Service keys: any number, each for all apps or only for ticked apps; a key limited to the app comes first, then a general one) win; otherwise the first of the administrator's keys that is valid for that app and covers that profile is used (desktop Apps Hub → Service keys: any number of named keys, each with its apps and, per app, all or selected people). Administrators cannot read profiles' own keys. See [Apps Hub documentation](docs/core-apps/apps-hub.md#service-keys-for-outside-services).
+
 ---
 
 ## Who it's for
@@ -160,6 +162,53 @@ can serve an old copy.
 
 It is being adopted step by step: use it in everything new, and replace the old `Date.now()`,
 hand-made `?v=` numbers and bare paths with it whenever you touch that code.
+
+
+---
+
+## For developers: shared file picker and uploader
+
+Core loads `mvmOS.filePicker` (`frontend/file-picker.js`) and `mvmOS.uploader`
+(`frontend/uploader.js`) on the desktop and on public app pages. The picker only
+lets a person choose; the uploader sends. Neither is a security boundary: the app's
+backend must check every path again with `backend/filepicker.py`
+(`resolve_server_path`, `copy_server_file`, `read_server_chunks`, `shared_file_url`).
+
+```js
+await mvmOS.filePicker.ready();
+const r = await mvmOS.filePicker.open({
+  mode: 'files',                       // 'file' | 'files' | 'folder' | 'directory' (a place to save to)
+  sources: ['device', 'server', 'shared'],
+  accept: ['.mp3', 'audio/*'],
+  server: { roots: ['~'], start: '~/Music' },   // the person cannot leave the roots
+  shared: { ids: null, permission: 'read' },     // 'upload' to choose where to write
+});                                             // null when cancelled
+```
+
+It first asks where the files are (this device, the mvmOS server as the signed-in
+Linux user, or a folder shared from another mvmOS) and offers only the sources the
+app allows and the person can reach. A start folder that no longer exists opens the
+root instead. A file from a shared folder is not copied: `sharedFileUrl` signs a
+short link and the bytes flow from the sharing server.
+
+```js
+const job = await mvmOS.uploader.choose({
+  mode: 'files',                       // or 'folder'
+  accept: ['.torrent'],
+  destination: { sources: ['server', 'shared'], server: { roots: ['~'], start: '~' }, rememberKey: 'my-app' },
+  extract: false,                      // unpack .zip/.tar archives on arrival (server only)
+});
+mvmOS.uploader.upload({ files, destination: { type: 'server', path: '/home/me/x' } });
+// or { type: 'shared', folderId, path: 'Albums', name: 'Music' }
+```
+
+Uploads are cut into parts under Cloudflare's request limit, run one after another
+and show in one floating panel with progress, speed, Stop and Try again. A server
+upload goes through `/api/files/upload-chunk` as the Linux user of the session, so
+it can write no more than File Manager could. A shared-folder upload goes straight
+from the browser to the sharing server. A job handle has `cancel()`, `retry()` and
+`state`, and the callbacks `onDone`, `onError` and `onCancel` receive it.
+`mvmOS.upload` remains for existing apps.
 
 ---
 

@@ -148,23 +148,43 @@ const AppHub = (() => {
       { id: 'apps',       label: t('ah_tab_apps'), adminOnly: true },
       { id: 'paid',       label: t('ah_tab_paid_apps'), adminOnly: true },
       { id: 'app-apis',   label: t('ah_tab_app_apis'), adminOnly: true },
+      { id: 'keys',       label: t('ah_tab_keys'), adminOnly: true },
       { id: 'users',      label: t('ah_tab_users'), adminOnly: true },
     ];
 
+    // Main categories on top, the tabs of the chosen category below them.
+    const groups = [
+      { id: 'profile', label: t('ah_group_profile'), tabs: ['account', 'favourites'] },
+      { id: 'apps',    label: t('ah_group_apps'),    tabs: ['apps', 'paid', 'app-apis', 'keys'] },
+      { id: 'users',   label: t('ah_group_users'),   tabs: ['users'] },
+    ];
+    const groupOf = id => groups.find(g => g.tabs.includes(id)) || groups[0];
+    const tabBtn = (id, label, cls, pad) => `<button class="${cls}" data-t="${id}"
+      style="background:none;border:none;border-bottom:2px solid transparent;padding:${pad};font-size:.85rem;color:var(--text-dim);cursor:pointer;font-family:inherit;white-space:nowrap">${label}</button>`;
+
     body.innerHTML = `
       <div style="display:flex;border-bottom:1px solid var(--border);flex-shrink:0;overflow-x:auto;scrollbar-width:thin">
-        ${tabs.map(t => `<button class="ah-tab" data-t="${t.id}"
-          style="background:none;border:none;border-bottom:2px solid transparent;padding:10px 14px;font-size:.85rem;color:var(--text-dim);cursor:pointer;font-family:inherit;white-space:nowrap"
-          >${t.label}</button>`).join('')}
+        ${groups.map(g => tabBtn(g.id, g.label, 'ah-group', '10px 16px').replace('font-size:.85rem', 'font-size:.9rem;font-weight:600')).join('')}
       </div>
+      <div id="ah-sub" style="display:none;border-bottom:1px solid var(--border);flex-shrink:0;overflow-x:auto;scrollbar-width:thin;background:var(--surface2)"></div>
       <div id="ah-body" style="flex:1;overflow-y:auto"></div>`;
 
     function setTab(id) {
       _activeTab = id;
-      body.querySelectorAll('.ah-tab').forEach(t => {
-        const active = t.dataset.t === id;
-        t.style.color       = active ? 'var(--accent)' : 'var(--text-dim)';
-        t.style.borderColor = active ? 'var(--accent)' : 'transparent';
+      const g = groupOf(id);
+      body.querySelectorAll('.ah-group').forEach(b => {
+        const active = b.dataset.t === g.id;
+        b.style.color       = active ? 'var(--accent)' : 'var(--text-dim)';
+        b.style.borderColor = active ? 'var(--accent)' : 'transparent';
+      });
+      const sub = body.querySelector('#ah-sub');
+      sub.style.display = g.tabs.length > 1 ? 'flex' : 'none';
+      sub.innerHTML = g.tabs.length > 1 ? g.tabs.map(tid => tabBtn(tid, tabs.find(x => x.id === tid).label, 'ah-tab', '8px 14px')).join('') : '';
+      sub.querySelectorAll('.ah-tab').forEach(b => {
+        const active = b.dataset.t === id;
+        b.style.color       = active ? 'var(--accent)' : 'var(--text-dim)';
+        b.style.borderColor = active ? 'var(--accent)' : 'transparent';
+        b.onclick = () => setTab(b.dataset.t);
       });
       const c = body.querySelector('#ah-body');
       if (id === 'account') renderAccount(c);
@@ -172,11 +192,15 @@ const AppHub = (() => {
       else if (id === 'apps')  renderApps(c);
       else if (id === 'paid')  renderCreditServices(c);
       else if (id === 'app-apis') renderAppApis(c);
+      else if (id === 'keys') renderKeys(c);
       else if (id === 'users') renderUsers(c);
     }
 
-    body.querySelectorAll('.ah-tab').forEach(t => {
-      t.onclick = () => setTab(t.dataset.t);
+    body.querySelectorAll('.ah-group').forEach(b => {
+      b.onclick = () => {
+        const g = groups.find(x => x.id === b.dataset.t);
+        setTab(g.tabs.includes(_activeTab) ? _activeTab : g.tabs[0]);
+      };
     });
 
     // ── Account tab ────────────────────────────────────────────
@@ -586,6 +610,173 @@ const AppHub = (() => {
         });
       }
       render(c.querySelector('#ah-app-apis-list'));
+    }
+
+    // ── API keys tab ───────────────────────────────────────────
+    // Keys the administrator adds for outside services (Google Maps today).
+    // Open a key to see the apps that use its service, pick the apps it is
+    // valid for and, per app, the people. People's own keys are not shown here.
+    async function renderKeys(c) {
+      c.innerHTML = '<div style="padding:20px;color:var(--text-dim);font-size:.85rem">…</div>';
+      const r = await fetch('/api/apphub/service-keys').catch(() => null);
+      if (!r?.ok) { c.innerHTML = `<div style="padding:20px;color:color-mix(in srgb,#f38ba8 35%,var(--text,#c9d1d9));font-size:.85rem">${t('ah_error_loading_apps')}</div>`; return; }
+      const data = await r.json();
+      const J = { 'Content-Type': 'application/json' };
+      const call = (method, url, body) => fetch(url, { method, headers: J, body: body === undefined ? undefined : JSON.stringify(body) }).catch(() => null);
+      const BASE = '/api/apphub/service-keys';
+      const err = 'color:color-mix(in srgb,#f38ba8 35%,var(--text,#c9d1d9))';
+      const inp = 'padding:7px 10px;border-radius:8px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit';
+      const svcLabel = id => (data.services.find(x => x.service === id) || {}).label || id;
+      const open = new Set();      // opened key cards
+      const openApp = new Set();   // opened "key:app" people panels
+
+      function draw() {
+        c.innerHTML = `
+          <div style="padding:12px 16px;font-size:.78rem;color:var(--text-dim);border-bottom:1px solid var(--border)">${esc(t('ah_keys_hint'))}</div>
+          <div style="padding:14px 16px;border-bottom:1px solid var(--border);display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+            <select id="ak-svc" style="${inp}">${data.services.map(sv => `<option value="${esc(sv.service)}">${esc(sv.label)}</option>`).join('')}</select>
+            <input id="ak-name" placeholder="${esc(t('ah_keys_name_ph'))}" style="${inp};width:170px">
+            <input id="ak-key" type="password" autocomplete="off" placeholder="${esc(t('keys_placeholder'))}" style="${inp};flex:1;min-width:180px">
+            <button id="ak-add" class="s-btn s-btn-sm" style="cursor:pointer">${esc(t('ah_keys_add'))}</button>
+            <div id="ak-msg" style="width:100%;font-size:.78rem;min-height:14px;${err}"></div>
+          </div>
+          <div style="padding:8px 16px;font-size:.74rem;color:var(--text-dim)">${esc(t('ah_keys_costs'))} ${esc(t('ah_keys_order'))}</div>
+          <div id="ak-list"></div>`;
+        const list = c.querySelector('#ak-list');
+        list.innerHTML = data.keys.length ? data.keys.map(keyCard).join('') :
+          `<div style="padding:16px;font-size:.84rem;color:var(--text-dim)">${esc(t('ah_keys_none_yet'))}</div>`;
+        const msg = c.querySelector('#ak-msg');
+        c.querySelector('#ak-add').onclick = async () => {
+          const res = await call('POST', BASE, { service: c.querySelector('#ak-svc').value,
+            name: c.querySelector('#ak-name').value, key: c.querySelector('#ak-key').value });
+          if (res?.ok) { const k = await res.json(); data.keys.push(k); open.add(k.id); draw(); }
+          else msg.textContent = res?.status === 400 ? t('keys_invalid') : t('ah_action_failed');
+        };
+        data.keys.forEach(k => bindKey(list.querySelector(`.ak-card[data-k="${k.id}"]`), k));
+      }
+
+      function keyCard(k) {
+        const on = k.apps.filter(a => a.enabled).length;
+        return `<div class="ak-card" data-k="${k.id}" style="border-bottom:1px solid var(--border)">
+          <div class="ak-head" style="display:flex;align-items:center;gap:10px;padding:12px 16px;cursor:pointer">
+            <span style="width:14px;color:var(--text-dim)">${open.has(k.id) ? '▾' : '▸'}</span>
+            <span style="font-size:1.1rem">🔑</span>
+            <div style="flex:1;min-width:0">
+              <div style="font-weight:600;font-size:.9rem">${esc(k.name)}</div>
+              <div style="font-size:.74rem;color:var(--text-dim)">${esc(svcLabel(k.service))} · ••••${esc(k.key.last4)} · ${esc(t('ah_keys_apps_count').replace('{n}', on))}</div>
+            </div>
+          </div>
+          ${open.has(k.id) ? keyBody(k) : ''}
+        </div>`;
+      }
+
+      function keyBody(k) {
+        return `<div style="padding:0 16px 14px 40px;display:flex;flex-direction:column;gap:12px">
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+            <input class="ak-rename" value="${esc(k.name)}" style="${inp};width:170px">
+            <input class="ak-newkey" type="password" autocomplete="off" placeholder="${esc(t('ah_keys_replace'))}" style="${inp};flex:1;min-width:150px">
+            <button class="ak-save s-btn s-btn-sm" style="cursor:pointer">${esc(t('keys_save'))}</button>
+            <button class="ak-del s-btn s-btn-sm" style="cursor:pointer">${esc(t('ah_delete'))}</button>
+            <a href="${esc((data.services.find(x => x.service === k.service) || {}).help_url || '#')}" target="_blank" rel="noopener" style="font-size:.78rem;color:var(--accent)">${esc(t('keys_get'))}</a>
+            <div class="ak-kmsg" style="width:100%;font-size:.78rem;min-height:14px;${err}"></div>
+          </div>
+          <strong style="font-size:.82rem">${esc(t('ah_keys_apps_for'))}</strong>
+          ${k.apps.length ? k.apps.map(a => appRow(k, a)).join('') : `<div style="font-size:.8rem;color:var(--text-dim)">${esc(t('ah_keys_no_apps'))}</div>`}
+        </div>`;
+      }
+
+      function appRow(k, a) {
+        const id = k.id + ':' + a.id, isOpen = a.enabled && openApp.has(id);
+        const sum = !a.enabled ? '' : a.all_users ? t('ah_keys_everyone') : t('ah_keys_people_count').replace('{n}', a.user_ids.length);
+        return `<div class="ak-app" data-a="${esc(a.id)}" style="border:1px solid var(--border);border-radius:10px;overflow:hidden">
+          <div style="display:flex;align-items:center;gap:10px;padding:8px 10px">
+            <input type="checkbox" class="ak-en" ${a.enabled ? 'checked' : ''} style="width:16px;height:16px;cursor:pointer">
+            <span style="font-size:1.1rem">${mvmOS.iconHTML(a)}</span>
+            <span class="ak-open" style="flex:1;font-size:.86rem;${a.enabled ? 'cursor:pointer' : 'color:var(--text-dim)'}">${esc(mvmOS.appName(a))}</span>
+            <span style="font-size:.74rem;color:var(--text-dim)">${esc(sum)}</span>
+            ${a.enabled ? `<span class="ak-open" style="cursor:pointer;color:var(--text-dim)">${isOpen ? '▾' : '▸'}</span>` : ''}
+          </div>
+          ${isOpen ? peoplePanel(a) : ''}
+        </div>`;
+      }
+
+      function peoplePanel(a) {
+        const chips = a.user_ids.map(uid => data.users.find(u => u.id === uid)).filter(Boolean).map(u => `
+          <span class="ak-chip" data-u="${esc(u.id)}" style="display:inline-flex;align-items:center;gap:6px;padding:3px 8px;border-radius:99px;background:var(--surface2);border:1px solid var(--border);font-size:.78rem">
+            ${esc(u.display_name)}<span class="ak-x" style="cursor:pointer;color:var(--text-dim)">✕</span></span>`).join('');
+        return `<div style="padding:8px 10px 12px;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:8px">
+          <div style="display:flex;gap:16px;font-size:.84rem">
+            <label style="cursor:pointer;display:flex;gap:6px;align-items:center"><input type="radio" name="m-${esc(a.id)}" class="ak-mode" value="all" ${a.all_users ? 'checked' : ''}>${esc(t('ah_keys_users_all'))}</label>
+            <label style="cursor:pointer;display:flex;gap:6px;align-items:center"><input type="radio" name="m-${esc(a.id)}" class="ak-mode" value="sel" ${a.all_users ? '' : 'checked'}>${esc(t('ah_keys_users_selected'))}</label>
+          </div>
+          ${a.all_users ? '' : `<div style="position:relative">
+            <input class="ak-search" autocomplete="off" placeholder="${esc(t('ah_keys_search'))}" style="${inp};width:100%;box-sizing:border-box">
+            <div class="ak-sugg" style="display:none;position:absolute;left:0;right:0;top:100%;z-index:5;max-height:200px;overflow:auto;background:var(--surface);border:1px solid var(--border);border-radius:8px;margin-top:2px"></div>
+          </div>
+          <div style="display:flex;flex-wrap:wrap;gap:6px">${chips || `<span style="font-size:.78rem;color:var(--text-dim)">${esc(t('ah_keys_no_people_chosen'))}</span>`}</div>`}
+        </div>`;
+      }
+
+      function bindKey(card, k) {
+        const redraw = () => { draw(); };
+        card.querySelector('.ak-head').onclick = () => { open.has(k.id) ? open.delete(k.id) : open.add(k.id); redraw(); };
+        if (!open.has(k.id)) return;
+        const kmsg = card.querySelector('.ak-kmsg');
+        card.querySelector('.ak-save').onclick = async () => {
+          const body = { name: card.querySelector('.ak-rename').value };
+          const nk = card.querySelector('.ak-newkey').value.trim();
+          if (nk) body.key = nk;
+          const res = await call('PATCH', `${BASE}/${k.id}`, body);
+          if (res?.ok) { Object.assign(k, await res.json()); redraw(); }
+          else kmsg.textContent = res?.status === 400 ? t('keys_invalid') : t('ah_action_failed');
+        };
+        card.querySelector('.ak-del').onclick = async () => {
+          if (!(await window.mvmOS?.confirm(t('ah_keys_delete_confirm').replace('{name}', k.name)))) return;
+          const res = await call('DELETE', `${BASE}/${k.id}`);
+          if (res?.ok) { data.keys = data.keys.filter(x => x.id !== k.id); redraw(); } else kmsg.textContent = t('ah_action_failed');
+        };
+        card.querySelectorAll('.ak-app').forEach(row => {
+          const a = k.apps.find(x => x.id === row.dataset.a);
+          const id = k.id + ':' + a.id;
+          const save = async () => {
+            const res = await call('PUT', `${BASE}/${k.id}/apps/${encodeURIComponent(a.id)}`,
+              { enabled: a.enabled, all_users: a.all_users, user_ids: a.user_ids });
+            if (!res?.ok) kmsg.textContent = t('ah_action_failed'); else kmsg.textContent = '';
+          };
+          row.querySelector('.ak-en').onchange = async e => {
+            a.enabled = e.target.checked; if (a.enabled) openApp.add(id); else openApp.delete(id);
+            await save(); redraw();
+          };
+          row.querySelectorAll('.ak-open').forEach(el => el.onclick = () => {
+            if (!a.enabled) return; openApp.has(id) ? openApp.delete(id) : openApp.add(id); redraw();
+          });
+          row.querySelectorAll('.ak-mode').forEach(m => m.onchange = async () => { a.all_users = m.value === 'all'; await save(); redraw(); });
+          row.querySelectorAll('.ak-x').forEach(x => x.onclick = async () => {
+            a.user_ids = a.user_ids.filter(u => u !== x.parentElement.dataset.u); await save(); redraw();
+          });
+          const search = row.querySelector('.ak-search'), sugg = row.querySelector('.ak-sugg');
+          if (search) {
+            const show = () => {
+              const q = search.value.trim().toLowerCase();
+              const hits = data.users.filter(u => !a.user_ids.includes(u.id) &&
+                (!q || (u.display_name + ' ' + u.username).toLowerCase().includes(q))).slice(0, 30);
+              sugg.innerHTML = hits.map(u => `<div class="ak-pick" data-u="${esc(u.id)}" style="display:flex;align-items:center;gap:8px;padding:6px 10px;cursor:pointer;font-size:.84rem">
+                ${renderAvatar(u, 22)}<span>${esc(u.display_name)} <span style="color:var(--text-dim);font-size:.74rem">@${esc(u.username)}</span></span></div>`).join('') +
+                (hits.length ? '' : `<div style="padding:8px 10px;font-size:.8rem;color:var(--text-dim)">${esc(t('ah_keys_no_match'))}</div>`);
+              sugg.style.display = '';
+              sugg.querySelectorAll('.ak-pick').forEach(el => {
+                el.onmouseenter = () => el.style.background = 'var(--surface2)';
+                el.onmouseleave = () => el.style.background = '';
+                el.onmousedown = async ev => { ev.preventDefault(); a.user_ids.push(el.dataset.u); await save(); redraw(); };
+              });
+            };
+            search.oninput = show; search.onfocus = show;
+            search.onblur = () => setTimeout(() => { sugg.style.display = 'none'; }, 120);
+          }
+        });
+      }
+
+      draw();
     }
 
     // ── Users tab ──────────────────────────────────────────────

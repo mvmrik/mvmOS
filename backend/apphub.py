@@ -16,6 +16,7 @@ Exports (used by other modules via sys.modules["backend.apphub"]):
   spend_credits(uid, app_id, amount, reason="", idempotency_key=None) -> int  (raises CreditError)
   grant_credits(uid, app_id, amount, reason="", idempotency_key=None) -> int  (raises CreditError)
   call_app_api(target_app_id, method, *args, **kwargs) -> Any  (raises AppApiError)
+  resolve_service_key(uid, service, app_id) -> {"key", "source"}  (profile key or admin-shared key, see apikeys.py)
 
 Credits — a shared, account-wide balance apps can charge against for optional
 paid features, and a premium feature of mvmOS itself. The implementation lives
@@ -568,6 +569,12 @@ def get_pub_session(token: Optional[str]) -> Optional[dict]:
             (token, now)
         ).fetchone()
     return dict(row) if row else None
+
+
+def resolve_service_key(user_id: str, service: str, app_id: str) -> dict:
+    """The outside-service key (e.g. "google_maps") this profile may use in this app."""
+    from .apikeys import resolve_service_key as _resolve
+    return _resolve(user_id, service, app_id)
 
 
 def get_users_by_ids(ids: list) -> list:

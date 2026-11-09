@@ -16,7 +16,7 @@ MODES = ("hub", "app")
 
 # Shared files every public page loads (frontend/ root).
 _SHARED_FILES = {
-    "/asset.js", "/accent-contrast.js", "/datetime-picker.js",
+    "/asset.js", "/accent-contrast.js", "/datetime-picker.js", "/file-picker.js", "/uploader.js",
     "/extension-bridge.js", "/keyboard-preference.js", "/logo.png",
     "/favicon.ico", "/sw.js", "/manifest.webmanifest",
 }

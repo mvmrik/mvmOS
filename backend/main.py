@@ -76,6 +76,7 @@ from .ssh_access import router as ssh_access_router, init_ssh_access_db
 from .startup import router as startup_router, _init_startup_db, run_startup_apps
 from . import public_hosts
 from .apphub import router as apphub_router, public_page_router as apphub_public_router, _init_db as _init_apphub_db, is_app_public
+from .apikeys import router as apikeys_router, init_db as _init_apikeys_db
 from .notifications import router as notifications_router
 from .clipboard import router as clipboard_router, purge_on_startup as _purge_clipboard
 from .feed import router as feed_router, init_db as _init_feed_db, mark_actions as _mark_feed_actions
@@ -96,6 +97,7 @@ _purge_clipboard()
 init_ssh_access_db()
 _init_startup_db()
 _init_apphub_db()
+_init_apikeys_db()
 _init_feed_db()
 
 app.include_router(auth_router)
@@ -121,6 +123,7 @@ app.include_router(scheduler_router)
 app.include_router(ssh_access_router)
 app.include_router(startup_router)
 app.include_router(apphub_router)
+app.include_router(apikeys_router)
 app.include_router(apphub_public_router, prefix="/pub/apphub")
 app.include_router(notifications_router)
 app.include_router(clipboard_router, prefix="/pub/clipboard")
@@ -525,7 +528,9 @@ async def layout_inject_middleware(request: Request, call_next):
     if ext_popup:
         # The popup page stays as the app wrote it, apart from the shared date
         # and time control, which apps in the popup need as much as anywhere.
-        picker_snippet = f'<script src="{asset("/datetime-picker.js")}"></script>'
+        picker_snippet = (f'<script src="{asset("/datetime-picker.js")}"></script>'
+                          f'<script src="{asset("/file-picker.js")}"></script>'
+                          f'<script src="{asset("/uploader.js")}"></script>')
         html = html.replace("</head>", picker_snippet + "</head>", 1) if "</head>" in html else picker_snippet + html
         headers = dict(response.headers)
         for h in ("content-length", "etag", "last-modified", "accept-ranges"):
@@ -543,7 +548,9 @@ async def layout_inject_middleware(request: Request, call_next):
     html, n = re.subn(r"<head\b[^>]*>", lambda h: h.group(0) + boot, html, count=1)
     if not n:
         html = boot + html
-    picker_snippet = f'<script src="{asset("/datetime-picker.js")}"></script>'
+    picker_snippet = (f'<script src="{asset("/datetime-picker.js")}"></script>'
+                      f'<script src="{asset("/file-picker.js")}"></script>'
+                      f'<script src="{asset("/uploader.js")}"></script>')
     html = html.replace("</head>", picker_snippet + "</head>", 1) if "</head>" in html else picker_snippet + html
     keyboard_snippet = f'<script src="{asset("/keyboard-preference.js")}" data-mvm-keyboard-scope="public"></script>'
     html = html.replace("</head>", keyboard_snippet + "</head>", 1) if "</head>" in html else keyboard_snippet + html

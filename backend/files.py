@@ -219,6 +219,8 @@ async def upload_chunk(
     filename: str = Form(...),
     path: str = Form("/"),
     no_finalize: str = Form("0"),
+    subdir: str = Form(""),
+    extract: str = Form("0"),
     file: UploadFile = File(...),
     session=Depends(get_current_session),
 ):
@@ -262,12 +264,24 @@ async def upload_chunk(
         # Caller will handle the file (e.g. YourSQL import) and delete it
         return {"ok": True, "done": True, "tmp_path": tmp_path, "name": filename}
 
-    # Move to destination
-    dest = safe_path(os.path.join(path, filename))
+    # Move to destination. ``subdir`` is the folder a file had inside an uploaded
+    # folder; it is created here, as the person, one validated segment at a time.
+    parts = [p for p in subdir.split("/")] if subdir else []
+    if any(p in ("", ".", "..") or "\0" in p for p in parts):
+        raise HTTPException(400, "Invalid folder name")
+    target_dir = safe_path(os.path.join(path, *parts)) if parts else safe_path(path)
+    extracting = extract == "1" and _archive_kind(filename)
+    dest = safe_path(os.path.join(target_dir, filename))
 
     def _finalize():
         os.chmod(tmp_path, 0o644)
         try:
+            if parts:
+                made = run_as(eu, ["mkdir", "-p", target_dir])
+                if made.returncode != 0:
+                    return made
+            if extracting:
+                return _extract_archive(eu, tmp_path, filename, target_dir)
             return run_as(eu, ["cp", tmp_path, dest])
         finally:
             try:
@@ -277,8 +291,26 @@ async def upload_chunk(
 
     r = await asyncio.to_thread(_finalize)
     if r.returncode != 0:
-        raise HTTPException(403, "Permission denied")
-    return {"ok": True, "done": True, "name": filename}
+        raise HTTPException(403, _cmd_error(r) or "Permission denied")
+    return {"ok": True, "done": True, "name": filename, "extracted": bool(extracting)}
+
+
+def _archive_kind(name: str):
+    n = name.lower()
+    if n.endswith(".zip"):
+        return "zip"
+    if n.endswith((".tar", ".tar.gz", ".tgz", ".tar.bz2", ".tar.xz")):
+        return "tar"
+    return None
+
+
+def _extract_archive(eu, tmp_path, filename, target_dir):
+    """Unpack an uploaded archive into ``target_dir`` as the person. Both tools
+    drop absolute paths and ``..`` parts, and the person can only write what
+    Linux lets them write anyway."""
+    if _archive_kind(filename) == "zip":
+        return run_as(eu, ["unzip", "-o", "-q", tmp_path, "-d", target_dir])
+    return run_as(eu, ["tar", "--no-same-owner", "-xf", tmp_path, "-C", target_dir])
 
 
 @router.delete("/upload-chunk")

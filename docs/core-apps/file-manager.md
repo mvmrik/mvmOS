@@ -92,9 +92,17 @@ user's device. Disconnecting removes the local reference; **Revoke access** on t
 source invalidates the grant and previously issued file tickets for new requests.
 An already running transfer may finish. File tickets expire after one hour.
 
-These folders are virtual entries in File Manager, not Linux mounts. Existing app
-file pickers and apps do not automatically accept them; app integration is a
-separate step.
+These folders are virtual entries in File Manager, not Linux mounts. Apps do not
+accept them automatically. An app that adopts the shared file picker and uploader
+(mvmAudio and qBit Dashboard so far) can offer a choice between this device, the
+mvmOS server and a shared folder when you pick files or a place to save to. The
+picker opens in a centred window and shows only the places the app allows. On the
+server you see only what your own Linux account may read, and some apps keep you
+inside your home folder. Files taken from a shared folder are not copied: they are
+played or read from the sharing server, which spends the traffic. Uploads from any
+app appear in one panel with progress and speed, wait their turn, are cut into parts
+below Cloudflare's size limit, and can be stopped or tried again. A folder or an
+archive can be uploaded, and an app may unpack the archive on arrival.
 
 ## Good practice
 

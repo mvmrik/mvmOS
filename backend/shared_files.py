@@ -309,9 +309,16 @@ def _decode(data):
 def file_ticket(grant_id: str, body: OperationBody, request: Request):
     row = _authorize(grant_id, request, 'read')
     _work(row, 'stat', path=body.path)
-    payload = _encode(json.dumps({'path': body.path, 'expires': int(time.time()) + 3600}, separators=(',', ':')).encode())
-    signature = _encode(hmac.new(row['token_hash'].encode(), payload.encode(), hashlib.sha256).digest())
-    return {'ticket': payload + '.' + signature, 'expires_in': 3600}
+    return {'ticket': sign_ticket(row['token_hash'], body.path, 3600), 'expires_in': 3600}
+
+
+def sign_ticket(token_hash, path, ttl):
+    """Protocol v1 file ticket. The holder of the folder key (the receiving
+    server) can compute it without any network request, which lets an app hand
+    a short-lived direct link to a listener who never sees the key itself."""
+    payload = _encode(json.dumps({'path': path, 'expires': int(time.time()) + int(ttl)}, separators=(',', ':')).encode())
+    signature = _encode(hmac.new(token_hash.encode(), payload.encode(), hashlib.sha256).digest())
+    return payload + '.' + signature
 
 
 def _ticket(grant_id, ticket, request):

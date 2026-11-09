@@ -30,7 +30,9 @@
   .tab:hover:not(.active){color:var(--fg)}
   .tab-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--red);margin-left:6px;vertical-align:middle}
   .tab-dot[hidden]{display:none}
-  .subtabs{display:flex;flex-wrap:wrap;gap:6px}
+  .subtabs{display:flex;flex-wrap:nowrap;gap:6px;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+  .subtabs::-webkit-scrollbar{display:none}
+  .subtab{flex:0 0 auto;white-space:nowrap}
   .subtab{background:var(--surface2);border:1px solid var(--border);color:var(--fg2);border-radius:999px;padding:7px 14px;font-size:.85rem;font-weight:600}
   .subtab.active{background:var(--accent);border-color:var(--accent);color:#1e1e2e}
   .subtab:hover:not(.active){color:var(--fg)}
@@ -269,7 +271,7 @@ let _activeTab = 'apps';
 let _feedView = null;     // the mounted Community feed, while that tab is open
 let _feedUnseen = 0;      // posts others shared since this account last looked
 let _feedPoll = null;
-let _settingsSection = 'appearance';
+let _settingsSection = _params.get('section') === 'keys' ? 'keys' : 'appearance';
 
 function showDashboard(activeTab) {
   activeTab = _activeTab = activeTab || 'apps';
@@ -675,7 +677,7 @@ async function _toggleFav(p) {
 }
 
 async function renderFavourites(c) {
-  c.innerHTML = `<div class="section" style="display:flex;flex-direction:column;gap:14px;max-width:560px"><h2 style="font-size:1.1rem">${t('ah_pub_tab_favourites')}</h2></div>`;
+  c.innerHTML = `<div class="section" style="display:flex;flex-direction:column;gap:14px"><h2 style="font-size:1.1rem">${t('ah_pub_tab_favourites')}</h2></div>`;
   const sc = c.querySelector('.section');
 
   if (_favs === null) await _loadFavs();
@@ -761,7 +763,7 @@ function renderProfile(c) {
   let _pendingAvatarData = _parseAvatarData(_me.avatar_data);
 
   c.innerHTML = `
-    <div class="section" style="max-width:480px;display:flex;flex-direction:column;gap:16px">
+    <div class="section" style="display:flex;flex-direction:column;gap:16px">
       <div style="display:flex;align-items:center;gap:14px">
         <div id="prof-av">${renderAvatar(_me, 54)}</div>
         <div>
@@ -871,11 +873,12 @@ function renderSettings(c) {
     ['apps', t('ah_pub_tab_apps')],
     ['formats', t('ah_pub_settings_sec_formats')],
     ['sharing', t('feed_settings_title')],
+    ['keys', t('keys_title')],
   ].concat(_me.api ? [['api', t('extapi_pub_title')]] : []);
   if (!sections.some(s => s[0] === _settingsSection)) _settingsSection = 'appearance';
 
   c.innerHTML = `
-    <div class="section" style="max-width:${_settingsSection === 'api' ? '1200px' : '480px'};display:flex;flex-direction:column;gap:20px">
+    <div class="section" style="display:flex;flex-direction:column;gap:20px">
       <div class="subtabs">${sections.map(([id, label]) =>
         `<button type="button" class="subtab${id === _settingsSection ? ' active' : ''}" data-sec="${id}">${esc(label)}</button>`).join('')}</div>
       <div data-sec="appearance" style="display:flex;flex-direction:column;gap:20px">
@@ -930,6 +933,7 @@ function renderSettings(c) {
           <div id="st-audience" style="display:flex;flex-direction:column;gap:8px"></div>
         </div>
       </div>
+      <div data-sec="keys" style="display:flex;flex-direction:column;gap:20px"><div id="st-keys"></div></div>
       ${_me.api ? '<div data-sec="api"><div class="card" style="padding:16px"><div id="api-tokens"></div></div></div>' : ''}
       <div class="err" id="st-err"></div>
     </div>`;
@@ -939,11 +943,11 @@ function renderSettings(c) {
     _settingsSection = id;
     c.querySelectorAll('.subtab').forEach(b => b.classList.toggle('active', b.dataset.sec === id));
     c.querySelectorAll('div[data-sec]').forEach(el => { el.style.display = el.dataset.sec === id ? 'flex' : 'none'; });
-    c.firstElementChild.style.maxWidth = id === 'api' ? '1200px' : '480px';
     if (id === 'api' && !apiMounted) { apiMounted = true; _mountApiTokens(c.querySelector('#api-tokens')); }
   }
   c.querySelectorAll('.subtab').forEach(b => { b.onclick = () => showSection(b.dataset.sec); });
   showSection(_settingsSection);
+  renderKeys(c.querySelector('#st-keys'));
   c.querySelector('#st-apps-sort').onchange = e => _setSortPref(e.target.value);
 
   // Who a new post is for unless chosen otherwise when writing it.
@@ -1091,6 +1095,99 @@ function renderSettings(c) {
   renderTimeFormatButtons();
 }
 
+// ── API keys (a section of Settings) ────────────────────────────
+// Keys for an outside service (Google Maps today), kept for this profile only.
+// The server never sends one back, only its last four characters, and the
+// administrator cannot read or remove them. A key with no app ticked works in
+// every app that uses the service; ticking apps limits it to those, so a person
+// can keep a different key for each app. Apps do not ask for the key
+// themselves: they take the matching one, or the one the administrator shares.
+
+async function renderKeys(box) {
+  if (!box) return;
+  const H = { 'Content-Type': 'application/json', 'X-Pub-Token': _token };
+  const r = await fetch(BASE + '/keys', { headers: H }).catch(() => null);
+  const list = r && r.ok ? await r.json() : [];
+  const nm = a => (window.mvmOS?.appName ? mvmOS.appName(a) : a.name);
+  const appBoxes = (apps, chosen) => apps.map(a => `<label style="display:flex;align-items:center;gap:8px;font-size:.85rem;cursor:pointer">
+      <input type="checkbox" value="${esc(a.id)}" ${chosen.includes(a.id) ? 'checked' : ''}><span>${esc(nm(a))}</span></label>`).join('');
+  const picked = el => [...el.querySelectorAll('input[type=checkbox]:checked')].map(i => i.value);
+
+  box.innerHTML = `<div style="font-size:.8rem;color:var(--fg2);margin-bottom:14px">${esc(t('keys_hint'))}</div>` + list.map(sv => {
+    // Which apps are served by more than one key of the same kind.
+    const dup = sv.apps.filter(a => {
+      const own = sv.keys.filter(k => k.app_ids.includes(a.id)).length;
+      return own > 1 || (own === 0 && sv.keys.filter(k => !k.app_ids.length).length > 1);
+    }).map(nm);
+    const cards = sv.keys.map(k => `<div style="border:1px solid var(--border);border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:8px" data-key="${k.id}">
+        <div style="display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap">
+          <div><div style="font-weight:600;font-size:.9rem">${esc(k.name)} <span style="font-weight:400;color:var(--fg2)">••••${esc(k.key.last4)}</span></div>
+            <div style="font-size:.78rem;color:var(--fg2)">${k.app_ids.length ? esc(t('keys_only_for').replace('{apps}', sv.apps.filter(a => k.app_ids.includes(a.id)).map(nm).join(', '))) : esc(t('keys_all_apps'))}</div></div>
+          <button type="button" class="btn btn-secondary" data-edit>${esc(t('keys_edit'))}</button>
+        </div>
+        <div data-panel style="display:none;flex-direction:column;gap:10px">
+          <input class="inp" data-name value="${esc(k.name)}" maxlength="60" placeholder="${esc(t('keys_name_ph'))}">
+          <input class="inp" type="password" autocomplete="off" data-in placeholder="${esc(t('keys_replace'))}">
+          <div style="font-size:.78rem;color:var(--fg2)">${esc(t('keys_apps_hint'))}</div>
+          <div data-apps style="display:flex;flex-direction:column;gap:6px">${appBoxes(sv.apps, k.app_ids)}</div>
+          <div style="display:flex;flex-wrap:wrap;gap:8px">
+            <button type="button" class="btn btn-primary" data-save>${esc(t('keys_save'))}</button>
+            <button type="button" class="btn btn-secondary" data-del>${esc(t('keys_remove'))}</button>
+          </div>
+          <div class="err" data-msg></div>
+        </div>
+      </div>`).join('');
+    return `<div class="card" style="padding:16px;display:flex;flex-direction:column;gap:12px" data-svc="${esc(sv.service)}">
+      <div style="font-weight:600;font-size:13px">${esc(sv.label)}</div>
+      ${sv.keys.length ? '' : `<div style="font-size:.8rem;color:var(--fg2)">${esc(sv.shared ? t('keys_shared') : t('keys_none'))}</div>`}
+      ${sv.keys.length && sv.shared ? `<div style="font-size:.78rem;color:var(--fg2)">${esc(t('keys_shared'))}</div>` : ''}
+      ${cards}
+      ${dup.length ? `<div style="font-size:.78rem;color:var(--fg2)">${esc(t('keys_overlap').replace('{apps}', dup.join(', ')))}</div>` : ''}
+      <div style="border-top:1px solid var(--border);padding-top:12px;display:flex;flex-direction:column;gap:8px" data-new>
+        <input class="inp" data-name maxlength="60" placeholder="${esc(t('keys_name_ph'))}">
+        <input class="inp" type="password" autocomplete="off" data-in placeholder="${esc(t('keys_placeholder'))}">
+        <div style="font-size:.78rem;color:var(--fg2)">${esc(t('keys_apps_hint'))}</div>
+        <div data-apps style="display:flex;flex-direction:column;gap:6px">${appBoxes(sv.apps, [])}</div>
+        <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
+          <button type="button" class="btn btn-primary" data-add>${esc(t('keys_add'))}</button>
+          <a href="${esc(sv.help_url)}" target="_blank" rel="noopener" style="font-size:.8rem;color:var(--accent)">${esc(t('keys_get'))}</a>
+        </div>
+        <div class="err" data-msg></div>
+      </div>
+    </div>`;
+  }).join('');
+
+  const fail = (msg, res) => { msg.textContent = res && res.status === 400 ? t('keys_invalid') : t('ah_pub_error_saving'); };
+  box.querySelectorAll('[data-svc]').forEach(card => {
+    const svc = card.dataset.svc;
+    const nw = card.querySelector('[data-new]');
+    nw.querySelector('[data-add]').onclick = async () => {
+      const msg = nw.querySelector('[data-msg]');
+      const body = { service: svc, name: nw.querySelector('[data-name]').value.trim(), key: nw.querySelector('[data-in]').value.trim(), app_ids: picked(nw.querySelector('[data-apps]')) };
+      const res = await fetch(BASE + '/keys', { method: 'POST', headers: H, body: JSON.stringify(body) }).catch(() => null);
+      if (res && res.ok) return renderKeys(box);
+      fail(msg, res);
+    };
+    card.querySelectorAll('[data-key]').forEach(row => {
+      const id = row.dataset.key, panel = row.querySelector('[data-panel]'), msg = row.querySelector('[data-msg]');
+      row.querySelector('[data-edit]').onclick = () => { panel.style.display = panel.style.display === 'none' ? 'flex' : 'none'; };
+      row.querySelector('[data-save]').onclick = async () => {
+        const body = { name: row.querySelector('[data-name]').value.trim(), app_ids: picked(row.querySelector('[data-apps]')) };
+        const key = row.querySelector('[data-in]').value.trim();
+        if (key) body.key = key;
+        const res = await fetch(BASE + '/keys/' + id, { method: 'PATCH', headers: H, body: JSON.stringify(body) }).catch(() => null);
+        if (res && res.ok) return renderKeys(box);
+        fail(msg, res);
+      };
+      row.querySelector('[data-del]').onclick = async () => {
+        if (!confirm(t('keys_delete_confirm').replace('{name}', row.querySelector('[data-name]').value))) return;
+        await fetch(BASE + '/keys/' + id, { method: 'DELETE', headers: H }).catch(() => null);
+        renderKeys(box);
+      };
+    });
+  });
+}
+
 // ── API (a section of Settings) ─────────────────────────────────
 
 function _mountApiTokens(box) {
@@ -1152,7 +1249,7 @@ async function renderCommunity(c) {
 
 async function renderInvitations(c, created) {
   c.innerHTML = `
-    <div class="section" style="max-width:640px;display:flex;flex-direction:column;gap:14px">
+    <div class="section" style="display:flex;flex-direction:column;gap:14px">
       <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
         <div style="flex:1;min-width:200px;font-size:.8rem;color:var(--fg2)">${esc(t('ah_invitations_page_hint'))}</div>
         <button class="btn btn-primary" id="inv-new">＋ ${esc(t('ah_invitation_new'))}</button>
@@ -1257,7 +1354,7 @@ async function renderCredits(c) {
   } catch(_) {}
 
   c.innerHTML = `
-    <div class="section" style="max-width:560px;display:flex;flex-direction:column;gap:14px">
+    <div class="section" style="display:flex;flex-direction:column;gap:14px">
       <div class="card" style="padding:20px;display:flex;flex-direction:column;align-items:center;gap:4px">
         <div style="font-size:.8rem;color:var(--fg2)">${t('ah_pub_your_balance')}</div>
         <div style="font-size:2.2rem;font-weight:700;color:var(--accent)">${balance}</div>
