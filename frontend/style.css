@@ -537,6 +537,44 @@ html, body {
 .wbtn-pin.pinned { color: #ff5f57; }
 .wbtn-pin.pinned:hover { color: #ff5f57; }
 .wbtn-pin + .wbtn-appsettings { margin-left: 0; }
+.wbtn-profile {
+  margin-left: auto;
+  background: none;
+  border: none;
+  padding: 2px;
+  border-radius: 50%;
+  cursor: pointer;
+  line-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.85rem;
+  transition: background 0.12s;
+}
+.wbtn-profile:hover { background: var(--surface2); }
+.wbtn-profile svg, .wbtn-profile > div { display: block; border-radius: 50%; }
+.wbtn-pin + .wbtn-profile, .wbtn-ontop + .wbtn-profile { margin-left: 0; }
+.win-profile-menu {
+  position: fixed;
+  z-index: 2147483000;
+  min-width: 220px;
+  max-width: 300px;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 10px 30px rgba(0,0,0,.35);
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.win-profile-head { display: flex; align-items: center; gap: 10px; padding: 8px 8px 10px; border-bottom: 1px solid var(--border); margin-bottom: 4px; }
+.win-profile-head > div:last-child { display: flex; flex-direction: column; min-width: 0; }
+.win-profile-head strong, .win-profile-head span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.win-profile-head span { font-size: .75rem; color: var(--text-dim); }
+.win-profile-menu button { background: none; border: none; color: inherit; font: inherit; font-size: .85rem; text-align: left; padding: 8px 10px; border-radius: 6px; cursor: pointer; }
+.win-profile-menu button:hover, .win-profile-menu button:focus-visible { background: var(--surface2); outline: none; }
 .wbtn-ontop {
   margin-left: auto;
   background: none;

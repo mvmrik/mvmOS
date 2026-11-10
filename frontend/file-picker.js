@@ -42,6 +42,8 @@
     no_read: 'This shared folder does not allow this.', scanning: 'Reading the folder… {count} files found',
     too_many: 'Too many files. At most {max} can be chosen.', too_large: '{name} is larger than {max}.',
     skipped_type: '{count} files were skipped because of their type.', skipped_size: '{count} files were skipped because they are too large.',
+    new_folder: 'New folder', folder_name: 'Folder name', create: 'Create', name_invalid: 'Use a name without slashes.',
+    create_failed: 'The folder could not be created.',
     only_types: 'Allowed types: {types}', folder_empty: 'This folder has no matching files.', open_folder: 'Open folder', total: 'Total',
   };
   const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
@@ -92,6 +94,11 @@
     if (!r.ok) { const e = new Error((await r.json().catch(() => ({}))).detail || r.statusText); e.status = r.status; throw e; }
     return r.json();
   }
+  async function postJson(url, data) {
+    const r = await fetch(url, {method: 'POST', credentials: 'same-origin', cache: 'no-store', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data)});
+    if (!r.ok) { const e = new Error((await r.json().catch(() => ({}))).detail || r.statusText); e.status = r.status; throw e; }
+    return r.json();
+  }
   const clean = p => p.replace(/\/+$/, '') || '/';
   const join = (dir, name) => (dir === '/' ? '' : clean(dir)) + '/' + name;
   const within = (p, root) => p === root || p.startsWith(root === '/' ? '/' : root + '/');
@@ -123,9 +130,11 @@
     // A remote listing is untrusted input.
     if (!Array.isArray(data.entries) || !Array.isArray(data.permissions)) throw new Error(tr('failed'));
     if (need && !data.permissions.includes(need)) throw new Error(tr('no_read'));
-    return data.entries.filter(e => e && typeof e.name === 'string' && e.name && e.name.length <= 255 && !/[\/\0]/.test(e.name) &&
+    const entries = data.entries.filter(e => e && typeof e.name === 'string' && e.name && e.name.length <= 255 && !/[\/\0]/.test(e.name) &&
       !['.', '..'].includes(e.name) && ['dir', 'file'].includes(e.type) && Number.isSafeInteger(e.size) && (hidden || !hiddenName(e.name)))
       .map(e => ({name: e.name, type: e.type, size: e.size}));
+    entries.permissions = data.permissions;
+    return entries;
   }
   // A short-lived direct link to a file in a shared folder, for playing it
   // from the sharing server instead of copying it.
@@ -190,7 +199,7 @@
   }
 
   function normalize(options) {
-    const o = {mode: 'file', sources: ['device'], accept: [], recursive: true, hidden: false, maxFiles: 1000, maxSize: 0, labels: null, ...options};
+    const o = {mode: 'file', sources: ['device'], accept: [], recursive: true, hidden: false, maxFiles: 1000, maxSize: 0, labels: null, createFolder: null, ...options};
     if (!MODES.includes(o.mode)) throw new TypeError('Invalid picker mode');
     o.sources = [...new Set(o.sources)].filter(x => SOURCES.includes(x));
     if (o.mode === 'directory') o.sources = o.sources.filter(x => x !== 'device');
@@ -383,11 +392,34 @@
           const entries = source === 'server' ? await serverList(path, o.hidden) : await sharedList(browse.folder, path, o.hidden, need);
           if (finished || mine !== loads) return;
           browse.entries = entries;
+          browse.permissions = entries.permissions || null;
         } catch (error) {
           if (finished || mine !== loads) return;
           browse.error = error.message || L('failed');
         }
         browse.loading = false; render();
+      }
+      // Whether this place can take a new folder: only when a folder is being chosen, and a
+      // shared folder only if it lets this server upload.
+      function canCreate() {
+        if (!picksFolder || o.createFolder === false || !browse) return false;
+        if (source === 'server') return true;
+        return source === 'shared' && Array.isArray(browse.permissions) && browse.permissions.includes('upload');
+      }
+      async function createFolder(raw) {
+        const name = String(raw || '').trim();
+        if (!name || name === '.' || name === '..' || /[\/\0]/.test(name) || name.length > 255) { browse.error = L('name_invalid'); render(); dialog.querySelector('[data-newname]')?.focus(); return; }
+        browse.loading = true; browse.error = ''; render();
+        try {
+          if (source === 'server') await postJson('/api/files/mkdir', {path: pathFor(name)});
+          else await remote(browse.folder, '/operations/mkdir', 'POST', {path: pathFor(name)});
+        } catch (error) {
+          browse.loading = false; browse.error = error.message || L('create_failed'); render(); return;
+        }
+        browse.creating = false; browse.newName = '';
+        // A place to save to is the point: the new folder is chosen at once.
+        if (o.mode === 'directory') { browse.loading = false; await finishFolder({name}); return; }
+        await load(pathFor(name));
       }
       async function chooseSource(next) {
         source = next; selection = new Map(); message = ''; deviceResult = null; browse = null;
@@ -451,7 +483,7 @@
           return `<button type="button" class="mvm-fp-row" role="${multi ? 'checkbox' : 'radio'}" aria-checked="${on}" data-file="${esc(e.name)}"><span class="mvm-fp-check" aria-hidden="true">${on ? '✓' : ''}</span><span class="mvm-fp-ico" aria-hidden="true">${icon(e.name)}</span><span class="mvm-fp-name" title="${esc(e.name)}">${esc(e.name)}</span><span class="mvm-fp-meta">${esc(size(e.size))}</span></button>`;
         }).join('');
         const empty = browse.loading ? L('loading') : visible.length ? '' : (browse.entries.length && needle ? L('no_match') : L('empty'));
-        shell(`<div class="mvm-fp-bar"><button type="button" class="mvm-fp-pick" data-up aria-label="${esc(L('up'))}" ${browse.path === (source === 'server' ? browse.root : '') ? 'disabled' : ''}>↑</button><div class="mvm-fp-crumbs" role="navigation">${parts.map((c, i) => `${i ? '<span aria-hidden="true">›</span>' : ''}<button type="button" data-crumb="${esc(c.path)}" ${i === parts.length - 1 ? 'aria-current="true"' : ''}>${esc(c.label)}</button>`).join('')}</div><input class="mvm-fp-filter" type="search" data-filter placeholder="${esc(L('filter'))}" aria-label="${esc(L('filter'))}" value="${esc(browse.filter || '')}"></div>${browse.error ? `<p class="mvm-fp-error" role="alert">${esc(browse.error)}</p>` : ''}<div class="mvm-fp-list" ${multi ? 'role="group"' : 'role="radiogroup"'}>${rows}${empty ? `<p class="mvm-fp-empty">${esc(empty)}</p>` : ''}</div>${message ? `<p class="mvm-fp-note" role="status">${esc(message)}</p>` : ''}`, {back});
+        shell(`<div class="mvm-fp-bar"><button type="button" class="mvm-fp-pick" data-up aria-label="${esc(L('up'))}" ${browse.path === (source === 'server' ? browse.root : '') ? 'disabled' : ''}>↑</button><div class="mvm-fp-crumbs" role="navigation">${parts.map((c, i) => `${i ? '<span aria-hidden="true">›</span>' : ''}<button type="button" data-crumb="${esc(c.path)}" ${i === parts.length - 1 ? 'aria-current="true"' : ''}>${esc(c.label)}</button>`).join('')}</div><input class="mvm-fp-filter" type="search" data-filter placeholder="${esc(L('filter'))}" aria-label="${esc(L('filter'))}" value="${esc(browse.filter || '')}">${canCreate() ? `<button type="button" class="mvm-fp-pick" data-new>＋ ${esc(L('new_folder'))}</button>` : ''}</div>${browse.creating ? `<form class="mvm-fp-bar mvm-fp-new" data-newform><input class="mvm-fp-filter" style="flex:1 1 200px" data-newname maxlength="255" placeholder="${esc(L('folder_name'))}" aria-label="${esc(L('folder_name'))}" value="${esc(browse.newName || '')}"><button type="submit" class="mvm-fp-btn mvm-fp-primary" ${browse.loading ? 'disabled' : ''}>${esc(L('create'))}</button><button type="button" class="mvm-fp-btn" data-newcancel>${esc(L('cancel'))}</button></form>` : ''}${browse.error ? `<p class="mvm-fp-error" role="alert">${esc(browse.error)}</p>` : ''}<div class="mvm-fp-list" ${multi ? 'role="group"' : 'role="radiogroup"'}>${rows}${empty ? `<p class="mvm-fp-empty">${esc(empty)}</p>` : ''}</div>${message ? `<p class="mvm-fp-note" role="status">${esc(message)}</p>` : ''}`, {back});
         const go = path => { message = ''; load(path); };
         dialog.querySelector('[data-up]').onclick = () => go(source === 'server' ? parent(browse.path) : browse.path.split('/').slice(0, -1).join('/'));
         dialog.querySelectorAll('[data-crumb]').forEach(b => { b.onclick = () => go(b.dataset.crumb); });
@@ -469,6 +501,10 @@
           };
           b.ondblclick = () => { if (!multi) confirm_(); };
         });
+        dialog.querySelector('[data-new]')?.addEventListener('click', () => { browse.creating = true; browse.newName = ''; browse.error = ''; render(); dialog.querySelector('[data-newname]')?.focus(); });
+        dialog.querySelector('[data-newcancel]')?.addEventListener('click', () => { browse.creating = false; render(); });
+        dialog.querySelector('[data-newname]')?.addEventListener('input', ev => { browse.newName = ev.target.value; });
+        dialog.querySelector('[data-newform]')?.addEventListener('submit', ev => { ev.preventDefault(); createFolder(browse.newName); });
         const filter = dialog.querySelector('[data-filter]');
         filter.oninput = () => { browse.filter = filter.value; const pos = filter.selectionStart; render(); const n = dialog.querySelector('[data-filter]'); n.focus(); n.setSelectionRange(pos, pos); };
       }

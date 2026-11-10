@@ -60,7 +60,11 @@ public header lets visitors switch directly between their apps, and a closed Com
 
 Public apps can opt into access checks per Apps Hub profile with `public_profile_access: true` and their own private `_can_access_public(user_id)` hook in `app_api.py`. Core filters discovery; ownership, sharing roles and route authorization remain in the app. See [Apps Hub documentation](docs/core-apps/apps-hub.md#profile-specific-app-visibility) and the Store developer guide for the contract.
 
-An app that needs a key for an outside service (today `google_maps`) names it in its manifest with `"services": ["google_maps"]` instead of a key setting, and its server code asks `hub.resolve_service_key(user_id, "google_maps", "<app id>")`. The profile's own keys (Apps Hub → Settings → Service keys: any number, each for all apps or only for ticked apps; a key limited to the app comes first, then a general one) win; otherwise the first of the administrator's keys that is valid for that app and covers that profile is used (desktop Apps Hub → Service keys: any number of named keys, each with its apps and, per app, all or selected people). Administrators cannot read profiles' own keys. See [Apps Hub documentation](docs/core-apps/apps-hub.md#service-keys-for-outside-services).
+An app that needs a key for an outside service (`google_maps` and `simkl`) names it in its manifest with `"services": ["google_maps"]` instead of a key setting, and its server code asks `hub.resolve_service_key(user_id, "google_maps", "<app id>")`. For services allowing personal keys, the profile's own keys (Apps Hub → Settings → Service keys: any number, each for all apps or only for ticked apps; a key limited to the app comes first, then a general one) win; otherwise the first of the administrator's keys that is valid for that app and covers that profile is used (desktop Apps Hub → Service keys: any number of named keys, each with its apps and, per app, all or selected people). Administrators cannot read profiles' own keys. See [Apps Hub documentation](docs/core-apps/apps-hub.md#service-keys-for-outside-services).
+
+Simkl support starts with Core 1.22.0. Its client ID is administrator managed and shared with selected profiles; it is not offered among personal service keys. The administrator form shows the installation origin to register as the service return address.
+
+Apps registered with `requires_apphub: true` show the signed-in profile in desktop window title bars. Its menu opens the account, the app’s settings when present, or logout.
 
 ---
 
@@ -190,6 +194,10 @@ Linux user, or a folder shared from another mvmOS) and offers only the sources t
 app allows and the person can reach. A start folder that no longer exists opens the
 root instead. A file from a shared folder is not copied: `sharedFileUrl` signs a
 short link and the bytes flow from the sharing server.
+
+Core 1.22.0 adds **New folder** when choosing a folder or save destination. Set `createFolder: false` to disable it; shared destinations offer it only with upload permission. A newly created save destination is selected immediately.
+
+For libraries that keep files in place, `backend.filepicker` also supplies `folder_files`, `open_server_file`, `write_beside`, `shared_folder_files`, `shared_read_head`, `shared_can_write` and `shared_write_beside`. Resolve the chosen root first, retain the Linux owner with the source and close returned file handles. Server reads enforce the owner’s access and the root boundary. Shared playback uses `shared_file_url` directly from the source server. These helpers require Core 1.22.0.
 
 ```js
 const job = await mvmOS.uploader.choose({

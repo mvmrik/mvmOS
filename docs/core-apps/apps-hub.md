@@ -69,9 +69,9 @@ Some apps need a key from an outside service, for example a Google Maps key. The
 
 Each profile can save its own keys in **Apps Hub → Settings → Service keys**, as many as it wants, each with a name. A key is stored for that profile only, and the administrator can neither read nor remove it. By default a key works in every app that uses the service. To keep a different key for each app, tick the apps a key is limited to: it then works only in those apps and wins over the general key there. If two keys apply to the same app, the one added first is used, and the page says so.
 
-The administrator can also add keys in the desktop **Apps Hub → Service keys** tab: pick the service (for example Google Maps), give the key a name and add it. Any number of keys can be added. Opening a key lists the installed apps that use its service; tick the apps the key is valid for, and for each app choose **All people** or **Selected people**, searching profiles by name. One app can use one key and another app a different one. A profile that is not covered, or an app that is not ticked, gets no key from it, and the app tells the person to add their own key or ask the administrator. If several keys fit the same person and app, the one added first is used. A profile's own key that applies to the app always wins over a shared one. Requests made with a shared key are billed to the account that owns it.
+The administrator can also add keys in the desktop **Apps Hub → Service keys** tab: pick the service (for example Google Maps), give the key a name and add it. Any number of keys can be added. Opening a key lists the installed apps that use its service; tick the apps the key is valid for, and for each app choose **All people** or **Selected people**, searching profiles by name. One app can use one key and another app a different one. A profile that is not covered, or an app that is not ticked, gets no key from it, and the app tells the person to add their own key or ask the administrator. If several keys fit the same person and app, the one added first is used. For services that allow personal keys, a profile's own key that applies to the app always wins over a shared one. Requests made with a shared key are billed to the account that owns it.
 
-The key still reaches the person's browser, because the map is loaded there. Restrict it to your domain and to the services it needs in the service's own console.
+For Google Maps, the key reaches the person's browser because the map is loaded there. Simkl requests use the client ID on the server. Restrict it to your domain and to the services it needs in the service's own console.
 
 ## What is happening now
 
@@ -122,3 +122,11 @@ Extensions request only the permissions declared by the app. Review the app’s 
 - Enable app-to-app APIs only for the specific integration you intend to use.
 - Treat public-user administration and credit changes as sensitive operational actions.
 - Review browser extension permissions before installation.
+
+## Profile menu in desktop app windows
+
+Apps that require Apps Hub show the signed-in profile avatar in their desktop title bar. Open it to view the account, open that app’s settings when available, or sign out. Apps Hub sign-in remains separate from the Linux desktop session. Phone windows retain their existing controls.
+
+## Administrator managed service identities
+
+Core 1.22.0 adds Simkl to Service keys. The administrator adds and shares its client ID with allowed apps and profiles; Simkl is not offered as a personal key. The form shows the installation’s origin to register as the return address. An app can then let each profile connect its own service account. A profile connection is separate from the shared client ID. Google Maps retains the existing personal-key precedence.

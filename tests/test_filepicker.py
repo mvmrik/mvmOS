@@ -49,6 +49,24 @@ class ServerFiles(unittest.TestCase):
             self.resolve(*a, **kw)
         self.assertEqual(caught.exception.status_code, code)
 
+    def test_library_listing_opening_and_sidecar_write(self):
+        Path(self.music, 'chapter2.mp3').write_bytes(b'abc')
+        Path(self.music, 'notes.txt').write_text('notes')
+        os.symlink(self.other, os.path.join(self.music, 'escape'))
+        entries = filepicker.folder_files('root', self.music, {'.mp3'})
+        self.assertEqual({e['rel'] for e in entries}, {'song.mp3', 'chapter2.mp3'})
+        handle, size = filepicker.open_server_file('root', self.music, 'chapter2.mp3')
+        with handle:
+            self.assertEqual(handle.read(), b'abc')
+        self.assertEqual(size, 3)
+        for rel in ('../other/secret.mp3', 'escape/secret.mp3'):
+            with self.assertRaises(HTTPException):
+                filepicker.open_server_file('root', self.music, rel)
+        target = filepicker.write_beside('root', self.music, 'chapter2.en.srt', b'subtitle')
+        self.assertEqual(Path(target).read_bytes(), b'subtitle')
+        self.assertIsNone(filepicker.write_beside('root', self.music, '../other/new.srt', b'bad'))
+        self.assertFalse(Path(self.other, 'new.srt').exists())
+
     def test_path_inside_allowed_root(self):
         self.assertEqual(self.resolve(self.song), self.song)
         self.assertEqual(self.resolve(self.music, kind="dir"), self.music)

@@ -1,6 +1,11 @@
 // mvmOS UI — 简体中文
 window._i18n = {
   "fpick_title_file": "选择文件",
+  "fpick_new_folder": "新建文件夹",
+  "fpick_folder_name": "文件夹名称",
+  "fpick_create": "创建",
+  "fpick_name_invalid": "名称中不要包含斜杠。",
+  "fpick_create_failed": "无法创建文件夹。",
   "fpick_title_files": "选择文件",
   "fpick_title_folder": "选择文件夹",
   "fpick_title_directory": "选择位置",
@@ -127,6 +132,8 @@ window._i18n = {
   'win_menu':                     '菜单',
   'win_public_page':              '公开页面',
   'win_pin_size':                 '在此设备上固定大小和位置',
+  'win_profile':                  'Apps Hub 个人资料',
+  'win_profile_open':             '个人资料和账户',
   'win_unpin_size':               '取消固定',
   'win_always_on_top':            '窗口置顶',
   'win_not_on_top':               '取消置顶',
@@ -849,6 +856,7 @@ window._i18n = {
   'keys_save'                       : '保存密钥',
   'keys_remove'                     : '删除密钥',
   'keys_get'                        : '获取密钥',
+  'keys_redirect'                   : '注册密钥时需要填写的回调地址',
   'keys_invalid'                    : '这看起来不是有效的密钥。',
   'keys_add'                          : '添加密钥',
   'keys_name_ph'                      : '名称(可选)',

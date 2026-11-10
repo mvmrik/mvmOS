@@ -639,6 +639,7 @@ const AppHub = (() => {
             <input id="ak-key" type="password" autocomplete="off" placeholder="${esc(t('keys_placeholder'))}" style="${inp};flex:1;min-width:180px">
             <button id="ak-add" class="s-btn s-btn-sm" style="cursor:pointer">${esc(t('ah_keys_add'))}</button>
             <div id="ak-msg" style="width:100%;font-size:.78rem;min-height:14px;${err}"></div>
+            <div id="ak-redirect" style="width:100%;display:none;font-size:.78rem;color:var(--text-dim)">${esc(t('keys_redirect'))}: <input readonly value="${esc(location.origin)}" onfocus="this.select()" style="${inp};min-width:260px"></div>
           </div>
           <div style="padding:8px 16px;font-size:.74rem;color:var(--text-dim)">${esc(t('ah_keys_costs'))} ${esc(t('ah_keys_order'))}</div>
           <div id="ak-list"></div>`;
@@ -646,6 +647,9 @@ const AppHub = (() => {
         list.innerHTML = data.keys.length ? data.keys.map(keyCard).join('') :
           `<div style="padding:16px;font-size:.84rem;color:var(--text-dim)">${esc(t('ah_keys_none_yet'))}</div>`;
         const msg = c.querySelector('#ak-msg');
+        const svcSel = c.querySelector('#ak-svc');
+        const showRedirect = () => { c.querySelector('#ak-redirect').style.display = (data.services.find(x => x.service === svcSel.value) || {}).redirect ? 'block' : 'none'; };
+        svcSel.onchange = showRedirect; showRedirect();
         c.querySelector('#ak-add').onclick = async () => {
           const res = await call('POST', BASE, { service: c.querySelector('#ak-svc').value,
             name: c.querySelector('#ak-name').value, key: c.querySelector('#ak-key').value });
@@ -1101,5 +1105,92 @@ const AppHub = (() => {
     setTab(_activeTab);
   }
 
-  return { openWindow, getToken, getUser, requireLogin };
+
+  // ── Profile button in the title bar of Apps Hub apps ────────────
+  // Every desktop window of an app that belongs to Apps Hub shows who is
+  // signed in, like the header of the public pages, and opens a small menu
+  // with the profile, the app's own settings (when it has any) and logout.
+  const _winBtns = new Set();
+  let _winInit = false;
+
+  async function _paintWinProfiles(force) {
+    _winBtns.forEach(b => { if (!b.isConnected) _winBtns.delete(b); });
+    if (!_winBtns.size) return;
+    const token = getToken();
+    if (!token) { _menuUser = null; _menuToken = null; }
+    else if (force || _menuToken !== token || !_menuUser || Date.now() - _menuAt > 30000) {
+      _menuUser = await getUser();
+      _menuToken = _menuUser ? token : null;
+      _menuAt = Date.now();
+    }
+    const user = token ? _menuUser : null;
+    _winBtns.forEach(b => {
+      b.innerHTML = user ? renderAvatar(user, 18) : '<span aria-hidden="true">👤</span>';
+      b.title = user ? `${user.display_name || user.username} (@${user.username}) · ${_t('app_apphub')}` : _t('ah_login');
+      b.setAttribute('aria-label', b.title);
+    });
+  }
+
+  function _closeWinMenu() {
+    document.querySelector('.win-profile-menu')?.remove();
+    document.removeEventListener('mousedown', _winMenuOutside, true);
+    document.removeEventListener('keydown', _winMenuKey, true);
+  }
+  function _winMenuOutside(e) { if (!e.target.closest('.win-profile-menu')) _closeWinMenu(); }
+  function _winMenuKey(e) { if (e.key === 'Escape') _closeWinMenu(); }
+
+  async function _winLogout() {
+    await fetch('/api/pub/apphub/logout', {method:'POST',headers:{'X-Pub-Token':getToken()}}).catch(()=>{});
+    localStorage.removeItem('apphub_token');
+    _pubUser = null;
+    window.dispatchEvent(new CustomEvent('apphub_logout'));
+  }
+
+  function _openWinMenu(btn) {
+    const reopen = document.querySelector('.win-profile-menu')?._owner !== btn;
+    _closeWinMenu();
+    if (!reopen) return;
+    const user = _menuToken === getToken() ? _menuUser : null;
+    const menu = document.createElement('div');
+    menu.className = 'win-profile-menu';
+    menu._owner = btn;
+    menu.innerHTML =
+      (user ? `<div class="win-profile-head">${renderAvatar(user, 34)}<div><strong>${esc(user.display_name || user.username)}</strong><span>@${esc(user.username)} · ${esc(_t('app_apphub'))}</span></div></div>` : '') +
+      `<button data-act="profile">${esc(_t('win_profile_open'))}</button>` +
+      (btn._onSettings ? `<button data-act="settings">${esc(_t('app_settings_title'))}</button>` : '') +
+      (user ? `<button data-act="logout">${esc(_t('ah_logout'))}</button>` : '');
+    document.body.appendChild(menu);
+    const r = btn.getBoundingClientRect();
+    menu.style.top = Math.round(r.bottom + 4) + 'px';
+    menu.style.left = Math.max(8, Math.min(window.innerWidth - menu.offsetWidth - 8, r.right - menu.offsetWidth)) + 'px';
+    menu.addEventListener('click', e => {
+      const act = e.target.closest('button')?.dataset.act;
+      if (!act) return;
+      _closeWinMenu();
+      if (act === 'profile') openWindow('account');
+      else if (act === 'settings') btn._onSettings?.();
+      else if (act === 'logout') _winLogout();
+    });
+    document.addEventListener('mousedown', _winMenuOutside, true);
+    document.addEventListener('keydown', _winMenuKey, true);
+    menu.querySelector('button')?.focus();
+  }
+
+  function mountWindowProfile(btn, opts) {
+    if (!btn) return;
+    if (!_winInit) {
+      _winInit = true;
+      window.addEventListener('apphub_login', () => _paintWinProfiles(true));
+      window.addEventListener('apphub_logout', () => _paintWinProfiles(true));
+      window.addEventListener('storage', e => { if (e.key === 'apphub_token') _paintWinProfiles(true); });
+    }
+    btn._onSettings = opts?.onSettings || null;
+    _winBtns.add(btn);
+    btn.addEventListener('mousedown', e => e.stopPropagation());
+    btn.addEventListener('click', e => { e.stopPropagation(); _openWinMenu(btn); });
+    // The window is added to the page right after this call; painting waits for it.
+    setTimeout(() => _paintWinProfiles(false), 0);
+  }
+
+  return { openWindow, getToken, getUser, requireLogin, mountWindowProfile };
 })();

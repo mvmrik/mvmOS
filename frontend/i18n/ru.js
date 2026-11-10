@@ -1,6 +1,11 @@
 // mvmOS UI — Русский
 window._i18n = {
   "fpick_title_file": "Выбор файла",
+  "fpick_new_folder": "Новая папка",
+  "fpick_folder_name": "Имя папки",
+  "fpick_create": "Создать",
+  "fpick_name_invalid": "Используйте имя без косых черт.",
+  "fpick_create_failed": "Не удалось создать папку.",
   "fpick_title_files": "Выбор файлов",
   "fpick_title_folder": "Выбор папки",
   "fpick_title_directory": "Выбор места",
@@ -127,6 +132,8 @@ window._i18n = {
   'win_menu':                     'Меню',
   'win_public_page':              'Публичная страница',
   'win_pin_size':                 'Закрепить размер и позицию на этом устройстве',
+  'win_profile':                  'Профиль Apps Hub',
+  'win_profile_open':             'Профиль и аккаунт',
   'win_unpin_size':               'Открепить',
   'win_always_on_top':            'Поверх всех окон',
   'win_not_on_top':               'Не держать поверх всех окон',
@@ -849,6 +856,7 @@ window._i18n = {
   'keys_save'                       : 'Сохранить ключ',
   'keys_remove'                     : 'Удалить ключ',
   'keys_get'                        : 'Получить ключ',
+  'keys_redirect'                   : 'Адрес возврата, который нужно ввести при регистрации ключа',
   'keys_invalid'                    : 'Это не похоже на действительный ключ.',
   'keys_add'                          : 'Добавить ключ',
   'keys_name_ph'                      : 'Название (необязательно)',

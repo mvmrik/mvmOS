@@ -1,7 +1,7 @@
 """
 Service API keys for Apps Hub profiles.
 
-An app that needs an outside service (today: Google Maps) does not ask for the
+An app that needs an outside service (Google Maps, Simkl) does not ask for the
 key in its own settings. It names the service in its manifest
 
     "services": ["google_maps"]
@@ -46,6 +46,9 @@ require_admin = sys.modules["backend.auth"].require_admin
 # Services an app may declare. Only the id and a label for the screens live here.
 SERVICES = {
     "google_maps": {"label": "Google Maps", "help_url": "https://console.cloud.google.com/google/maps-apis/credentials"},
+    # Only the administrator adds the key (people sign in to Simkl inside the app);
+    # "redirect": the service asks for a return address when the key is registered.
+    "simkl": {"label": "Simkl", "help_url": "https://simkl.com/settings/developer/", "redirect": True, "personal": False},
 }
 
 _KEY_RE = re.compile(r"^[A-Za-z0-9_\-.:]{8,256}$")
@@ -187,13 +190,14 @@ def resolve_service_key(user_id: str, service: str, app_id: str) -> dict:
     for every app; if several qualify, the one added first wins."""
     if not user_id or service not in SERVICES:
         return {"key": "", "source": ""}
+    personal = SERVICES[service].get("personal", True)
     try:
         with _hub._db() as conn:
-            row = conn.execute(
+            row = None if not personal else conn.execute(
                 "SELECT k.key FROM service_keys_mine k JOIN service_keys_mine_app a ON a.key_id=k.id "
                 "WHERE k.user_id=? AND k.service=? AND a.app_id=? ORDER BY k.id LIMIT 1",
                 (user_id, service, app_id)).fetchone()
-            if not row:
+            if personal and not row:
                 row = conn.execute(
                     "SELECT key FROM service_keys_mine WHERE user_id=? AND service=? AND "
                     "NOT EXISTS (SELECT 1 FROM service_keys_mine_app a WHERE a.key_id=service_keys_mine.id) "
@@ -242,6 +246,8 @@ async def list_my_keys(x_pub_token: Optional[str] = Header(default=None)):
     out = []
     with _hub._db() as conn:
         for sid, meta in SERVICES.items():
+            if not meta.get("personal", True):
+                continue
             rows = conn.execute("SELECT id,name,key FROM service_keys_mine WHERE user_id=? AND service=? ORDER BY id",
                                 (u["id"], sid)).fetchall()
             shared = conn.execute(
@@ -272,6 +278,8 @@ def _set_apps(conn, key_id: int, service: str, app_ids: list) -> None:
 async def add_my_key(body: MyKeyBody, x_pub_token: Optional[str] = Header(default=None)):
     u = _user(x_pub_token)
     _service(body.service)
+    if not SERVICES[body.service].get("personal", True):
+        raise HTTPException(403, detail="admin_only")
     key = _clean_key(body.key)
     name = (body.name or "").strip()[:60] or SERVICES[body.service]["label"]
     with _hub._db() as conn:
@@ -345,7 +353,7 @@ async def list_keys(_session=Depends(require_admin)):
             "SELECT id,username,display_name,avatar_color,avatar_svg,avatar_data FROM public_users "
             "ORDER BY display_name COLLATE NOCASE").fetchall()]
         keys = [_key_json(conn, k) for k in conn.execute("SELECT id,service,name,key FROM service_keys ORDER BY id")]
-    services = [{"service": sid, "label": m["label"], "help_url": m["help_url"]} for sid, m in SERVICES.items()]
+    services = [{"service": sid, "label": m["label"], "help_url": m["help_url"], "redirect": bool(m.get("redirect"))} for sid, m in SERVICES.items()]
     return JSONResponse({"services": services, "keys": keys, "users": users})
 
 

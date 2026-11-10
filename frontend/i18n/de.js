@@ -1,6 +1,11 @@
 // mvmOS UI — Deutsch
 window._i18n = {
   "fpick_title_file": "Datei auswählen",
+  "fpick_new_folder": "Neuer Ordner",
+  "fpick_folder_name": "Ordnername",
+  "fpick_create": "Erstellen",
+  "fpick_name_invalid": "Verwende einen Namen ohne Schrägstriche.",
+  "fpick_create_failed": "Der Ordner konnte nicht erstellt werden.",
   "fpick_title_files": "Dateien auswählen",
   "fpick_title_folder": "Ordner auswählen",
   "fpick_title_directory": "Ort auswählen",
@@ -127,6 +132,8 @@ window._i18n = {
   'win_menu':                     'Menü',
   'win_public_page':              'Öffentliche Seite',
   'win_pin_size':                 'Größe & Position auf diesem Gerät fixieren',
+  'win_profile':                  'Apps-Hub-Profil',
+  'win_profile_open':             'Profil und Konto',
   'win_unpin_size':               'Fixierung aufheben',
   'win_always_on_top':            'Immer im Vordergrund',
   'win_not_on_top':               'Nicht mehr im Vordergrund halten',
@@ -849,6 +856,7 @@ window._i18n = {
   'keys_save'                       : 'Schlüssel speichern',
   'keys_remove'                     : 'Schlüssel entfernen',
   'keys_get'                        : 'Schlüssel besorgen',
+  'keys_redirect'                   : 'Rücksprungadresse, die du bei der Registrierung des Schlüssels einträgst',
   'keys_invalid'                    : 'Das sieht nicht nach einem gültigen Schlüssel aus.',
   'keys_add'                          : 'Schlüssel hinzufügen',
   'keys_name_ph'                      : 'Name (optional)',

@@ -1,6 +1,11 @@
 // mvmOS UI — Português (Brasil)
 window._i18n = {
   "fpick_title_file": "Escolher um arquivo",
+  "fpick_new_folder": "Nova pasta",
+  "fpick_folder_name": "Nome da pasta",
+  "fpick_create": "Criar",
+  "fpick_name_invalid": "Use um nome sem barras.",
+  "fpick_create_failed": "Não foi possível criar a pasta.",
   "fpick_title_files": "Escolher arquivos",
   "fpick_title_folder": "Escolher uma pasta",
   "fpick_title_directory": "Escolher um local",
@@ -127,6 +132,8 @@ window._i18n = {
   'win_menu':                     'Menu',
   'win_public_page':              'Página pública',
   'win_pin_size':                 'Fixar tamanho e posição neste dispositivo',
+  'win_profile':                  'Perfil do Apps Hub',
+  'win_profile_open':             'Perfil e conta',
   'win_unpin_size':               'Desafixar',
   'win_always_on_top':            'Sempre no topo',
   'win_not_on_top':               'Deixar de manter no topo',
@@ -849,6 +856,7 @@ window._i18n = {
   'keys_save'                       : 'Salvar chave',
   'keys_remove'                     : 'Remover chave',
   'keys_get'                        : 'Obter uma chave',
+  'keys_redirect'                   : 'Endereço de retorno a informar ao registrar a chave',
   'keys_invalid'                    : 'Isso não parece uma chave válida.',
   'keys_add'                          : 'Adicionar chave',
   'keys_name_ph'                      : 'Nome (opcional)',

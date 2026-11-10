@@ -36,6 +36,22 @@ const freePort = () => new Promise(r => {const s = net.createServer(); s.listen(
     const wait = (fn, arg) => page.waitForFunction(fn, arg, {timeout: 60000});
     const state = id => page.evaluate(id => mvmOS.uploader.jobs().find(j => j.id === id)?.state, id);
 
+    // Folder creation returns the new destination on both storage types.
+    await page.evaluate(landing => { window.newDestination = mvmOS.filePicker.open({mode:'directory', sources:['server'], server:{roots:[landing],start:landing}}); }, landing);
+    await page.click('.mvm-fp [data-new]');
+    await page.fill('.mvm-fp [data-newname]', 'Created here');
+    await page.locator('.mvm-fp [data-newform]').evaluate(form => form.requestSubmit());
+    const created = await page.evaluate(() => window.newDestination);
+    assert.equal(created.folder.path, path.join(landing, 'Created here'));
+    assert.ok(fs.statSync(created.folder.path).isDirectory());
+    await page.evaluate(id => { window.newDestination = mvmOS.filePicker.open({mode:'directory', sources:['shared'], shared:{ids:[id],permission:'upload'}}); }, folder.id);
+    await page.click('.mvm-fp [data-new]');
+    await page.fill('.mvm-fp [data-newname]', 'Created remotely');
+    await page.locator('.mvm-fp [data-newform]').evaluate(form => form.requestSubmit());
+    const remoteCreated = await page.evaluate(() => window.newDestination);
+    assert.equal(remoteCreated.folder.shared.path, 'Created remotely');
+    assert.ok(fs.statSync(path.join(shared, 'Created remotely')).isDirectory());
+
     // 1. A folder with sub-folders and one file larger than a part, to the server.
     const j1 = await page.evaluate(async landing => {
       const big = new File([new Uint8Array(105 * 1024 * 1024).fill(7)], 'big.bin');
@@ -64,19 +80,20 @@ const freePort = () => new Promise(r => {const s = net.createServer(); s.listen(
     assert.ok(!fs.existsSync(path.join(landing, 'pack.zip')), 'the archive itself is not kept');
 
     // 4. A second upload waits, the running one can be stopped, then the waiting one runs.
-    await page.evaluate(landing => {
+    const stoppedName = 'stopped-' + Date.now() + '.bin';
+    await page.evaluate(([landing, stoppedName]) => {
       const big = n => new File([new Uint8Array(300 * 1024 * 1024).fill(1)], n);
-      window.__a = mvmOS.uploader.upload({files: [big('first.bin')], destination: {type: 'server', path: landing}});
+      window.__a = mvmOS.uploader.upload({files: [big(stoppedName)], destination: {type: 'server', path: landing}});
       window.__b = mvmOS.uploader.upload({files: [new File(['second'], 'second.txt')], destination: {type: 'server', path: landing}});
-    }, landing);
+    }, [landing, stoppedName]);
     await page.waitForFunction(() => window.__a.state === 'uploading' && window.__b.state === 'waiting');
     await wait(() => window.__a.base + window.__a.part > 0);
     await page.screenshot({path: path.join(temp, 'panel.png')});
     await page.click('.mvm-up-job:nth-child(' + (await page.evaluate(() => mvmOS.uploader.jobs().indexOf(window.__a) + 1)) + ') [data-act=stop]');
     await wait(() => window.__a.state === 'cancelled' && window.__b.state === 'done');
-    assert.ok(!fs.existsSync(path.join(landing, 'first.bin')), 'a stopped upload leaves no file');
+    assert.ok(!fs.existsSync(path.join(landing, stoppedName)), 'a stopped upload leaves no file');
     assert.equal(fs.readFileSync(path.join(landing, 'second.txt'), 'utf8'), 'second');
-    const left = fs.existsSync('/tmp/mvmos-uploads') ? fs.readdirSync('/tmp/mvmos-uploads').filter(f => f.endsWith('_first.bin.mvmostmp')) : [];
+    const left = fs.existsSync('/tmp/mvmos-uploads') ? fs.readdirSync('/tmp/mvmos-uploads').filter(f => f.endsWith('_' + stoppedName + '.mvmostmp')) : [];
     assert.deepEqual(left, [], 'the stopped upload leaves no temporary file');
 
     // 5. A path outside what the person may write is reported, not hidden.

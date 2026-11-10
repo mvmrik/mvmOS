@@ -24,7 +24,7 @@ File Manager is the desktop file browser for the signed-in user’s permitted fi
 
 Double-clicking a file in File Manager or on the desktop opens it with the default app for its type. Out of the box images open in the image viewer, video and audio in the media player, source code in the code editor, plain text in the text editor, `.url` shortcuts in the browser, and archives are extracted in place. Installed apps can register file types of their own, and the chosen default app opens files with those extensions.
 
-Right-click a file and choose Open with to pick another app for that one file. The code editor and the text editor are always offered, whatever the file is. Tick Always use this app to make the choice the new default for every file with that extension. A file type that no app claims shows the same choice when you double-click it.
+Right-click a file and choose Open with to pick another app for that one file. The code editor and the text editor are always offered, whatever the file is. Tick Always use this app to make the choice the new default for every file with that extension. A file type that no app claims shows the same choice when you double-click it. From Core 1.22.0, if an installed Store app competes with another handler and you have not saved a choice, double-clicking also opens this chooser. Saving a default removes the ambiguity.
 
 Settings has its own Default apps section. It first shows every app with the file types it opens, your own choices highlighted, and then the list of file types to change. File types that share the same app and the same choices share a row, and changing a row changes all of them. Type an extension in the search field, or click it under its app, to change just that one; an extension no app knows yet, such as `pdf`, can be given an app the same way. Restore defaults removes all your choices. If the app you chose is uninstalled, its file types go back to their default app.
 
@@ -107,3 +107,7 @@ archive can be uploaded, and an app may unpack the archive on arrival.
 ## Good practice
 
 Deleting or changing permissions affects the real server filesystem. Keep backups of important content and apply restrictive permissions only when you understand the effect on the relevant app or service. Use administrator mode only for the change you need and leave it when you are done.
+
+## Creating a folder in an app’s picker
+
+When an app asks you to choose a folder or save destination, the shared picker offers New folder. Enter a name without slashes. A new save destination is selected immediately; when selecting folder contents, the picker opens the new folder. Shared folders offer creation only when their upload permission allows it, and apps can disable the option.

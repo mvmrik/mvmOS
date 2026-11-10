@@ -1,6 +1,11 @@
 // mvmOS UI — Български
 window._i18n = {
   "fpick_title_file": "Избор на файл",
+  "fpick_new_folder": "Нова папка",
+  "fpick_folder_name": "Име на папката",
+  "fpick_create": "Създай",
+  "fpick_name_invalid": "Използвай име без наклонени черти.",
+  "fpick_create_failed": "Папката не можа да бъде създадена.",
   "fpick_title_files": "Избор на файлове",
   "fpick_title_folder": "Избор на папка",
   "fpick_title_directory": "Избор на място",
@@ -127,6 +132,8 @@ window._i18n = {
   'win_menu':                     'Меню',
   'win_public_page':              'Публична страница',
   'win_pin_size':                 'Фиксирай размера и позицията на това устройство',
+  'win_profile':                  'Профил в Apps Hub',
+  'win_profile_open':             'Профил и акаунт',
   'win_unpin_size':               'Премахни фиксирането',
   'win_always_on_top':            'Винаги най-отгоре',
   'win_not_on_top':               'Спри да е винаги най-отгоре',
@@ -849,6 +856,7 @@ window._i18n = {
   'keys_save'                       : 'Запази ключа',
   'keys_remove'                     : 'Премахни ключа',
   'keys_get'                        : 'Вземи ключ',
+  'keys_redirect'                   : 'Адрес за връщане, който да въведеш там, където регистрираш ключа',
   'keys_invalid'                    : 'Това не прилича на валиден ключ.',
   'keys_add'                          : 'Добави ключ',
   'keys_name_ph'                      : 'Име (по желание)',

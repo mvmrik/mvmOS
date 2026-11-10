@@ -1,6 +1,11 @@
 // mvmOS UI — 日本語
 window._i18n = {
   "fpick_title_file": "ファイルを選択",
+  "fpick_new_folder": "新しいフォルダー",
+  "fpick_folder_name": "フォルダー名",
+  "fpick_create": "作成",
+  "fpick_name_invalid": "スラッシュを含まない名前を使ってください。",
+  "fpick_create_failed": "フォルダーを作成できませんでした。",
   "fpick_title_files": "ファイルを選択",
   "fpick_title_folder": "フォルダを選択",
   "fpick_title_directory": "場所を選択",
@@ -127,6 +132,8 @@ window._i18n = {
   'win_menu':                     'メニュー',
   'win_public_page':              '公開ページ',
   'win_pin_size':                 'このデバイスでサイズと位置を固定',
+  'win_profile':                  'Apps Hub プロフィール',
+  'win_profile_open':             'プロフィールとアカウント',
   'win_unpin_size':               '固定を解除',
   'win_always_on_top':            '常に手前に表示',
   'win_not_on_top':               '常に手前に表示を解除',
@@ -849,6 +856,7 @@ window._i18n = {
   'keys_save'                       : 'キーを保存',
   'keys_remove'                     : 'キーを削除',
   'keys_get'                        : 'キーを取得',
+  'keys_redirect'                   : 'キーを登録するときに入力する戻り先アドレス',
   'keys_invalid'                    : '有効なキーではないようです。',
   'keys_add'                          : 'キーを追加',
   'keys_name_ph'                      : '名前(任意)',

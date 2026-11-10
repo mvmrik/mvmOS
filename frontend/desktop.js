@@ -666,6 +666,9 @@ const Desktop = (() => {
 
     const mobile = isMobile();
     const mobileFullscreen = mobile && window._vosSettings?.mobile_fullscreen !== false;
+    // Apps Hub apps show the signed-in profile in the title bar; its menu also
+    // carries the app's settings, so the gear is only kept for the other apps.
+    const hubProfile = !mobile && !!_appDef?.requires_apphub && typeof AppHub !== 'undefined';
     if (mobile) {
       el.classList.add('window-mobile');
       if (mobileFullscreen) {
@@ -704,7 +707,8 @@ const Desktop = (() => {
         <div class="window-title">${titleHtml}</div>
         ${!mobile ? `<button class="wbtn-ontop" title="${t('win_always_on_top')}"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg"><path d="M5 4h14"/><path d="M12 20V9"/><path d="M7 13l5-5l5 5"/></svg></button>` : ''}
         ${!mobile ? `<button class="wbtn-pin" title="${t('win_pin_size')}"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg"><path d="M9 4h6l-.5 5.5L18 12v2h-5v5l-1 1l-1-1v-5H6v-2l3.5-2.5z"/></svg></button>` : ''}
-        ${appSettings ? `<button class="wbtn-appsettings" title="${t('settings_title')}">⚙</button>` : ''}
+        ${appSettings && !hubProfile ? `<button class="wbtn-appsettings" title="${t('settings_title')}">⚙</button>` : ''}
+        ${hubProfile ? `<button class="wbtn-profile" title="${t('win_profile')}" aria-haspopup="menu"></button>` : ''}
       </div>`}
       <div class="window-body"></div>
       ${mobileFullscreen ? '' : `<div class="window-footer">
@@ -813,6 +817,12 @@ const Desktop = (() => {
         e.stopPropagation();
         if (onAppSettings) onAppSettings();
         else Settings.openWindow(appSettings);
+      });
+    }
+
+    if (hubProfile) {
+      AppHub.mountWindowProfile(el.querySelector('.wbtn-profile'), {
+        onSettings: appSettings ? () => { if (onAppSettings) onAppSettings(); else Settings.openWindow(appSettings); } : null,
       });
     }
 

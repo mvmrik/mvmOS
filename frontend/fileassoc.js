@@ -3,7 +3,7 @@
 // Which app opens which kind of file, for File Manager and the desktop.
 //
 // The built-in handlers keep the order the double-click used to test them in,
-// so with nothing chosen every file opens exactly as before. An installed app
+// with a chooser for unresolved conflicts involving a Store app. An installed app
 // adds its own types by passing file_types (extensions without the dot) and an
 // openFile(path) function to mvmOS.registerApp; a type no built-in handler
 // knows then opens in that app. The user's own choices live in the
@@ -125,7 +125,14 @@ const FileAssoc = (() => {
   // Opens the file with its app; a type nothing claims asks with "Open with…".
   async function open(path, ctx) {
     await load();
-    const h = handlerFor(extOf(path.split('/').pop()));
+    const ext = extOf(path.split('/').pop());
+    // Nothing chosen yet and an installed app competes with another handler:
+    // ask instead of guessing. One claimer opens straight away.
+    if (!(_map && _map[ext] && candidates(ext, true).some(x => x.id === _map[ext]))) {
+      const c = candidates(ext, false);
+      if (c.length > 1 && c.some(x => x.id.startsWith('app:'))) return openWith(path, ctx);
+    }
+    const h = handlerFor(ext);
     if (!h) return openWith(path, ctx);
     h.open(path, ctxOf(ctx));
   }
@@ -177,14 +184,16 @@ const FileAssoc = (() => {
     };
   }
 
-  // Saving the built-in default again just drops the choice, so the type
-  // follows the default if that ever changes.
+  // A default handler may stay implicit unless a Store app competes for the
+  // extension. In that case remember even the built-in choice to stop prompting.
   // ext may also be a list, to set several types in one save.
   async function setDefault(ext, id) {
     const map = { ...(await load()) };
     for (const e of [].concat(ext)) {
       const def = builtinDefault(e);
-      if (!id || (def && def.id === id)) delete map[e];
+      const handlers = candidates(e, false);
+      const competing = handlers.length > 1 && handlers.some(h => h.id.startsWith('app:'));
+      if (!id || (def && def.id === id && !competing)) delete map[e];
       else map[e] = id;
     }
     await save(map);
