@@ -251,6 +251,10 @@ def write_beside(user, root, rel, data):
 # app never sees the key. The video itself is never fetched here: playing uses
 # ``shared_file_url`` and the bytes flow from the sharing server.
 
+# Cloudflare in front of the sharing server rejects Python's default agent (error 1010).
+_USER_AGENT = "mvmOS-shared-files/1.0"
+
+
 def _shared_row(owner, folder_id):
     with get_conn() as c:
         row = c.execute("SELECT origin,grant_id,secret,name FROM file_remote_folders WHERE id=? AND owner=?",
@@ -267,7 +271,7 @@ def _shared_call(row, suffix, method="GET", payload=None, headers=None, timeout=
     url = f"{row['origin']}{shared_files.PREFIX}/{row['grant_id']}{suffix}"
     data = None if payload is None else (payload if isinstance(payload, bytes) else json.dumps(payload).encode())
     req = urllib.request.Request(url, data=data, method=method, headers={
-        "Authorization": "Bearer " + row["secret"], **({"Content-Type": "application/json"} if isinstance(payload, dict) else {}),
+        "User-Agent": _USER_AGENT, "Authorization": "Bearer " + row["secret"], **({"Content-Type": "application/json"} if isinstance(payload, dict) else {}),
         **(headers or {})})
     try:
         with urllib.request.urlopen(req, timeout=timeout) as r:
@@ -322,7 +326,7 @@ def shared_read_head(owner, folder_id, path, max_bytes=5 * 1024 ** 2):
     """The first ``max_bytes`` of a small file (e.g. a subtitle) of a shared folder."""
     import urllib.request
     url = shared_file_url(owner, folder_id, path, ttl=120)
-    req = urllib.request.Request(url, headers={"Range": "bytes=0-%d" % (max_bytes - 1)})
+    req = urllib.request.Request(url, headers={"User-Agent": _USER_AGENT, "Range": "bytes=0-%d" % (max_bytes - 1)})
     try:
         with urllib.request.urlopen(req, timeout=30) as r:
             return r.read(max_bytes)

@@ -197,7 +197,7 @@ short link and the bytes flow from the sharing server.
 
 Core 1.22.0 adds **New folder** when choosing a folder or save destination. Set `createFolder: false` to disable it; shared destinations offer it only with upload permission. A newly created save destination is selected immediately.
 
-For libraries that keep files in place, `backend.filepicker` also supplies `folder_files`, `open_server_file`, `write_beside`, `shared_folder_files`, `shared_read_head`, `shared_can_write` and `shared_write_beside`. Resolve the chosen root first, retain the Linux owner with the source and close returned file handles. Server reads enforce the owner’s access and the root boundary. Shared playback uses `shared_file_url` directly from the source server. These helpers require Core 1.22.0.
+For libraries that keep files in place, `backend.filepicker` also supplies `folder_files`, `open_server_file`, `write_beside`, `shared_folder_files`, `shared_read_head`, `shared_can_write` and `shared_write_beside`. Resolve the chosen root first, retain the Linux owner with the source and close returned file handles. Server reads enforce the owner’s access and the root boundary. Shared playback uses `shared_file_url` directly from the source server. These helpers require Core 1.22.0. Core 1.22.1 makes every request to a shared folder carry its own `mvmOS-shared-files` User-Agent, so a sharing server behind Cloudflare no longer refuses the default Python client.
 
 ```js
 const job = await mvmOS.uploader.choose({
