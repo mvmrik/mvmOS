@@ -965,7 +965,10 @@ html, body {
 }
 .fm-device-btn { cursor: pointer; font-size: .95rem; padding: 0 6px; color: var(--text-dim); }
 .fm-device-btn:hover { color: var(--text); }
-.fm-device { cursor: pointer; }
+.fm-device { cursor: pointer; padding: 10px 14px; gap: 12px; }
+.fm-device-skipped { padding: 10px 14px; gap: 12px; opacity: .6; }
+.fm-entry.fm-device .fm-size, .fm-entry.fm-device-skipped .fm-size { width: 150px; text-align: left; white-space: nowrap; }
+.fm-entry.fm-device .fm-date, .fm-entry.fm-device-skipped .fm-date { width: 300px; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .fm-bookmark-add { color: var(--text-dim); font-style: italic; }
 .fm-bookmark-add:hover { color: var(--text); }
 .fm-bookmark-remove {

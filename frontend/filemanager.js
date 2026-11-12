@@ -662,11 +662,11 @@ const FileManager = (() => {
         const row = document.createElement('div');
         row.className = 'fm-entry fm-device';
         const state = d.mountpoint ? t('fm_drive_mounted_at').replace('{path}', d.mountpoint) : t('fm_drive_not_mounted');
-        row.innerHTML = `<span class="fm-entry-icon">${d.usb ? '🔌' : '💾'}</span>
-          <span class="fm-entry-name">${_escHtml(d.label)}</span>
-          <span class="fm-entry-size">${fmtSize(d.size)} · ${_escHtml(d.fstype)}</span>
-          <span class="fm-entry-date" style="color:var(--text-dim);font-size:.8rem">${_escHtml(state)}</span>
-          ${d.mountpoint ? `<span class="fm-device-btn" title="${_escHtml(t('fm_drive_eject'))}">⏏</span>` : ''}`;
+        row.innerHTML = `<span class="fm-icon">${d.usb ? '🔌' : '💾'}</span>
+          <span class="fm-name">${_escHtml(d.label)}</span>
+          <span class="fm-size fm-device-meta">${fmtSize(d.size)} · ${_escHtml(d.fstype)}</span>
+          <span class="fm-date fm-device-state">${_escHtml(state)}</span>
+          ${d.mountpoint ? `<span class="fm-device-btn" title="${_escHtml(t('fm_drive_eject'))}">⏏</span>` : '<span class="fm-device-btn" style="visibility:hidden">⏏</span>'}`;
         row.addEventListener('click', async e => {
           if (e.target.closest('.fm-device-btn')) return;
           if (d.mountpoint) return this.navigate(d.mountpoint);
@@ -686,11 +686,10 @@ const FileManager = (() => {
       for (const d of skipped) {
         const row = document.createElement('div');
         row.className = 'fm-entry fm-device-skipped';
-        row.style.opacity = '.6';
-        row.innerHTML = `<span class="fm-entry-icon">💽</span>
-          <span class="fm-entry-name">${_escHtml(d.label)}</span>
-          <span class="fm-entry-size">${fmtSize(d.size)}${d.fstype ? ' · ' + _escHtml(d.fstype) : ''}</span>
-          <span class="fm-entry-date" style="color:var(--text-dim);font-size:.8rem">${_escHtml(t('fm_drive_why_' + d.reason))}</span>`;
+        row.innerHTML = `<span class="fm-icon">💽</span>
+          <span class="fm-name">${_escHtml(d.label)}</span>
+          <span class="fm-size fm-device-meta">${fmtSize(d.size)}${d.fstype ? ' · ' + _escHtml(d.fstype) : ''}</span>
+          <span class="fm-date fm-device-state">${_escHtml(t('fm_drive_why_' + d.reason))}</span><span class="fm-device-btn" style="visibility:hidden">⏏</span>`;
         this.listEl.appendChild(row);
       }
     }
