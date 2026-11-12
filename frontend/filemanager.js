@@ -403,6 +403,7 @@ const FileManager = (() => {
             await this.paste(path);
           });
         }
+        if (path === '/') addItem('ℹ️ ' + t('fm_drive_info'), () => this.showComputerInfo());
         addItem('⬛ Open in Terminal', () => {
           Terminal.openWindow();
           setTimeout(() => document.dispatchEvent(new CustomEvent('terminal-run', { detail: `cd ${shQuote(path)}` })), 500);
@@ -634,6 +635,131 @@ const FileManager = (() => {
 
     // Disks the system does not run from. A mounted disk opens like a folder;
     // an unmounted one is mounted on click, which only an administrator may do.
+    _fmtSize(n) {
+      n = Number(n) || 0;
+      return n >= 1e12 ? (n / 1e12).toFixed(1) + ' TB' : n >= 1e9 ? (n / 1e9).toFixed(1) + ' GB' : Math.round(n / 1e6) + ' MB';
+    }
+
+    // Simple modal used by the disk and computer information and by formatting.
+    // blocks: [{heading, rows: [[label, value]], bar: {used, total}}]
+    _modal(title, blocks, buttons = [], extra) {
+      document.querySelector('.fm-modal-overlay')?.remove();
+      const overlay = document.createElement('div');
+      overlay.className = 'fm-modal-overlay';
+      const box = document.createElement('div');
+      box.className = 'fm-modal';
+      const h = document.createElement('h3'); h.textContent = title; box.appendChild(h);
+      for (const blk of blocks) {
+        const sec = document.createElement('div'); sec.className = 'fm-modal-block';
+        if (blk.heading) { const hh = document.createElement('div'); hh.className = 'fm-modal-heading'; hh.textContent = blk.heading; sec.appendChild(hh); }
+        if (blk.text) { const tx = document.createElement('div'); tx.className = 'fm-modal-text'; tx.textContent = blk.text; sec.appendChild(tx); }
+        if (blk.bar && blk.bar.total) {
+          const pct = Math.min(100, Math.round(blk.bar.used / blk.bar.total * 100));
+          const bar = document.createElement('div'); bar.className = 'fm-usage';
+          bar.innerHTML = `<div class="fm-usage-fill${pct >= 90 ? ' full' : ''}" style="width:${pct}%"></div>`;
+          sec.appendChild(bar);
+          const cap = document.createElement('div'); cap.className = 'fm-usage-cap';
+          cap.textContent = t('fm_info_free_of').replace('{free}', this._fmtSize(blk.bar.total - blk.bar.used)).replace('{total}', this._fmtSize(blk.bar.total)) + ` · ${pct}%`;
+          sec.appendChild(cap);
+        }
+        for (const [k, v] of blk.rows || []) {
+          const r = document.createElement('div'); r.className = 'fm-modal-row';
+          const kk = document.createElement('span'); kk.textContent = k;
+          const vv = document.createElement('span'); vv.textContent = v;
+          r.append(kk, vv); sec.appendChild(r);
+        }
+        box.appendChild(sec);
+      }
+      if (extra) box.appendChild(extra);
+      const bar = document.createElement('div'); bar.className = 'fm-modal-actions';
+      for (const [label, fn, kind] of buttons.concat([[t('fm_info_close'), null]])) {
+        const bt = document.createElement('button'); bt.className = 's-btn'; bt.textContent = label;
+        if (kind === 'danger') bt.className = 's-btn s-btn-danger';
+        bt.addEventListener('click', () => { if (fn) { if (fn() === false) return; } overlay.remove(); });
+        bar.appendChild(bt);
+      }
+      box.appendChild(bar);
+      overlay.appendChild(box);
+      overlay.addEventListener('mousedown', e => { if (e.target === overlay) overlay.remove(); });
+      overlay.addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Escape') overlay.remove(); });
+      document.body.appendChild(overlay);
+      return overlay;
+    }
+
+    _notice(msg) { return this._modal(t('fm_devices'), [{ text: msg }]); }
+
+    _healthRows(disk) {
+      const sm = disk.smart || {};
+      const rows = [];
+      const state = { ok: 'fm_info_health_ok', failing: 'fm_info_health_fail', not_installed: 'fm_info_health_install', unavailable: 'fm_info_health_na' }[sm.state] || 'fm_info_health_na';
+      rows.push([t('fm_info_health'), (sm.state === 'ok' ? '✅ ' : sm.state === 'failing' ? '⚠️ ' : '') + t(state)]);
+      if (sm.temperature != null) rows.push([t('fm_info_temp'), sm.temperature + ' °C']);
+      if (sm.hours != null) rows.push([t('fm_info_hours'), String(sm.hours)]);
+      if (sm.reallocated != null) rows.push([t('fm_info_realloc'), String(sm.reallocated)]);
+      if (sm.pending != null) rows.push([t('fm_info_pending'), String(sm.pending)]);
+      if (sm.percentage_used != null) rows.push([t('fm_info_wear'), sm.percentage_used + '%']);
+      if (sm.media_errors != null) rows.push([t('fm_info_media_errors'), String(sm.media_errors)]);
+      return rows;
+    }
+
+    _diskRows(disk) {
+      const kind = { ssd: 'fm_info_type_ssd', hdd: 'fm_info_type_hdd', usb: 'fm_info_type_usb' }[disk.kind];
+      const rows = [];
+      if (disk.model) rows.push([t('fm_info_model'), disk.model]);
+      rows.push([t('fm_info_device'), disk.device]);
+      if (disk.serial) rows.push([t('fm_info_serial'), disk.serial]);
+      rows.push([t('fm_info_size'), this._fmtSize(disk.size)]);
+      if (kind) rows.push([t('fm_info_type'), t(kind)]);
+      return rows.concat(this._healthRows(disk));
+    }
+
+    async showDriveInfo(device) {
+      const res = await this.api('/api/files/drives/info?device=' + encodeURIComponent(device));
+      if (!res.ok) return this._notice(t('fm_drive_info_failed'));
+      const d = await res.json();
+      const yes = t('fm_info_yes'), no = t('fm_info_no');
+      const fsRows = [];
+      if (d.label) fsRows.push([t('fm_info_label'), d.label]);
+      fsRows.push([t('fm_info_device'), d.device]);
+      fsRows.push([t('fm_info_fs'), d.fstype || '—']);
+      if (d.uuid) fsRows.push([t('fm_info_uuid'), d.uuid]);
+      fsRows.push([t('fm_info_size'), this._fmtSize(d.size)]);
+      fsRows.push([t('fm_info_mount'), d.mountpoint || t('fm_info_not_mounted')]);
+      if (d.mountpoint) fsRows.push([t('fm_info_at_start'), d.persistent ? yes : no]);
+      this._modal(d.label || d.device, [
+        { heading: t('fm_info_volume'), rows: fsRows, bar: d.usage?.total ? { used: d.usage.used, total: d.usage.total } : null },
+        { heading: t('fm_info_disk'), rows: this._diskRows(d.disk) },
+      ]);
+    }
+
+    async showComputerInfo() {
+      const res = await this.api('/api/files/drives/computer');
+      if (!res.ok) return this._notice(t('fm_drive_info_failed'));
+      const c = await res.json();
+      const blocks = (c.filesystems || []).map(f => ({
+        heading: `${f.mountpoint}  ·  ${f.device}  ·  ${f.fstype}`,
+        rows: [], bar: { used: f.used, total: f.total },
+      }));
+      for (const disk of c.disks || []) blocks.push({ heading: '💽 ' + (disk.model || disk.name), rows: this._diskRows(disk) });
+      this._modal(t('fm_info_computer'), blocks);
+    }
+
+    formatDialog(d, done) {
+      const wrap = document.createElement('div');
+      wrap.className = 'fm-modal-form';
+      const l1 = document.createElement('label'); l1.textContent = t('fm_drive_format_label');
+      const label = document.createElement('input'); label.value = 'Storage'; label.maxLength = 16;
+      const l2 = document.createElement('label'); l2.textContent = t('fm_drive_format_confirm').replace('{name}', d.name);
+      const confirm = document.createElement('input'); confirm.placeholder = d.name; confirm.autocomplete = 'off';
+      wrap.append(l1, label, l2, confirm);
+      this._modal(t('fm_drive_format_title'), [{
+        text: t('fm_drive_format_warn').replace('{name}', `${d.model ? d.model + ' ' : ''}${d.device} (${this._fmtSize(d.size)})`),
+      }], [[t('fm_drive_format_go'), () => {
+        if (confirm.value.trim() !== d.name) { confirm.focus(); confirm.classList.add('fm-bad'); return false; }
+        done(label.value.trim() || 'Storage', confirm.value.trim());
+      }, 'danger']], wrap);
+    }
+
     async renderDevices() {
       const data = await (await this.api('/api/files/drives')).json();
       const list = data.drives || [], skipped = data.skipped || [];
@@ -645,51 +771,103 @@ const FileManager = (() => {
         none.textContent = t('fm_devices_none');
         this.listEl.appendChild(none);
       }
-      const fmtSize = n => n >= 1e12 ? (n / 1e12).toFixed(1) + ' TB' : n >= 1e9 ? (n / 1e9).toFixed(1) + ' GB' : Math.round(n / 1e6) + ' MB';
-      const call = async (d, action) => {
+      const fmtSize = n => this._fmtSize(n);
+      const call = async (d, action, extra = {}) => {
         const res = await this.api(`/api/files/drives/${action}`, {
-          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ device: d.device }),
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ device: d.device, ...extra }),
         });
         const out = await res.json().catch(() => ({}));
         if (!res.ok) {
-          this.showError(out.detail === 'admin_required' ? t('fm_drive_admin_only')
-            : `${t(action === 'mount' ? 'fm_drive_mount_failed' : 'fm_drive_unmount_failed')}: ${out.detail || res.status}`);
+          const failed = { unmount: 'fm_drive_unmount_failed', owner: 'fm_drive_owner_failed', format: 'fm_drive_format_failed' }[action] || 'fm_drive_mount_failed';
+          this._notice(out.detail === 'admin_required' ? t('fm_drive_admin_only') : `${t(failed)}: ${out.detail || res.status}`);
           return null;
         }
         return out;
       };
+      const nameHtml = d => `${_escHtml(d.label)}<span class="fm-device-sub">${_escHtml([d.model, d.name].filter(Boolean).join(' · '))}</span>`;
       for (const d of list) {
         const row = document.createElement('div');
-        row.className = 'fm-entry fm-device';
-        const state = d.mountpoint ? t('fm_drive_mounted_at').replace('{path}', d.mountpoint) : t('fm_drive_not_mounted');
+        row.className = 'fm-entry fm-device' + (d.mountpoint ? ' mounted' : '');
+        let state = d.mountpoint ? t('fm_drive_mounted_at').replace('{path}', d.mountpoint) : t('fm_drive_not_mounted');
+        if (d.persistent) state += ' · ' + t('fm_drive_at_start');
+        const meta = d.usage?.total
+          ? t('fm_info_free_of').replace('{free}', fmtSize(d.usage.free)).replace('{total}', fmtSize(d.usage.total))
+          : fmtSize(d.size);
         row.innerHTML = `<span class="fm-icon">${d.usb ? '🔌' : '💾'}</span>
-          <span class="fm-name">${_escHtml(d.label)}</span>
-          <span class="fm-size fm-device-meta">${fmtSize(d.size)} · ${_escHtml(d.fstype)}</span>
+          <span class="fm-name">${nameHtml(d)}</span>
+          <span class="fm-size fm-device-meta">${_escHtml(meta)} · ${_escHtml(d.fstype)}</span>
           <span class="fm-date fm-device-state">${_escHtml(state)}</span>
           ${d.mountpoint ? `<span class="fm-device-btn" title="${_escHtml(t('fm_drive_eject'))}">⏏</span>` : '<span class="fm-device-btn" style="visibility:hidden">⏏</span>'}`;
-        row.addEventListener('click', async e => {
-          if (e.target.closest('.fm-device-btn')) return;
-          if (d.mountpoint) return this.navigate(d.mountpoint);
+        const mountAndOpen = async permanent => {
           row.style.opacity = '.5';
-          const out = await call(d, 'mount');
+          const out = await call(d, 'mount', { permanent });
           if (out?.mountpoint) this.navigate(out.mountpoint); else this.navigate('__devices__');
+        };
+        const unmount = async forget => {
+          row.style.opacity = '.5';
+          await call(d, 'unmount', { forget });
+          this.navigate('__devices__');
+        };
+        const owner = async recursive => {
+          if (recursive && !await SharedFiles.dialog(t('fm_drive_owner_all_confirm'))) return;
+          if (await call(d, 'owner', { recursive })) this._notice(t('fm_drive_owner_done'));
+        };
+        row.addEventListener('click', () => {
+          this.listEl.querySelectorAll('.fm-device.selected').forEach(x => x.classList.remove('selected'));
+          row.classList.add('selected');
+        });
+        row.addEventListener('dblclick', e => {
+          if (e.target.closest('.fm-device-btn')) return;
+          if (d.mountpoint) this.navigate(d.mountpoint); else mountAndOpen(false);
+        });
+        row.addEventListener('contextmenu', e => {
+          e.preventDefault(); e.stopPropagation();
+          const items = [];
+          if (d.mountpoint) {
+            items.push([t('fm_drive_open'), () => this.navigate(d.mountpoint)]);
+            items.push([t('fm_drive_unmount'), () => unmount(false)]);
+            if (d.persistent && d.persistent_managed) {
+              items.push([t('fm_drive_unmount_forget'), () => unmount(true)]);
+              items.push([t('fm_drive_persist_off'), async () => { await call(d, 'persist', { permanent: false }); this.navigate('__devices__'); }]);
+            } else if (!d.persistent) {
+              items.push([t('fm_drive_persist_on'), async () => { await call(d, 'persist', { permanent: true }); this.navigate('__devices__'); }]);
+            }
+            if (!d.readonly && !['vfat', 'exfat', 'ntfs', 'ntfs3', 'hfsplus'].includes(d.fstype)) {
+              items.push([t('fm_drive_owner'), () => owner(false)]);
+              items.push([t('fm_drive_owner_all'), () => owner(true)]);
+            }
+          } else {
+            items.push([t('fm_drive_mount_once'), () => mountAndOpen(false)]);
+            if (!d.persistent) items.push([t('fm_drive_mount_always'), () => mountAndOpen(true)]);
+            else if (d.persistent_managed) items.push([t('fm_drive_persist_off'), async () => { await call(d, 'unmount', { forget: true }); this.navigate('__devices__'); }]);
+          }
+          items.push(['ℹ️ ' + t('fm_drive_info'), () => this.showDriveInfo(d.device)]);
+          this._showMenu(e, items);
         });
         const eject = row.querySelector('.fm-device-btn');
-        if (eject) eject.addEventListener('click', async e => {
-          e.stopPropagation();
-          row.style.opacity = '.5';
-          await call(d, 'unmount');
-          this.navigate('__devices__');
-        });
+        if (eject) eject.addEventListener('click', e => { e.stopPropagation(); unmount(false); });
         this.listEl.appendChild(row);
       }
       for (const d of skipped) {
         const row = document.createElement('div');
         row.className = 'fm-entry fm-device-skipped';
         row.innerHTML = `<span class="fm-icon">💽</span>
-          <span class="fm-name">${_escHtml(d.label)}</span>
+          <span class="fm-name">${nameHtml(d)}</span>
           <span class="fm-size fm-device-meta">${fmtSize(d.size)}${d.fstype ? ' · ' + _escHtml(d.fstype) : ''}</span>
           <span class="fm-date fm-device-state">${_escHtml(t('fm_drive_why_' + d.reason))}</span><span class="fm-device-btn" style="visibility:hidden">⏏</span>`;
+        row.addEventListener('contextmenu', e => {
+          e.preventDefault(); e.stopPropagation();
+          const items = [];
+          if (d.formattable) items.push([t('fm_drive_format'), () => this.formatDialog(d, async (label, confirm) => {
+            row.style.opacity = '.5';
+            const wait = this._notice(t('fm_drive_formatting'));
+            const out = await call(d, 'format', { label, confirm });
+            if (out) wait.remove();
+            this.navigate('__devices__');
+          })]);
+          items.push(['ℹ️ ' + t('fm_drive_info'), () => this.showDriveInfo(d.device)]);
+          this._showMenu(e, items);
+        });
         this.listEl.appendChild(row);
       }
     }
@@ -718,6 +896,26 @@ const FileManager = (() => {
         });
         this.listEl.appendChild(row);
       });
+    }
+
+    // Small context menu for places that are not file rows. items: [[label, action], ...]
+    _showMenu(e, items) {
+      document.getElementById('fm-ctx')?.remove();
+      const menu = document.createElement('div');
+      menu.id = 'fm-ctx';
+      menu.style.cssText = `position:fixed;left:${e.clientX}px;top:${e.clientY}px;z-index:99999;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:4px 0;min-width:180px;box-shadow:0 4px 16px rgba(0,0,0,.4)`;
+      for (const [label, action] of items) {
+        const el = document.createElement('div');
+        el.style.cssText = 'padding:8px 14px;cursor:pointer;font-size:.85rem;transition:background .1s;';
+        el.textContent = label;
+        el.addEventListener('mouseenter', () => el.style.background = 'var(--surface)');
+        el.addEventListener('mouseleave', () => el.style.background = '');
+        el.addEventListener('click', () => { menu.remove(); action(); });
+        menu.appendChild(el);
+      }
+      document.body.appendChild(menu);
+      const close = () => { menu.remove(); document.removeEventListener('click', close); };
+      setTimeout(() => document.addEventListener('click', close), 0);
     }
 
     _showTrashCtxMenu(e, item) {

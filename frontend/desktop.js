@@ -1076,7 +1076,11 @@ const Desktop = (() => {
       delete el.dataset.maximized;
     } else {
       el.dataset.origStyle = JSON.stringify({ left: el.style.left, top: el.style.top, width: el.style.width, height: el.style.height });
+      // Resetting cssText also drops the stacking order, which sent the window
+      // behind every other open one, so it is kept.
+      const z = el.style.zIndex;
       el.style.cssText = 'left:0;top:0;width:100%;height:100%';
+      if (z) el.style.zIndex = z;
       el.dataset.maximized = '1';
     }
   }

@@ -106,11 +106,29 @@ archive can be uploaded, and an app may unpack the archive on arrival.
 
 ## Disks and external drives
 
-The File Manager sidebar has a Devices place between Computer and Trash. Opening it lists the disks and partitions the server does not run from, such as a USB drive or a second internal disk, with label, size, file system and whether each is mounted, or says that no disks were found. A disk that the system sees but cannot be offered, such as an encrypted volume, an unsupported file system or a disk without a file system, is shown dimmed with the reason. Swap, RAID and LVM members and the disk that holds the system are never listed.
+The File Manager sidebar has a Devices place between Computer and Trash. Opening it lists the disks and partitions the server does not run from, such as a USB drive or a second internal disk, with label, size, file system and whether each is mounted, or says that no disks were found. A disk that the system sees but cannot be offered, such as a locked encrypted volume (LUKS or BitLocker), an unsupported file system or a disk without a file system, is shown dimmed with the reason. Once an encrypted volume has been unlocked in Linux, for example at start-up, the unlocked volume is listed like any other disk and the locked container is hidden. Swap, RAID and LVM members and the disk that holds the system are never listed.
 
-A mounted disk opens like any other folder. Clicking one that is not mounted mounts it under `/media/mvmos/<label>` and opens it. Mounting and ejecting are limited to an administrator: root, or a sudo user who confirms their own password. Everyone else can only open disks that are already mounted. The eject button next to a mounted disk unmounts it, and a USB disk is powered off so it can be unplugged.
+A mounted disk opens like any other folder. Double-click a disk that is not mounted to mount it under `/media/mvmos/<label>` and open it. Right-click a disk for its menu: a disk that is not mounted offers Mount once and Mount at every start, and a mounted disk offers Open, Unmount, and the choice to start or stop mounting it at every start. Mounting and unmounting are limited to an administrator: root, or a sudo user who confirms their own password. Everyone else can only open disks that are already mounted. The eject button next to a mounted disk unmounts it, and a USB disk is powered off so it can be unplugged. Unmount fails with the system's message while a program still uses the disk.
 
-Disks are mounted with `nosuid` and `nodev`. FAT, exFAT and NTFS disks have no Unix owners, so they are mounted owned by the account that asked, and a disk with a read-only medium opens read-only. A disk mounted this way is not added to `/etc/fstab`; it stays mounted until it is ejected or the server restarts. What a person can read inside a disk is still decided by the Linux permissions of their own account.
+Mount once keeps the disk mounted until it is unmounted or the server restarts. Mount at every start adds one line to `/etc/fstab`, marked with a `# mvmos:` comment, that identifies the disk by its UUID and uses `nofail`, so a disk that is unplugged never stops the server from starting. A copy of the original file is kept as `/etc/fstab.mvmos.bak` the first time. Stop mounting at every start, or Unmount and stop mounting at start, removes that line again. A disk that the server owner already listed in `/etc/fstab` by hand is shown as mounted at every start and is never changed by File Manager.
+
+Disks are mounted with `nosuid` and `nodev`. FAT, exFAT and NTFS disks have no Unix owners, so they are mounted owned by the account that asked, and a disk with a read-only medium opens read-only. What a person can read inside a disk is still decided by the Linux permissions of their own account.
+
+Every row shows the disk's name, its model and device name, its size, its file system and, when it is mounted, how much space is free.
+
+### Ownership of a new disk
+
+A Linux file system such as ext4 belongs to root when it is mounted for the first time, so a normal account cannot write to it or share a folder from it. The right-click menu of a mounted disk has Make me the owner of the disk, which gives the administrator who asks the top folder of the disk, and Make me the owner of everything on the disk, which changes every file and folder after a confirmation and can take a long time on a large disk. Disks without Unix owners do not offer them.
+
+### Formatting a new disk
+
+A disk or partition that has no file system and is not mounted shows Format as ext4 in its right-click menu. The administrator chooses a name, must type the device name to confirm, and the disk gets a GPT partition table with one partition and an ext4 file system that is owned by the administrator who formatted it. Only a completely empty disk can be formatted: anything that already has a file system, partitions, a mount or the system on it is refused.
+
+### Information and health
+
+Info in the right-click menu of a disk shows its name, device, file system, UUID, size, where it is mounted, whether it is mounted at every start, a usage bar with the free space, and the model, serial number and kind of the physical disk. When the `smartctl` program from the `smartmontools` package is installed on the server, it also shows the health reported by the disk: the overall result, temperature, power-on hours, reallocated and pending sectors, and wear or media errors for NVMe disks. Without it the health line says that smartmontools is needed, and virtual disks do not report health.
+
+The Computer place has Info in its right-click menu. It shows the space used and free on every mounted file system of this server and the model, kind and health of each physical disk.
 
 ## Good practice
 

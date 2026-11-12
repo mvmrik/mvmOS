@@ -29,8 +29,8 @@ Browse and transfer files directly between your browser and the source server,
 including copying whole folders between local and remote storage. These are virtual
 File Manager locations, not Linux mounts or automatic app file-picker entries.
 See the [File Manager guide](docs/core-apps/file-manager.md#shared-folders-between-servers).
-The Devices place lists extra and external disks, which an administrator can mount and eject
-without leaving File Manager. See the [File Manager guide](docs/core-apps/file-manager.md#disks-and-external-drives).
+The Devices place lists extra and external disks. An administrator can mount them once or at every start, unmount them, take ownership of a new Linux disk, format an empty one and see its free space and health; the Computer place shows the same information for this server.
+See the [File Manager guide](docs/core-apps/file-manager.md#disks-and-external-drives).
 
 **Run the machine.** Manage Linux users, cron jobs, systemd services, nginx sites and
 domains, SSH keys, and scheduled backups you can download or restore. Watch CPU, memory and
