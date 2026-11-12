@@ -289,6 +289,7 @@ const FileManager = (() => {
         sep2.className = 'fm-places-sep';
         this.placesEl.appendChild(sep2);
         this._addPlace('💻', t('fm_computer'), '/');
+        this._addPlace('💾', t('fm_devices'), '__devices__');
         this._addPlace('🗑️', t('fm_trash'), '__trash__');
 
         // Bookmarks
@@ -471,6 +472,19 @@ const FileManager = (() => {
         return;
       }
 
+      // ── Devices view ──
+      if (path === '__devices__') {
+        this._setTrashMode(false);
+        this._remote = null;
+        this.mkdirBtn.disabled = this.uploadBtn2.disabled = true;
+        this.body.querySelector('.fm-search-deep').disabled = true;
+        this.breadEl.innerHTML = `<span class="fm-bread-btn">💾 ${_escHtml(t('fm_devices'))}</span>`;
+        try { await this.renderDevices(); }
+        catch { this.showError(t('fm_network_error')); }
+        finally { this._navigating = false; }
+        return;
+      }
+
       this._setTrashMode(false);
       const remotePath = SharedFiles.parse(path);
       this._remote = null;
@@ -615,6 +629,69 @@ const FileManager = (() => {
         clearInterval(this._rootTimer);
         this._adminExpires = null;
         badge.remove();
+      }
+    }
+
+    // Disks the system does not run from. A mounted disk opens like a folder;
+    // an unmounted one is mounted on click, which only an administrator may do.
+    async renderDevices() {
+      const data = await (await this.api('/api/files/drives')).json();
+      const list = data.drives || [], skipped = data.skipped || [];
+      this.listEl.innerHTML = '';
+      this._lastEntries = [];
+      if (!list.length) {
+        const none = document.createElement('div');
+        none.className = 'fm-empty';
+        none.textContent = t('fm_devices_none');
+        this.listEl.appendChild(none);
+      }
+      const fmtSize = n => n >= 1e12 ? (n / 1e12).toFixed(1) + ' TB' : n >= 1e9 ? (n / 1e9).toFixed(1) + ' GB' : Math.round(n / 1e6) + ' MB';
+      const call = async (d, action) => {
+        const res = await this.api(`/api/files/drives/${action}`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ device: d.device }),
+        });
+        const out = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          this.showError(out.detail === 'admin_required' ? t('fm_drive_admin_only')
+            : `${t(action === 'mount' ? 'fm_drive_mount_failed' : 'fm_drive_unmount_failed')}: ${out.detail || res.status}`);
+          return null;
+        }
+        return out;
+      };
+      for (const d of list) {
+        const row = document.createElement('div');
+        row.className = 'fm-entry fm-device';
+        const state = d.mountpoint ? t('fm_drive_mounted_at').replace('{path}', d.mountpoint) : t('fm_drive_not_mounted');
+        row.innerHTML = `<span class="fm-entry-icon">${d.usb ? '🔌' : '💾'}</span>
+          <span class="fm-entry-name">${_escHtml(d.label)}</span>
+          <span class="fm-entry-size">${fmtSize(d.size)} · ${_escHtml(d.fstype)}</span>
+          <span class="fm-entry-date" style="color:var(--text-dim);font-size:.8rem">${_escHtml(state)}</span>
+          ${d.mountpoint ? `<span class="fm-device-btn" title="${_escHtml(t('fm_drive_eject'))}">⏏</span>` : ''}`;
+        row.addEventListener('click', async e => {
+          if (e.target.closest('.fm-device-btn')) return;
+          if (d.mountpoint) return this.navigate(d.mountpoint);
+          row.style.opacity = '.5';
+          const out = await call(d, 'mount');
+          if (out?.mountpoint) this.navigate(out.mountpoint); else this.navigate('__devices__');
+        });
+        const eject = row.querySelector('.fm-device-btn');
+        if (eject) eject.addEventListener('click', async e => {
+          e.stopPropagation();
+          row.style.opacity = '.5';
+          await call(d, 'unmount');
+          this.navigate('__devices__');
+        });
+        this.listEl.appendChild(row);
+      }
+      for (const d of skipped) {
+        const row = document.createElement('div');
+        row.className = 'fm-entry fm-device-skipped';
+        row.style.opacity = '.6';
+        row.innerHTML = `<span class="fm-entry-icon">💽</span>
+          <span class="fm-entry-name">${_escHtml(d.label)}</span>
+          <span class="fm-entry-size">${fmtSize(d.size)}${d.fstype ? ' · ' + _escHtml(d.fstype) : ''}</span>
+          <span class="fm-entry-date" style="color:var(--text-dim);font-size:.8rem">${_escHtml(t('fm_drive_why_' + d.reason))}</span>`;
+        this.listEl.appendChild(row);
       }
     }
 

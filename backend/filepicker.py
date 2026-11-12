@@ -361,3 +361,48 @@ def shared_write_beside(owner, folder_id, path, data):
         return True
     except (HTTPException, ValueError, KeyError):
         return False
+
+
+def shared_mkdir(owner, folder_id, path):
+    """Create a folder in a shared folder. ``True`` when it exists afterwards."""
+    row = _shared_row(owner, folder_id)
+    try:
+        _shared_call(row, "/operations/mkdir", "POST", {"path": path})
+        return True
+    except HTTPException:
+        return False
+
+
+def shared_delete(owner, folder_id, path):
+    """Delete a file or an empty folder of a shared folder. ``True`` when it was deleted."""
+    row = _shared_row(owner, folder_id)
+    try:
+        _shared_call(row, "/operations/delete", "POST", {"path": path})
+        return True
+    except HTTPException:
+        return False
+
+
+def shared_upload_file(owner, folder_id, path, local_path):
+    """Stream a local file to ``path`` of a shared folder without loading it into memory."""
+    import json
+    row = _shared_row(owner, folder_id)
+    size = os.path.getsize(local_path)
+    start = json.loads(_shared_call(row, "/uploads", "POST", {"path": path, "size": size}))
+    chunk = int(start.get("chunk_size") or 4 * 1024 * 1024)
+    offset = 0
+    try:
+        with open(local_path, "rb") as f:
+            while offset < size or (offset == 0 and size == 0):
+                part = f.read(chunk)
+                _shared_call(row, "/uploads/" + start["id"], "PUT", part,
+                             {"X-Upload-Offset": str(offset), "Content-Type": "application/octet-stream"}, timeout=300)
+                offset += len(part)
+                if not part:
+                    break
+    except Exception:
+        try:
+            _shared_call(row, "/uploads/" + start["id"], "DELETE")
+        except HTTPException:
+            pass
+        raise

@@ -1597,19 +1597,22 @@ const Settings = (() => {
           return;
         }
         listEl.innerHTML = backups.map(b => {
+          if (b.unreachable) {
+            return `<div style="background:var(--surface2);border-radius:8px;padding:10px 12px;margin-bottom:8px;color:#e05555;font-size:.82rem">${esc(b.location_label)}: ${t('backup_place_unreachable')}</div>`;
+          }
           const date = new Date(b.created_at * 1000).toLocaleString();
           const mb = (b.size / 1024 / 1024).toFixed(1);
           return `
-            <div style="background:var(--surface2);border-radius:8px;padding:10px 12px;margin-bottom:8px" data-file="${b.filename}">
+            <div style="background:var(--surface2);border-radius:8px;padding:10px 12px;margin-bottom:8px" data-file="${esc(b.filename)}" data-loc="${esc(b.location)}">
               <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
                 <div style="flex:1;min-width:0">
-                  <div style="font-family:monospace;font-size:.85rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${b.filename}</div>
-                  <div style="font-size:.75rem;color:var(--text-dim);margin-top:3px">${date} &middot; ${mb} MB</div>
+                  <div style="font-family:monospace;font-size:.85rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(b.filename)}</div>
+                  <div style="font-size:.75rem;color:var(--text-dim);margin-top:3px">${date} &middot; ${mb} MB &middot; ${b.type === 'shared' ? '🔗' : '🖥️'} ${esc(b.location_label)}</div>
                 </div>
-                <div style="display:flex;gap:6px;flex-shrink:0">
-                  <a class="s-btn-sm bk-download" href="/api/backup/download/${encodeURIComponent(b.filename)}" download>${t('backup_download')}</a>
+                ${b.type === 'server' ? `<div style="display:flex;gap:6px;flex-shrink:0">
+                  <a class="s-btn-sm bk-download" href="/api/backup/download/${encodeURIComponent(b.filename)}?loc=${encodeURIComponent(b.location)}" download>${t('backup_download')}</a>
                   <button class="s-btn-sm s-btn-danger bk-del">${t('users_delete')}</button>
-                </div>
+                </div>` : ''}
               </div>
             </div>`;
         }).join('');
@@ -1635,7 +1638,7 @@ const Settings = (() => {
           btn.addEventListener('click', async () => {
             const filename = btn.closest('[data-file]').dataset.file;
             if (!confirm(t('backup_delete_confirm').replace('{f}', filename))) return;
-            await fetch(`/api/backup/${filename}`, { method: 'DELETE' });
+            await fetch(`/api/backup/${encodeURIComponent(filename)}?loc=${encodeURIComponent(btn.closest('[data-file]').dataset.loc)}`, { method: 'DELETE' });
             await loadList();
           });
         });
@@ -1644,35 +1647,101 @@ const Settings = (() => {
       }
     }
 
+    let places = [];
+    const esc = v => String(v == null ? '' : v).replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
+    const placeMsg = (text, bad) => {
+      const el = panel.querySelector('#bk-place-msg');
+      el.style.color = bad ? '#e05555' : '#50fa7b';
+      el.textContent = text;
+      if (text) setTimeout(() => { if (el.textContent === text) el.textContent = ''; }, 4000);
+    };
+    function renderPlaces() {
+      const el = panel.querySelector('#bk-places');
+      el.innerHTML = places.map((p, i) => `
+        <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;background:var(--surface2);border-radius:8px;padding:8px 12px;margin-bottom:6px" data-i="${i}">
+          <span>${p.type === 'shared' ? '🔗' : '🖥️'}</span>
+          <div style="flex:1;min-width:0">
+            <div style="font-family:monospace;font-size:.85rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.label)}</div>
+            <div style="font-size:.72rem;color:var(--text-dim)">${p.type === 'shared' ? t('backup_place_shared') : t('backup_place_server')}</div>
+          </div>
+          <button class="s-btn-sm bk-place-change">${t('backup_change_place')}</button>
+          <button class="s-btn-sm s-btn-danger bk-place-remove" ${places.length < 2 ? 'disabled' : ''}>${t('backup_remove_place')}</button>
+          <div style="flex-basis:100%;display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;margin-top:6px">
+            <div>
+              <div style="font-size:.72rem;color:var(--text-dim);margin-bottom:3px">${t('backup_schedule')}</div>
+              <select class="s-input bk-place-schedule" style="width:auto">
+                ${['disabled', 'daily', 'weekly', 'monthly'].map(v => `<option value="${v}" ${p.schedule === v ? 'selected' : ''}>${v === 'disabled' ? t('backup_sched_disabled') : _bkSchedLabel('backup_sched_' + v)}</option>`).join('')}
+              </select>
+            </div>
+            <div>
+              <div style="font-size:.72rem;color:var(--text-dim);margin-bottom:3px">${t('backup_keep')}</div>
+              <input type="number" class="s-input bk-place-keep" min="1" max="99" value="${p.keep}" style="width:70px">
+            </div>
+          </div>
+        </div>`).join('');
+      el.querySelectorAll('.bk-place-schedule, .bk-place-keep').forEach(c => c.addEventListener('change', () => {
+        const i = +c.closest('[data-i]').dataset.i, row = c.closest('[data-i]');
+        const next = places.slice();
+        next[i] = { ...next[i], schedule: row.querySelector('.bk-place-schedule').value,
+          keep: Math.max(1, Math.min(99, parseInt(row.querySelector('.bk-place-keep').value) || 5)) };
+        savePlaces(next);
+      }));
+      el.querySelectorAll('.bk-place-change').forEach(b => b.addEventListener('click', () => choosePlace(+b.closest('[data-i]').dataset.i)));
+      el.querySelectorAll('.bk-place-remove').forEach(b => b.addEventListener('click', () => {
+        const i = +b.closest('[data-i]').dataset.i;
+        savePlaces(places.filter((_, k) => k !== i));
+      }));
+    }
+    async function savePlaces(next) {
+      try {
+        const res = await fetch('/api/backup/locations', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ locations: next.map(p => ({ type: p.type, path: p.path, folder_id: p.folder_id || '', name: p.name || '', schedule: p.schedule || 'disabled', keep: p.keep || 5 })) }),
+        });
+        const d = await res.json().catch(() => ({}));
+        if (!res.ok) { placeMsg(d.detail || t('backup_failed'), true); return; }
+        places = d;
+        renderPlaces();
+        placeMsg(t('saved'));
+        await loadList();
+      } catch (_) {
+        placeMsg(t('backup_failed'), true);
+      }
+    }
+    async function choosePlace(index) {
+      await mvmOS.filePicker.ready();
+      const r = await mvmOS.filePicker.open({
+        mode: 'directory',
+        sources: ['server', 'shared'],
+        server: { roots: ['/'], start: index != null && places[index]?.type === 'server' ? places[index].path : '/var/backups' },
+        shared: { ids: null, permission: 'upload' },
+      });
+      if (!r || !r.folder) return;
+      const place = r.source === 'shared'
+        ? { type: 'shared', folder_id: r.folder.shared.folderId, path: r.folder.shared.path || '', name: r.folder.shared.folderName }
+        : { type: 'server', path: r.folder.path };
+      const old = index != null ? places[index] : null;
+      place.schedule = old ? old.schedule : 'disabled';
+      place.keep = old ? old.keep : 5;
+      const next = places.slice();
+      if (index == null) next.push(place); else next[index] = place;
+      await savePlaces(next);
+    }
+
     if (!panel.dataset.loaded) {
       panel.dataset.loaded = '1';
       panel.innerHTML = `
         <div class="settings-section">
           <div class="settings-section-title">${t('backup_title')}</div>
-          <div style="font-size:.82rem;color:var(--text-dim);margin-bottom:12px">${t('backup_location')} <code>/var/backups/mvmos/</code></div>
+          <div style="font-size:.82rem;color:var(--text-dim);margin-bottom:8px">${t('backup_location')}</div>
+          <div id="bk-places" style="margin-bottom:10px"></div>
+          <div style="margin-bottom:14px">
+            <button class="s-btn-sm" id="bk-add-place">${t('backup_add_place')}</button>
+            <span id="bk-place-msg" style="font-size:.82rem;margin-left:10px"></span>
+          </div>
           <div>
             <button class="s-btn" id="bk-create">${t('backup_create')}</button>
             <span id="bk-create-msg" style="font-size:.82rem;margin-left:10px"></span>
-          </div>
-        </div>
-        <div class="settings-section">
-          <div class="settings-section-title">${t('backup_auto_title')}</div>
-          <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end">
-            <div>
-              <div style="font-size:.75rem;color:var(--text-dim);margin-bottom:4px">${t('backup_schedule')}</div>
-              <select id="bk-schedule" class="s-input" style="width:auto">
-                <option value="disabled">${t('backup_sched_disabled')}</option>
-                <option value="daily">${_bkSchedLabel('backup_sched_daily')}</option>
-                <option value="weekly">${_bkSchedLabel('backup_sched_weekly')}</option>
-                <option value="monthly">${_bkSchedLabel('backup_sched_monthly')}</option>
-              </select>
-            </div>
-            <div>
-              <div style="font-size:.75rem;color:var(--text-dim);margin-bottom:4px">${t('backup_keep')}</div>
-              <input id="bk-keep" type="number" class="s-input" min="1" max="99" value="5" style="width:70px">
-            </div>
-            <button class="s-btn" id="bk-sched-save">${t('save')}</button>
-            <span id="bk-sched-msg" style="font-size:.82rem"></span>
           </div>
         </div>
         <div class="settings-section">
@@ -1682,6 +1751,9 @@ const Settings = (() => {
           </div>
           <div id="bk-list"></div>
         </div>`;
+
+      panel.querySelector('#bk-add-place').addEventListener('click', () => choosePlace(null));
+      fetch('/api/backup/locations').then(r => r.json()).then(d => { places = d; renderPlaces(); });
 
       panel.querySelector('#bk-create').addEventListener('click', async () => {
         const btn = panel.querySelector('#bk-create');
@@ -1693,8 +1765,11 @@ const Settings = (() => {
           const res = await fetch('/api/backup/create', { method: 'POST' });
           const d = await res.json();
           if (res.ok) {
-            msg.style.color = '#50fa7b';
-            msg.textContent = t('backup_created');
+            const failed = (d.results || []).filter(x => !x.ok);
+            msg.style.color = failed.length ? '#e0a030' : '#50fa7b';
+            msg.textContent = failed.length
+              ? t('backup_created_partial').replace('{n}', failed.length).replace('{places}', failed.map(x => x.label + ': ' + x.error).join('; '))
+              : t('backup_created');
             await loadList();
           } else {
             msg.style.color = '#e05555';
@@ -1705,32 +1780,6 @@ const Settings = (() => {
           msg.textContent = t('backup_failed');
         }
         btn.disabled = false;
-      });
-
-      panel.querySelector('#bk-sched-save').addEventListener('click', async () => {
-        const schedule = panel.querySelector('#bk-schedule').value;
-        const keep = parseInt(panel.querySelector('#bk-keep').value) || 5;
-        const msg = panel.querySelector('#bk-sched-msg');
-        msg.style.color = 'var(--text-dim)';
-        msg.textContent = '…';
-        const res = await fetch('/api/backup/schedule', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ schedule, keep }),
-        });
-        if (res.ok) {
-          msg.style.color = '#50fa7b';
-          msg.textContent = t('saved');
-        } else {
-          msg.style.color = '#e05555';
-          msg.textContent = t('error');
-        }
-        setTimeout(() => { msg.textContent = ''; }, 2500);
-      });
-
-      fetch('/api/backup/schedule').then(r => r.json()).then(d => {
-        panel.querySelector('#bk-schedule').value = d.schedule || 'disabled';
-        panel.querySelector('#bk-keep').value = d.keep || 5;
       });
     }
 

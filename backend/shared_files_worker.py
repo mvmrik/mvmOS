@@ -95,6 +95,8 @@ def main(body):
                     return None
             if op == 'mkdir':
                 os.mkdir(name, mode=0o755, dir_fd=parent)
+                # mkdir honours the umask; make the mode explicit so other users can enter the folder.
+                os.chmod(name, 0o755, dir_fd=parent)
             elif op == 'delete':
                 st = os.stat(name, dir_fd=parent, follow_symlinks=False)
                 if stat.S_ISDIR(st.st_mode):
@@ -138,6 +140,9 @@ def main(body):
                     f.write(base64.b64decode(body['data'], validate=True))
                     f.flush()
                     if body['final']:
+                        # Created private (0600); publish with normal permissions so other
+                        # programs on the sharing server (media servers, Samba) can read it.
+                        os.fchmod(f.fileno(), 0o644)
                         os.fsync(f.fileno())
                 if body['final']:
                     # Hard link creates the destination only if it does not exist.

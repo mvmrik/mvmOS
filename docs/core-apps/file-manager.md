@@ -104,6 +104,14 @@ app appear in one panel with progress and speed, wait their turn, are cut into p
 below Cloudflare's size limit, and can be stopped or tried again. A folder or an
 archive can be uploaded, and an app may unpack the archive on arrival.
 
+## Disks and external drives
+
+The File Manager sidebar has a Devices place between Computer and Trash. Opening it lists the disks and partitions the server does not run from, such as a USB drive or a second internal disk, with label, size, file system and whether each is mounted, or says that no disks were found. A disk that the system sees but cannot be offered, such as an encrypted volume, an unsupported file system or a disk without a file system, is shown dimmed with the reason. Swap, RAID and LVM members and the disk that holds the system are never listed.
+
+A mounted disk opens like any other folder. Clicking one that is not mounted mounts it under `/media/mvmos/<label>` and opens it. Mounting and ejecting are limited to an administrator: root, or a sudo user who confirms their own password. Everyone else can only open disks that are already mounted. The eject button next to a mounted disk unmounts it, and a USB disk is powered off so it can be unplugged.
+
+Disks are mounted with `nosuid` and `nodev`. FAT, exFAT and NTFS disks have no Unix owners, so they are mounted owned by the account that asked, and a disk with a read-only medium opens read-only. A disk mounted this way is not added to `/etc/fstab`; it stays mounted until it is ejected or the server restarts. What a person can read inside a disk is still decided by the Linux permissions of their own account.
+
 ## Good practice
 
 Deleting or changing permissions affects the real server filesystem. Keep backups of important content and apply restrictive permissions only when you understand the effect on the relevant app or service. Use administrator mode only for the change you need and leave it when you are done.

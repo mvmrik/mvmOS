@@ -56,6 +56,7 @@ from .auth import router as auth_router, get_current_session
 from .terminal import router as terminal_router
 from .savedcommands import router as savedcommands_router
 from .files import router as files_router
+from .drives import router as drives_router
 from . import shared_files
 from .desktop import router as desktop_router
 from .settings import router as settings_router
@@ -103,6 +104,7 @@ _init_feed_db()
 app.include_router(auth_router)
 app.include_router(terminal_router)
 app.include_router(savedcommands_router)
+app.include_router(drives_router)
 app.include_router(files_router)
 app.include_router(shared_files.router)
 app.include_router(desktop_router)

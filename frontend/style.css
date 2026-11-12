@@ -963,6 +963,9 @@ html, body {
   background: var(--border);
   margin: 5px 10px;
 }
+.fm-device-btn { cursor: pointer; font-size: .95rem; padding: 0 6px; color: var(--text-dim); }
+.fm-device-btn:hover { color: var(--text); }
+.fm-device { cursor: pointer; }
 .fm-bookmark-add { color: var(--text-dim); font-style: italic; }
 .fm-bookmark-add:hover { color: var(--text); }
 .fm-bookmark-remove {

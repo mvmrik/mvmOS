@@ -29,6 +29,8 @@ Browse and transfer files directly between your browser and the source server,
 including copying whole folders between local and remote storage. These are virtual
 File Manager locations, not Linux mounts or automatic app file-picker entries.
 See the [File Manager guide](docs/core-apps/file-manager.md#shared-folders-between-servers).
+The Devices place lists extra and external disks, which an administrator can mount and eject
+without leaving File Manager. See the [File Manager guide](docs/core-apps/file-manager.md#disks-and-external-drives).
 
 **Run the machine.** Manage Linux users, cron jobs, systemd services, nginx sites and
 domains, SSH keys, and scheduled backups you can download or restore. Watch CPU, memory and
@@ -197,7 +199,7 @@ short link and the bytes flow from the sharing server.
 
 Core 1.22.0 adds **New folder** when choosing a folder or save destination. Set `createFolder: false` to disable it; shared destinations offer it only with upload permission. A newly created save destination is selected immediately.
 
-For libraries that keep files in place, `backend.filepicker` also supplies `folder_files`, `open_server_file`, `write_beside`, `shared_folder_files`, `shared_read_head`, `shared_can_write` and `shared_write_beside`. Resolve the chosen root first, retain the Linux owner with the source and close returned file handles. Server reads enforce the owner’s access and the root boundary. Shared playback uses `shared_file_url` directly from the source server. These helpers require Core 1.22.0. Core 1.22.1 makes every request to a shared folder carry its own `mvmOS-shared-files` User-Agent, so a sharing server behind Cloudflare no longer refuses the default Python client.
+For libraries that keep files in place, `backend.filepicker` also supplies `folder_files`, `open_server_file`, `write_beside`, `shared_folder_files`, `shared_read_head`, `shared_can_write` and `shared_write_beside`. Resolve the chosen root first, retain the Linux owner with the source and close returned file handles. Server reads enforce the owner’s access and the root boundary. Shared playback uses `shared_file_url` directly from the source server. These helpers require Core 1.22.0. Core 1.22.1 makes every request to a shared folder carry its own `mvmOS-shared-files` User-Agent, so a sharing server behind Cloudflare no longer refuses the default Python client. Core 1.23.0 makes files and folders written into a shared folder 644 and 755 instead of private 600, so a media server on the sharing machine can read them, and adds `shared_mkdir(owner, folder_id, path)`, `shared_delete(owner, folder_id, path)` and `shared_upload_file(owner, folder_id, path, local_path)` for writing to a shared folder from an app. Core 1.23.0 also lets System backups go to several places, each with its own schedule and number of copies to keep.
 
 ```js
 const job = await mvmOS.uploader.choose({
