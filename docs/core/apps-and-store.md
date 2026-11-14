@@ -9,6 +9,10 @@ order: 50
 
 mvmOS includes Core tools for desktop and server administration. Additional applications are distributed through the Store. Each app can have its own configuration, data storage, permissions, and third-party integrations, so read its documentation before enabling it. An app can also register file types of its own, so that its files open in it from File Manager and the desktop; which app opens which type can be changed in Settings under Default apps.
 
+## Apps you build yourself
+
+[[App Builder]] creates small apps of your own by talking to the AI chosen in mvmAI. They run in a protected sandbox, are installed from App Builder instead of the Store, and can be downloaded and imported by other people with App Builder.
+
 ## Installing and updating
 
 Use the Store to discover available apps and install the ones needed by your server. Updates may change app behaviour, so create backups for apps that store important data and review release notes before updating production systems.

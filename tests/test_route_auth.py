@@ -72,6 +72,10 @@ ADMIN = {
     ("POST", "/api/backup/create"), ("GET", "/api/backup/download/{folder_name}"),
     ("DELETE", "/api/backup/{folder_name}"), ("POST", "/api/backup/schedule"),
     ("POST", "/api/domains"), ("DELETE", "/api/domains/{site_id}"),
+    # App Builder writes code that is installed as an app and calls the AI.
+    ("POST", "/api/builder/projects"), ("POST", "/api/builder/projects/{pid}/chat"),
+    ("POST", "/api/builder/projects/{pid}/install"), ("POST", "/api/builder/projects/{pid}/uninstall"),
+    ("POST", "/api/builder/import"), ("PUT", "/api/builder/projects/{pid}/file"),
 }
 
 

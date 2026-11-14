@@ -49,6 +49,12 @@ chosen time, a rule can check what the app reports and call its functions or not
 External APIs let your own scripts call the functions you choose, with tokens you can
 restrict and revoke.
 
+**Build your own.** App Builder turns an idea into a small app of your own: describe it to the
+AI you already use in mvmAI, try it in a live preview, then install it or give the file to a
+friend. Built apps run in a protected sandbox and can use your other apps through the same
+rules as Automations. Apps can have their own server code, run in a restricted loader, and games
+can be multiplayer in Game Hub.
+
 **Add what you need.** The core stays deliberately small. Everything else — a budget tracker,
 a task list, a website builder, a chat, an RSS reader, games, an AI assistant, a database
 client, a torrent dashboard — installs from the App Store in a couple of clicks, and

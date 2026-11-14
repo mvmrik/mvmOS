@@ -55,6 +55,7 @@ SYSTEM_APPS = [
     {"id": "cron-manager",    "name": "Cron Manager",     "icon": "⏰", "category": "System & Administration"},
     {"id": "clipboard",       "name": "Clipboard",        "icon": "📋", "category": "Utilities"},
     {"id": "automations",     "name": "Automations",      "icon": "⚡", "category": "Utilities"},
+    {"id": "app-builder",     "name": "App Builder",      "icon": "🧱", "category": "Developer Tools"},
 ]
 
 

@@ -102,6 +102,7 @@ An app can declare the features or services that it is able to charge for. In th
 - A price of `0` keeps that feature free for public users.
 - A positive price makes the app deduct that number of credits when the user chooses the feature.
 - The administrator can change a price later without changing the app code.
+- Prices are always set here; an app does not add its own price or quota settings.
 
 Apps use the central credit service to charge or grant balances. Charges are atomic and idempotent, which prevents a retried request or two simultaneous requests from charging the same action twice. An app can also grant credits for a reward, correction, refund, or other workflow chosen by the installation administrator.
 

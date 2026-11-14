@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#4338ca"/>
+      <stop offset="0.55" stop-color="#7c3aed"/>
+      <stop offset="1" stop-color="#0891b2"/>
+    </linearGradient>
+    <linearGradient id="win" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#dfe6ff"/>
+    </linearGradient>
+    <linearGradient id="b1" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#818cf8"/><stop offset="1" stop-color="#4f46e5"/></linearGradient>
+    <linearGradient id="b2" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#22d3ee"/><stop offset="1" stop-color="#0891b2"/></linearGradient>
+    <linearGradient id="b3" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#c4b5fd"/><stop offset="1" stop-color="#7c3aed"/></linearGradient>
+    <linearGradient id="spark" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fef08a"/><stop offset="1" stop-color="#f59e0b"/></linearGradient>
+  </defs>
+  <rect width="128" height="128" rx="28" fill="url(#bg)"/>
+  <circle cx="100" cy="26" r="38" fill="#ffffff" opacity="0.1"/>
+  <circle cx="18" cy="116" r="34" fill="#000000" opacity="0.12"/>
+  <rect x="18" y="34" width="80" height="66" rx="11" fill="#1e1b4b" opacity="0.35" transform="translate(0 4)"/>
+  <rect x="18" y="32" width="80" height="66" rx="11" fill="url(#win)"/>
+  <path d="M18 43a11 11 0 0 1 11-11h58a11 11 0 0 1 11 11v5H18z" fill="#c7d2fe"/>
+  <circle cx="29" cy="40" r="2.8" fill="#f87171"/>
+  <circle cx="38.5" cy="40" r="2.8" fill="#fbbf24"/>
+  <circle cx="48" cy="40" r="2.8" fill="#34d399"/>
+  <rect x="28" y="57" width="27" height="15" rx="4.5" fill="url(#b1)"/>
+  <rect x="59" y="57" width="29" height="15" rx="4.5" fill="url(#b2)"/>
+  <rect x="28" y="76" width="42" height="15" rx="4.5" fill="url(#b3)"/>
+  <rect x="74" y="76" width="14" height="15" rx="4.5" fill="#e0e7ff" stroke="#a5b4fc" stroke-width="1.6" stroke-dasharray="3 2.6"/>
+  <path d="M98 12l4.6 12.4 12.4 4.6-12.4 4.6L98 46l-4.6-12.4L81 29l12.4-4.6z" fill="url(#spark)" stroke="#ffffff" stroke-width="2.2" stroke-linejoin="round"/>
+  <path d="M110 66l2.5 6.5 6.5 2.5-6.5 2.5-2.5 6.5-2.5-6.5-6.5-2.5 6.5-2.5z" fill="#ffffff" opacity="0.92"/>
+</svg>

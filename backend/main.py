@@ -80,6 +80,7 @@ from .apphub import router as apphub_router, public_page_router as apphub_public
 from .apikeys import router as apikeys_router, init_db as _init_apikeys_db
 from .notifications import router as notifications_router
 from .clipboard import router as clipboard_router, purge_on_startup as _purge_clipboard
+from .builder import router as builder_router, refresh_installed as _refresh_builder_apps
 from .feed import router as feed_router, init_db as _init_feed_db, mark_actions as _mark_feed_actions
 from .automations import router as automations_router, desktop_router as automations_desktop_router, watch_requests as _watch_automations
 from .platform_api import router as platform_router
@@ -131,6 +132,7 @@ app.include_router(notifications_router)
 app.include_router(clipboard_router, prefix="/pub/clipboard")
 app.include_router(automations_router, prefix="/pub/automations")
 app.include_router(automations_desktop_router)
+app.include_router(builder_router)
 # A finished write to an app's own /pub/<app>/ routes is an Automations event.
 app.middleware("http")(_watch_automations)
 # ...and the same write is offered to its author for sharing in Community.
@@ -664,6 +666,10 @@ app_isolation.install()
 # Load app-specific public routes after the core public PWA routes above.
 # This keeps /pub/<app>/manifest.webmanifest and its worker from being
 # swallowed by an app's optional SPA catch-all route.
+try:
+    _refresh_builder_apps()
+except Exception as _e:   # a damaged app made here must never stop the server
+    print(f"[builder] refresh failed: {_e}")
 public_loader.load_all(app)
 projects.init(app)
 

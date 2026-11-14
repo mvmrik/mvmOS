@@ -105,6 +105,7 @@ var mvmOS = (() => {
       { id: 'notifications',   name: t('app_notifications'), icon: '🔔', category: 'Communication', system: true, launch: () => Notifications.openWindow() },
       { id: 'clipboard',        name: t('app_clipboard'), icon: '📋', category: 'Utilities', system: true, launch: () => ClipboardApp.openWindow() },
       { id: 'automations',      name: t('app_automations'), icon: '⚡', category: 'Utilities', system: true, launch: () => AutomationsApp.openWindow() },
+      { id: 'app-builder',      name: t('app_builder'), icon: '🧱', iconImage: '/icons/app-builder.svg', category: 'Developer Tools', system: true, launch: () => AppBuilder.openWindow() },
       { id: 'cron-manager',     name: t('app_cron_manager'), icon: '⏰', category: 'System & Administration', system: true, launch: () => CronManager.openWindow() },
     ];
   }
@@ -882,7 +883,7 @@ var mvmOS = (() => {
   // emoji. `app` is anything with icon (emoji) and iconImage / icon_image.
   function _iconHTML(app, fallback = '📦') {
     const img = app && (app.iconImage || app.icon_image);
-    if (img && /^\/apps\/[A-Za-z0-9_-]+\//.test(img)) {
+    if (img && (/^\/apps\/[A-Za-z0-9_-]+\//.test(img) || /^\/icons\/[A-Za-z0-9_-]+\.svg$/.test(img))) {
       return `<img class="ico-img" src="${_escHtml(img)}" alt="" draggable="false">`;
     }
     return _escHtml((app && app.icon) || fallback);

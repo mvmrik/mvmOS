@@ -1,0 +1,33 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>__NAME__</title>
+<style>
+  :root { --bg:#0d1117; --fg:#c9d1d9; }
+  html, body { margin: 0; height: 100%; background: var(--bg, #0d1117); color: var(--fg, #c9d1d9); font-family: system-ui, sans-serif; }
+  #builder-app { position: fixed; left: 0; right: 0; top: 0; bottom: 0; }
+  #builder-msg { padding: 24px; text-align: center; }
+</style>
+</head>
+<body>
+<div id="builder-app"></div>
+<script src="/pub/__ID__/builder-runtime.js"></script>
+<script>
+(function () {
+  var token = localStorage.getItem('apphub_token');
+  var host = document.getElementById('builder-app');
+  if (!token) { location.href = '/pub/apphub/?next=' + encodeURIComponent(location.href); return; }
+  var headers = function () { return { 'X-Pub-Token': token }; };
+  fetch('/api/pub/apphub/me', { headers: headers() }).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; }).then(function (me) {
+    return window.BuilderRuntime.mount(host, {
+      appId: '__ID__', mode: 'public', sdkUrl: '/pub/__ID__/builder-sdk.js',
+      user: { name: me ? (me.display_name || me.username || '') : '' },
+      serverBase: '/pub/__ID__', api: { base: '/pub/__ID__', headers: headers },
+    });
+  }).catch(function (e) { host.innerHTML = '<div id="builder-msg"></div>'; document.getElementById('builder-msg').textContent = (e && e.message) || 'Error'; });
+})();
+</script>
+</body>
+</html>
