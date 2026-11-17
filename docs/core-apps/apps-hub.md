@@ -39,13 +39,13 @@ The chosen apps, the sort order and the selected category belong to the profile 
 
 ## Switching public apps
 
-The app button in the shared public header opens Home and up to ten apps from your own home screen, following its selected category and alphabetical, recent or frequent order. The current app is also shown when it falls outside that list. Visitors without a profile see published apps that do not require profile-specific access, alphabetically. Opening an app here updates its usage history, and the menu closes with Escape or a tap outside.
+The current app is shown as an icon in the shared public header, with its name in the tooltip. Up to three recent app icons offer direct shortcuts, using this browser's recent list and the profile's available apps. The app button opens Home and up to ten apps from your own home screen, following its selected category and alphabetical, recent or frequent order. The current app is also shown when it falls outside that list. Visitors without a profile see published apps that do not require profile-specific access, alphabetically. Opening an app here updates its usage history, and the menu closes with Escape or a tap outside.
 
 Profile searches match names without case differences in any script, including Cyrillic.
 
 ## Community
 
-Community is a tab of the public Apps Hub page where signed-in profiles of the same installation share with each other. It is closed: nobody outside the installation sees a post, and the author chooses who may. A post can be free text (links and YouTube addresses are recognised), up to four photos of up to 10 MB each, or a repost of someone's post. Others can like, comment on and repost it, and the author is notified of each. A red dot on the Community tab shows that others have shared something since the profile last looked, and older posts load on demand.
+Community is the default tab of the desktop Apps Hub window and a tab of the public Apps Hub page where signed-in profiles of the same installation share with each other. It is closed: nobody outside the installation sees a post, and the author chooses who may. A post can be free text (links and YouTube addresses are recognised), up to four photos of up to 10 MB each, or a repost of someone's post. Others can like, comment on and repost it, and the author is notified of each. A red dot on the Community tab shows that others have shared something since the profile last looked, and older posts load on demand.
 
 Each post has an audience: everyone with a profile, only the profile's favourites, or chosen people searched by name; chosen people are notified. Only posts for everyone can be reposted. The audience new posts start with is set in Settings under Sharing, and can still be changed for each post.
 
@@ -75,7 +75,9 @@ For Google Maps, the key reaches the person's browser because the map is loaded 
 
 ## What is happening now
 
-When an app reports live activity for a profile, a compact panel appears under the header of every public page, for example an app timer with its title and a clock that keeps counting. Tapping it opens the app. A running timer always appears first. If several timers are running, the one most recently started or resumed appears first. When no timer is running, the most recent activity appears first. A +N button reveals the other items. The panel is only there while there is something to show and it belongs to the profile alone; nobody else sees it.
+When an app reports live activity for a profile, the activity button in the public header shows a running or paused indicator. Opening it displays current items above the recent actions, with clocks and the actions each app offers. There is no separate strip below the header. The button is present only while there is live or recent activity.
+
+The desktop has the same kind of button beside the notification bell, and phone users can reach it from the side panel. It can open the relevant desktop app, control a timer or share a recent action to Community. The desktop list is filtered to the signed-in Apps Hub profile; clearing it preserves other profiles' entries. Recent actions remain only in the browser, while current activities are read again from the server.
 
 An app takes part by offering a `get_live_activity` function in its app API, and it is shown only for apps that the profile keeps on its home screen. It can provide ISO timestamps as `started_at` for a running timer and `activity_at` (or `created_at`) for other activity so Apps Hub can place the newest item first. The administrator's app-to-app switch is not needed, because the profile only reads its own data on its own page. An item can also carry compact buttons beside the timer — pause, resume, stop or done — each naming a function of the same app. The page can only run a button the app offered a moment before for that profile. The function is for the page itself and is not listed in the External APIs or in Automations.
 

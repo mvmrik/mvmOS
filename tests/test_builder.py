@@ -3,10 +3,12 @@ AI may write. Run: venv/bin/python -m unittest tests.test_builder"""
 import io
 import json
 import os
+import sqlite3
 import sys
 import tempfile
 import unittest
 import zipfile
+from unittest.mock import patch
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
@@ -233,6 +235,34 @@ class ImportTest(Env):
 
 
 class TemplateTest(Env):
+    def test_installed_version_changes_only_when_changed_work_is_installed(self):
+        from backend import public_loader
+        for name, value in good_files().items():
+            B.write_text_file(self.pid, name, value)
+        database = os.path.join(self.tmp.name, 'core.db')
+        with sqlite3.connect(database) as c:
+            c.execute('CREATE TABLE plugins (id TEXT PRIMARY KEY, name, icon, category, version, description, '
+                      'store_id, installed_at, open_count, last_opened_at)')
+        with patch.object(B, 'APPS_DIR', os.path.join(self.tmp.name, 'apps')), \
+                patch.object(B, 'get_conn', lambda: sqlite3.connect(database)), \
+                patch.object(B, '_installed_ids', return_value=set()), \
+                patch.object(B, '_hub', return_value=None), \
+                patch.object(public_loader, 'reload_app'):
+            self.assertEqual(B.install_project(self.pid, 'root')['version'], '1.0.0')
+            self.assertFalse(B._public(B.load_project(self.pid))['changed_since_install'])
+            self.assertEqual(B.install_project(self.pid, 'root')['version'], '1.0.0')
+            self.assertEqual(len(B.list_snapshots(self.pid)), 1)
+            B.write_text_file(self.pid, 'app.js', "document.title = mvm.t('title') + '!';")
+            p = B._public(B.load_project(self.pid))
+            self.assertEqual((p['installed']['version'], p['next_version'], p['changed_since_install']),
+                             ('1.0.0', '1.0.1', True))
+            sid = B.snapshot(self.pid, 'before install')
+            self.assertEqual(next(s for s in B.list_snapshots(self.pid) if s['id'] == sid)['version'], '1.0.0')
+            self.assertEqual(B.install_project(self.pid, 'root')['version'], '1.0.1')
+            releases = [s for s in B.list_snapshots(self.pid) if s['installed']]
+            self.assertEqual({s['version'] for s in releases}, {'1.0.0', '1.0.1'})
+            self.assertTrue(all(s['created_at'] for s in releases))
+
     def test_trusted_files_contain_nothing_from_the_app(self):
         p = dict(self.p, name='Evil"; alert(1); "', emoji="<script>")
         files = B.trusted_files(p)

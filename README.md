@@ -53,7 +53,7 @@ restrict and revoke.
 AI you already use in mvmAI, try it in a live preview, then install it or give the file to a
 friend. Built apps run in a protected sandbox and can use your other apps through the same
 rules as Automations. Apps can have their own server code, run in a restricted loader, and games
-can be multiplayer in Game Hub.
+can be multiplayer in Game Hub. App Builder distinguishes installed releases from uninstalled edits, offers the next version on the update button and keeps labelled release snapshots in Versions.
 
 **Add what you need.** The core stays deliberately small. Everything else — a budget tracker,
 a task list, a website builder, a chat, an RSS reader, games, an AI assistant, a database
@@ -320,3 +320,7 @@ from its use. Securing your server and your data is your responsibility.
 ## Theme contrast
 
 Core derives `--on-accent` from the active `--accent` color, choosing black or white for the stronger contrast and refreshing it when the theme changes. Use it for text and icons on an accent background. Public Apps Hub pages get `--pub-on-accent` (and `--on-accent`) the same way from `frontend/accent-contrast.js`, refreshed whenever the profile theme changes. The desktop background may be a wallpaper color and must not be used as contrasting text. Theme-aware panels use `--text`/`--text-dim` with `--surface`/`--surface2`; public apps use the corresponding `--pub-*` variables. Fixed dark canvases, game boards and media viewers must set their own light foreground, including overlays and secondary labels. Check result dialogs, bonus breakdowns, status messages, selected states and hover states in light and dark themes when changing an interface.
+
+## Direct upload tickets for shared folders
+
+Core 1.26.0 adds `backend.filepicker.shared_upload_ticket(owner, folder_id, path, size, ttl=14400)`. It returns `{base, ticket, path}` for one file in a connected folder owned by that Linux account. The browser starts, sends chunks and cancels at the source server’s `/pub/shared-files/v1/<grant>/uploads` routes using `X-Upload-Ticket`, without receiving the folder key or relaying bytes through the receiving server. Source checks enforce the path, maximum size, expiry, recipient origin and current upload permission. Both servers need Core 1.26.0; apps must handle older sources and can fall back to their normal upload route.

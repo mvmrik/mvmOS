@@ -17,6 +17,21 @@
   --radius: 6px;
   --font: 'Segoe UI', system-ui, sans-serif;
   --mono: 'Consolas', 'Menlo', monospace;
+
+  /* Store app widgets are written against the --pub-* names that Apps Hub
+     defines. The desktop maps them to its own theme, so a widget follows the
+     active theme and its accent always pairs with --on-accent. */
+  --pub-bg: var(--bg);
+  --pub-surface1: var(--surface);
+  --pub-surface2: var(--surface2);
+  --pub-border: var(--border);
+  --pub-fg: var(--text);
+  --pub-fg2: var(--text-dim);
+  --pub-dim: var(--text-dim);
+  --pub-accent: var(--accent);
+  --pub-accent-hover: var(--accent-hover);
+  --pub-on-accent: var(--on-accent);
+  --pub-red: var(--danger);
 }
 
 html, body {

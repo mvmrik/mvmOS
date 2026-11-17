@@ -129,7 +129,17 @@ def list_projects(owner: str) -> list:
 
 def _public(p: dict) -> dict:
     inst = p.get("installed")
+    changed, nxt = False, None
+    if inst:
+        try:
+            changed = content_hash(read_files(p["id"]), p) != inst.get("hash")
+        except Exception:
+            changed = False
+        if changed:
+            parts = [int(x) if str(x).isdigit() else 0 for x in str(inst.get("version", "1.0.0")).split(".")[:3]] + [0, 0, 0]
+            nxt = f"{parts[0]}.{parts[1]}.{parts[2] + 1}"
     return {
+        "changed_since_install": changed, "next_version": nxt,
         "id": p["id"], "app_id": p["app_id"], "name": p["name"], "name_i18n": p.get("name_i18n") or {},
         "description": p.get("description", ""), "category": p["category"], "emoji": p.get("emoji", "🧩"),
         "profiles": bool(p.get("profiles")), "public": bool(p.get("public")), "languages": project_languages(p),
@@ -290,7 +300,9 @@ def delete_file(pid: str, rel: str) -> bool:
     return False
 
 
-def snapshot(pid: str, label: str = "") -> Optional[str]:
+def snapshot(pid: str, label: str = "", version: Optional[str] = None) -> Optional[str]:
+    """Copy the project files. `version` is the installed version the files belong to; when it is not given,
+    the version that is installed right now is recorded, so the history shows what the work was based on."""
     src = _app_dir(pid)
     if not os.path.isdir(src) or not os.listdir(src):
         return None
@@ -299,6 +311,13 @@ def snapshot(pid: str, label: str = "") -> Optional[str]:
     shutil.copytree(src, os.path.join(dest, "app"))
     with open(os.path.join(dest, "label.txt"), "w", encoding="utf-8") as f:
         f.write(_clean_text(label, 120))
+    if version is None:
+        try:
+            version = (load_project(pid) or {}).get("installed", {}).get("version")
+        except Exception:
+            version = None
+    with open(os.path.join(dest, "version.txt"), "w", encoding="utf-8") as f:
+        f.write(str(version or ""))
     snaps = sorted(os.listdir(os.path.join(_pdir(pid), "snapshots")))
     for old in snaps[:-MAX_SNAPSHOTS]:
         shutil.rmtree(os.path.join(_pdir(pid), "snapshots", old), ignore_errors=True)
@@ -315,7 +334,17 @@ def list_snapshots(pid: str) -> list:
                     label = f.read()
             except OSError:
                 label = ""
-            out.append({"id": sid, "label": label})
+            try:
+                with open(os.path.join(root, sid, "version.txt"), encoding="utf-8") as f:
+                    ver = f.read().strip()
+            except OSError:
+                ver = ""
+            try:
+                created_at = time.mktime(time.strptime(sid[:15], "%Y%m%d-%H%M%S"))
+            except ValueError:
+                created_at = None
+            out.append({"id": sid, "label": label, "version": ver, "created_at": created_at,
+                        "installed": label.startswith("Installed ")})
     return out
 
 
@@ -634,6 +663,7 @@ def install_project(pid: str, owner: str, confirm_server: bool = False) -> dict:
     files = read_files(pid)
     h = content_hash(files, p)
     inst = p.get("installed") or {}
+    new_release = not inst or inst.get("hash") != h
     if inst and inst.get("hash") != h:
         parts = [int(x) for x in str(p.get("version", "1.0.0")).split(".")[:3]] + [0, 0, 0]
         p["version"] = f"{parts[0]}.{parts[1]}.{parts[2] + 1}"
@@ -675,6 +705,8 @@ def install_project(pid: str, owner: str, confirm_server: bool = False) -> dict:
     public_loader.reload_app(app_id)
     p["installed"] = {"version": mf["version"], "hash": h, "at": _now()}
     save_project(p)
+    if new_release:
+        snapshot(pid, "Installed " + mf["version"], version=mf["version"])
     return {"app_id": app_id, "version": mf["version"], "public": bool(p.get("public")), "server": server}
 
 

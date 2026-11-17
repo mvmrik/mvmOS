@@ -90,7 +90,7 @@ the receiving server. A tunnel or reverse proxy on that source's own
 address still participates in its traffic. The source must be reachable from the
 user's device. Disconnecting removes the local reference; **Revoke access** on the
 source invalidates the grant and previously issued file tickets for new requests.
-An already running transfer may finish. File tickets expire after one hour.
+An already running transfer may finish. File tickets expire after one hour. Core 1.26.0 also lets participating apps request a signed upload ticket for one file and maximum size, so a profile can upload directly from its browser without receiving the connected folder key. The source rechecks expiry, path, size, recipient origin and upload permission on upload requests. Older source servers can be handled by the app's ordinary upload fallback.
 
 These folders are virtual entries in File Manager, not Linux mounts. Apps do not
 accept them automatically. An app that adopts the shared file picker and uploader

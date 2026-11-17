@@ -200,6 +200,19 @@ class SharedLinks(unittest.TestCase):
             filepicker.shared_file_url("alice", "f1", "a.mp3")
         self.assertEqual(caught.exception.status_code, 404)
 
+    def test_direct_upload_ticket_is_bound_to_connected_owner_and_destination(self):
+        info = filepicker.shared_upload_ticket('alice', 'f1', 'Albums/new.mp3', 6, 600)
+        self.assertEqual(info['base'], f'https://nas.example/pub/shared-files/v1/{self.grant}')
+        self.assertEqual(info['path'], 'Albums/new.mp3')
+        with shared_files.get_conn() as c:
+            row = c.execute('SELECT * FROM file_folder_grants WHERE id=?', (self.grant,)).fetchone()
+        payload = shared_files._upload_ticket(row, info['ticket'])
+        self.assertEqual((payload['path'], payload['size']), ('Albums/new.mp3', 6))
+        for owner, path, code in [('bob', 'a.mp3', 404), ('alice', '../a.mp3', 400)]:
+            with self.assertRaises(HTTPException) as caught:
+                filepicker.shared_upload_ticket(owner, 'f1', path, 6)
+            self.assertEqual(caught.exception.status_code, code)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -34,6 +34,7 @@ SESSION_CHECKS = {
     auth.require_root_session,
     shared_files.grant_identity,  # revocable folder capability, validated at source
     shared_files.file_identity,   # signed, expiring file ticket, validated at source
+    shared_files.upload_identity, # signed upload ticket or revocable folder key
 }
 
 # Routes without a desktop session dependency, each with the reason it is safe.

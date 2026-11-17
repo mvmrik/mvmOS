@@ -166,6 +166,43 @@ class SharedFilesTest(unittest.TestCase):
         self.assertEqual(operation('delete', 'folder').status_code, 200)
         self.assertEqual(self.outside.read_text(), 'PRIVATE')
 
+    def test_upload_ticket_is_limited_to_one_path_size_and_origin(self):
+        key = hashlib.sha256(self.grant['secret'].encode()).hexdigest()
+        ticket = sf.sign_upload_ticket(key, 'direct.txt', 6, 600)
+        headers = {'X-Upload-Ticket': ticket, 'Origin': self.recipient}
+        for path, size in [('elsewhere.txt', 6), ('direct.txt', 7)]:
+            r = self.client.post(self.base + '/uploads', headers=headers, json={'path': path, 'size': size})
+            self.assertEqual(r.status_code, 403, r.text)
+        self.assertEqual(self.client.get(self.base + '/list', headers=headers).status_code, 401)
+        self.assertEqual(self.client.post(self.base + '/uploads', headers={**headers, 'Origin': 'https://evil.example'},
+            json={'path': 'direct.txt', 'size': 6}).status_code, 403)
+        r = self.client.post(self.base + '/uploads', headers=headers, json={'path': 'direct.txt', 'size': 6})
+        self.assertEqual(r.status_code, 200, r.text)
+        url = self.base + '/uploads/' + r.json()['id']
+        smaller = sf.sign_upload_ticket(key, 'direct.txt', 3, 600)
+        self.assertEqual(self.client.put(url, headers={**headers, 'X-Upload-Ticket': smaller,
+            'X-Upload-Offset': '0'}, content=b'abc').status_code, 403)
+        r = self.client.put(url, headers={**headers, 'X-Upload-Offset': '0'}, content=b'abcdef')
+        self.assertEqual(r.status_code, 200, r.text)
+        self.assertEqual((self.root / 'direct.txt').read_bytes(), b'abcdef')
+
+    def test_upload_ticket_cannot_be_forged_reused_after_expiry_or_revocation(self):
+        key = hashlib.sha256(self.grant['secret'].encode()).hexdigest()
+        ticket = sf.sign_upload_ticket(key, 'direct.txt', 3, 600)
+        headers = {'X-Upload-Ticket': ticket, 'Origin': self.recipient}
+        forged = ticket[:-1] + ('A' if ticket[-1] != 'A' else 'B')
+        self.assertEqual(self.client.post(self.base + '/uploads', headers={**headers, 'X-Upload-Ticket': forged},
+            json={'path': 'direct.txt', 'size': 3}).status_code, 403)
+        expired = sf.sign_upload_ticket(key, 'direct.txt', 3, -1)
+        self.assertEqual(self.client.post(self.base + '/uploads', headers={**headers, 'X-Upload-Ticket': expired},
+            json={'path': 'direct.txt', 'size': 3}).status_code, 403)
+        r = self.client.post(self.base + '/uploads', headers=headers, json={'path': 'direct.txt', 'size': 3})
+        self.assertEqual(r.status_code, 200, r.text)
+        url = self.base + '/uploads/' + r.json()['id']
+        self.client.delete('/api/files/sharing/' + self.grant['id'], headers=self.local)
+        self.assertEqual(self.client.put(url, headers={**headers, 'X-Upload-Offset': '0'}, content=b'abc').status_code, 410)
+        self.assertFalse((self.root / 'direct.txt').exists())
+
     @unittest.skipUnless(os.geteuid() == 0, 'needs root to verify privilege dropping')
     def test_share_runs_as_owner_without_administrator_elevation(self):
         nobody = pwd.getpwnam('nobody')

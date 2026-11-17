@@ -693,16 +693,22 @@
     wrap.className = 'mvm-bell mvm-act';
     var list = loadActivity();
     // Like the bell: nothing at all until there is something behind it.
-    if (!list.length) return wrap;
+    if (!list.length && !_live.length) return wrap;
     var label = esc(tt('feed_activity_title', 'Recent activity'));
+    // Something running or paused right now sits on top of the list and
+    // changes the icon, so it can be seen without opening the panel.
+    var running = _live.some(function (i) { return i.state !== 'paused'; });
+    var icon = !_live.length ? '🕘' : (running ? '▶️' : '⏸️');
+    var btnLabel = _live.length ? esc(tt('ah_live_title', 'Happening now')) + ' · ' + label : label;
     wrap.innerHTML =
-      '<button class="mvm-bell-btn mvm-act-btn" type="button" aria-haspopup="true" aria-expanded="' + (_actOpen ? 'true' : 'false') + '" title="' + label + '" aria-label="' + label + '">🕘</button>'
+      '<button class="mvm-bell-btn mvm-act-btn' + (_live.length ? (running ? ' live' : ' live paused') : '') + '" type="button" aria-haspopup="true" aria-expanded="' + (_actOpen ? 'true' : 'false') + '" title="' + btnLabel + '" aria-label="' + btnLabel + '">' + icon + '</button>'
       + '<div class="mvm-notif mvm-act-panel"' + (_actOpen ? '' : ' hidden') + '>'
         + '<div class="mvm-notif-hdr"><span>' + label + '</span>'
           + '<button class="mvm-notif-all mvm-act-new" type="button">✏️ ' + esc(tt('feed_new_post', 'New post')) + '</button></div>'
-        + '<div class="mvm-notif-list">' + list.map(activityRow).join('') + '</div>'
+        + (_live.length ? '<div class="mvm-live-sec">' + _live.map(liveRow).join('') + '</div>' : '')
+        + (list.length ? '<div class="mvm-notif-list">' + list.map(activityRow).join('') + '</div>' : '')
         + '<div class="mvm-act-foot"><span>' + esc(tt('feed_activity_hint', 'Only you see this list. It stays in this browser.')) + '</span>'
-          + '<button class="mvm-notif-all mvm-act-clear" type="button">' + esc(tt('feed_activity_clear', 'Clear')) + '</button></div>'
+          + (list.length ? '<button class="mvm-notif-all mvm-act-clear" type="button">' + esc(tt('feed_activity_clear', 'Clear')) + '</button>' : '') + '</div>'
       + '</div>';
 
     var btn = wrap.querySelector('.mvm-act-btn');
@@ -719,10 +725,12 @@
     };
     panel.onclick = function (e) { e.stopPropagation(); };
     wrap.querySelector('.mvm-act-new').onclick = function () { shareActivity(null); };
-    wrap.querySelector('.mvm-act-clear').onclick = function () {
+    var clr = wrap.querySelector('.mvm-act-clear');
+    if (clr) clr.onclick = function () {
       saveActivity(loadActivity().filter(function (a) { return currentUserId() && a.u && a.u !== currentUserId(); }));
       closeActivity();
     };
+    wrap.querySelectorAll('.mvm-live-act').forEach(function (b) { b.onclick = function () { liveAct(b); }; });
     wrap.querySelectorAll('.mvm-act-share').forEach(function (el) {
       el.onclick = function () {
         var entry = list.filter(function (a) { return a.id === el.dataset.id; })[0];
@@ -749,7 +757,6 @@
   // occupies a single row; "+N" reveals any additional activities below it.
   var _live = [];
   var _liveAt = 0;       // when _live was fetched, to keep running timers ticking
-  var _liveOpen = false;
   var _liveTimer = null;
 
   function clock(sec) {
@@ -807,27 +814,11 @@
   }
 
   function renderLive() {
-    var el = document.querySelector('.mvm-live');
-    var hdr = document.querySelector('.mvm-hdr');
-    if (!_live.length || !hdr) {
-      if (el) el.remove();
-      clearInterval(_liveTimer); _liveTimer = null;
-      return;
-    }
-    if (!el) {
-      el = document.createElement('div');
-      el.className = 'mvm-live';
-      hdr.after(el);
-    }
-    var more = _live.length - 1;
-    el.innerHTML = '<div class="mvm-live-main"><div class="mvm-live-first">' + liveRow(_live[0]) + '</div>' +
-      (more > 0 ? '<button type="button" class="mvm-live-more" aria-expanded="' + _liveOpen + '" aria-label="' +
-        esc(tt('ah_live_title', 'Happening now')) + '">+' + more + '</button>' : '') + '</div>' +
-      (more > 0 && _liveOpen ? '<div class="mvm-live-list">' + _live.slice(1).map(liveRow).join('') + '</div>' : '');
-    el.querySelectorAll('.mvm-live-act').forEach(function (b) { b.onclick = function () { liveAct(b); }; });
-    var btn = el.querySelector('.mvm-live-more');
-    if (btn) btn.onclick = function () { _liveOpen = !_liveOpen; renderLive(); };
-    if (!_liveTimer) _liveTimer = setInterval(tickLive, 1000);
+    var old = document.querySelector('.mvm-live');
+    if (old) old.remove();
+    renderActivity();
+    if (_live.length) { if (!_liveTimer) _liveTimer = setInterval(tickLive, 1000); }
+    else { clearInterval(_liveTimer); _liveTimer = null; }
   }
 
   function tickLive() {
@@ -860,8 +851,13 @@
     s.textContent =
       '.mvm-hdr{display:flex;align-items:center;gap:12px;padding:9px 16px;border-bottom:1px solid var(--border,#45475a);' +
       'background:var(--surface1,#181825);font-family:system-ui,sans-serif;flex-shrink:0;order:-1}' +
-      '.mvm-live{order:-1;flex-shrink:0;box-sizing:border-box;width:min(680px,calc(100% - 20px));margin:6px auto 0;' +
-      'background:var(--surface2,#313244);border:1px solid var(--border,#45475a);border-radius:10px;font-family:system-ui,sans-serif}' +
+      '.mvm-live-sec{border-bottom:1px solid var(--border,#45475a);background:var(--surface2,#313244)}' +
+      '.mvm-live-sec .mvm-live-item+.mvm-live-item{border-top:1px solid var(--border,#45475a)}' +
+      '.mvm-act-btn.live{box-shadow:0 0 0 2px var(--green,#a6e3a1);background:color-mix(in srgb,var(--green,#a6e3a1) 22%,transparent)}' +
+      '.mvm-act-btn.live.paused{box-shadow:0 0 0 2px var(--yellow,#f9e2af);background:color-mix(in srgb,var(--yellow,#f9e2af) 22%,transparent)}' +
+      '.mvm-act-btn.live:not(.paused){animation:mvm-live-pulse 1.6s ease-in-out infinite}@keyframes mvm-live-pulse{50%{box-shadow:0 0 0 2px var(--green,#a6e3a1),0 0 10px 3px var(--green,#a6e3a1)}}' +
+      '.mvm-act-btn.live:after{content:"";position:absolute;top:-2px;right:-2px;width:10px;height:10px;border-radius:50%;background:var(--green,#a6e3a1);border:2px solid var(--surface1,#181825)}' +
+      '.mvm-act-btn.live.paused:after{background:var(--yellow,#f9e2af)}' +
       '.mvm-live-main,.mvm-live-item{display:flex;align-items:center;min-width:0}' +
       '.mvm-live-first,.mvm-live-item{flex:1;min-width:0}' +
       '.mvm-live-acts{display:flex;gap:3px;padding:0 7px 0 0;flex-shrink:0}' +
@@ -870,7 +866,6 @@
       '.mvm-live-act:hover{border-color:var(--accent,#89b4fa)}.mvm-live-act:disabled{opacity:.5}' +
       '.mvm-live-row{display:flex;align-items:center;gap:8px;flex:1;min-width:0;min-height:40px;padding:3px 10px;box-sizing:border-box;' +
       'text-decoration:none;color:var(--fg,#cdd6f4)}' +
-      '.mvm-live-list .mvm-live-item{border-top:1px solid var(--border,#45475a)}' +
       '.mvm-live-ico{font-size:17px;line-height:1;flex-shrink:0}' +
       '.mvm-live-text{display:flex;align-items:center;gap:8px;min-width:0;flex:1}' +
       '.mvm-live-title{min-width:0;font-size:12.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}' +
@@ -878,13 +873,15 @@
       '.mvm-live-state:before{content:"";width:5px;height:5px;border-radius:50%;background:currentColor}' +
       '.mvm-live-state.paused{color:var(--yellow,#f9e2af)}' +
       '.mvm-live-time{font-size:12.5px;font-weight:700;font-variant-numeric:tabular-nums;flex-shrink:0}' +
-      '.mvm-live-more{align-self:stretch;flex-shrink:0;min-width:36px;border:none;border-left:1px solid var(--border,#45475a);background:none;' +
-      'color:var(--accent,#89b4fa);font-size:12px;font-weight:700;font-family:inherit;cursor:pointer}' +
       '.mvm-crumbs{display:flex;align-items:center;min-width:0;font-family:system-ui,sans-serif}' +
       '.mvm-sw-btn{display:flex;align-items:center;gap:7px;min-width:0;max-width:100%;height:34px;padding:0 10px 0 8px;' +
       'background:var(--surface2,#313244);border:1px solid var(--border,#45475a);border-radius:9px;cursor:pointer;' +
       'font-family:inherit;font-size:14px;font-weight:700;color:var(--fg,#cdd6f4);box-sizing:border-box}' +
       '.mvm-sw-btn:hover,.mvm-sw-btn[aria-expanded="true"]{border-color:var(--accent,#89b4fa)}' +
+      '.mvm-crumbs{gap:6px}.mvm-sw-btn.mvm-sw-icononly .mvm-sw-name{display:none}' +
+      '.mvm-sw-pill{display:grid;place-items:center;width:34px;height:34px;padding:0;flex-shrink:0;background:var(--surface1,#181825);' +
+      'border:1px solid var(--border,#45475a);border-radius:9px;cursor:pointer;font-size:17px;line-height:1;color:var(--fg,#cdd6f4);opacity:.85;font-family:inherit;text-decoration:none}' +
+      '.mvm-sw-pill:hover{border-color:var(--accent,#89b4fa);opacity:1}' +
       '.mvm-sw-ico{font-size:17px;line-height:1;flex-shrink:0}' +
       '.mvm-sw-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}' +
       '.mvm-sw-caret{font-size:10px;color:var(--fg2,#a6adc8);flex-shrink:0;transition:transform .15s}' +
@@ -955,9 +952,9 @@
       'box-shadow:0 8px 24px rgba(0,0,0,.35);font-family:system-ui,sans-serif;font-size:13px;color:var(--fg,#cdd6f4)}' +
       '.mvm-toast a{color:var(--accent,#89b4fa);font-weight:700;text-decoration:none}' +
       '@media(max-width:600px){.mvm-notif{position:fixed;top:72px;right:12px;left:12px;width:auto;max-width:none;max-height:calc(100dvh - 84px)}.mvm-notif-list{max-height:calc(100dvh - 132px)}}' +
-      '@media(max-width:600px){.mvm-live{width:calc(100% - 12px);margin-top:4px}.mvm-live-row{gap:5px;padding:3px 6px;min-height:42px}' +
+      '@media(max-width:600px){.mvm-live-row{gap:5px;padding:3px 6px;min-height:42px}' +
       '.mvm-live-ico{font-size:15px}.mvm-live-text{gap:5px}.mvm-live-state{font-size:0;gap:0}.mvm-live-time{font-size:11.5px}' +
-      '.mvm-live-acts{gap:2px;padding-right:4px}.mvm-live-act{width:38px;height:38px}.mvm-live-more{min-width:38px}}' +
+      '.mvm-live-acts{gap:2px;padding-right:4px}.mvm-live-act{width:38px;height:38px}}' +
       '.mvm-menu{position:absolute;top:calc(100% + 8px);right:0;min-width:200px;background:var(--surface1,#181825);' +
       'border:1px solid var(--border,#45475a);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.35);' +
       'z-index:1000;display:flex;flex-direction:column;padding:6px}' +
@@ -1169,10 +1166,12 @@
 
     var crumbs = document.createElement('div');
     crumbs.className = 'mvm-crumbs';
+    var recent = _singleApp ? [] : rememberRecent();
+    var cached = appMeta ? null : recentList().filter(function (x) { return x.id === APP_ID; })[0];
     var cur = homeIsCurrent() ? homeEntry() : {
-      icon: (appMeta && appMeta.icon) || '📦',
-      icon_image: appMeta && appMeta.icon_image,
-      name: appMeta ? appLabel(appMeta) : (publicNames[APP_ID] || APP_ID)
+      icon: (appMeta && appMeta.icon) || (cached && cached.icon) || '📦',
+      icon_image: (appMeta && appMeta.icon_image) || (cached && cached.icon_image),
+      name: appMeta ? appLabel(appMeta) : (cached && cached.name) || publicNames[APP_ID] || APP_ID
     };
     var swLabel = esc(tt('ah_pub_switch_app', 'Switch app'));
     crumbs.innerHTML = '<button class="mvm-sw-btn" type="button" aria-haspopup="true" aria-expanded="false" title="' + swLabel + '" aria-label="' + swLabel + '">'
@@ -1191,6 +1190,31 @@
       e.stopPropagation();
       if (switcherOpen()) closeSwitcher(); else openSwitcher(this);
     };
+    if (!_singleApp) {
+      // Only the icon of the current app: the name is in the tooltip, and the room
+      // goes to quick links to the apps used just before this one.
+      var swBtn0 = crumbs.querySelector('.mvm-sw-btn');
+      swBtn0.classList.add('mvm-sw-icononly');
+      swBtn0.title = cur.name;
+      swBtn0.setAttribute('aria-label', cur.name);
+      recent.forEach(function (a) {
+        var label = a.name;
+        var pill = document.createElement('a');
+        pill.className = 'mvm-sw-pill';
+        pill.href = '/pub/' + encodeURIComponent(a.id) + '/';
+        pill.title = label;
+        pill.setAttribute('aria-label', label);
+        pill.innerHTML = iconHTML(a);
+        pill.addEventListener('click', function () {
+          // Counted like a tap on the home screen's card.
+          var token = localStorage.getItem(TOKEN_KEY);
+          if (token) fetch('/api/pub/apphub/apps/' + encodeURIComponent(a.id) + '/open', {
+            method: 'POST', headers: { 'X-Pub-Token': token }, keepalive: true
+          }).catch(function () {});
+        });
+        crumbs.appendChild(pill);
+      });
+    }
     hdr.appendChild(crumbs);
 
     var spacer = document.createElement('div');
@@ -1336,6 +1360,42 @@
   // What refresh() last fetched, so a rebuild caused purely by a language change
   // re-renders the header from it instead of repeating the three requests.
   var _lastResults = null;
+
+  // Each entry carries its icon and name, so the very first header render (before
+  // the app list arrives) already draws the final icons and nothing shifts later.
+  var RECENT_KEY = 'mvm_recent_apps';
+  var RECENT_SHOWN = 3;
+  function entryOf(a) {
+    return { id: a.id, icon: a.icon || '', icon_image: a.icon_image || a.iconImage || '', name: appLabel(a) };
+  }
+  function recentList() {
+    var list = [];
+    try { list = JSON.parse(localStorage.getItem(RECENT_KEY) || '[]'); } catch (e) {}
+    if (!Array.isArray(list)) return [];
+    return list.filter(function (x) { return x && typeof x === 'object' && typeof x.id === 'string'; });
+  }
+  function rememberRecent() {
+    var list = recentList();
+    var known = _swApps ? (_swApps.filter(function (x) { return x.id === APP_ID; })[0] || null) : null;
+    if (!homeIsCurrent() && APP_ID) {
+      var self = known ? entryOf(known) : (list.filter(function (x) { return x.id === APP_ID; })[0] || null);
+      if (self) {
+        list = [self].concat(list.filter(function (x) { return x.id !== APP_ID; })).slice(0, 12);
+        try { localStorage.setItem(RECENT_KEY, JSON.stringify(list)); } catch (e) {}
+      }
+    }
+    var out = [];
+    list.forEach(function (e) {
+      if (e.id === APP_ID || out.length >= RECENT_SHOWN) return;
+      if (_swApps) {
+        var a = _swApps.filter(function (x) { return x.id === e.id && x.installed; })[0];
+        if (!a) return;
+        e = entryOf(a);
+      }
+      out.push(e);
+    });
+    return out;
+  }
 
   function renderHeader() {
     var r = _lastResults || [null, null, null];

@@ -132,7 +132,7 @@ const AppHub = (() => {
       height: 600,
       onMount(body) {
         body.style.cssText = 'padding:0;display:flex;flex-direction:column;height:100%;overflow:hidden';
-        _mount(body, startTab || 'account');
+        _mount(body, startTab || 'community');
       },
     });
   }
@@ -143,6 +143,7 @@ const AppHub = (() => {
 
     const t = window.t || (k => k);
     const tabs = [
+      { id: 'community',  label: '💬 ' + t('feed_tab') },
       { id: 'account',    label: t('ah_tab_account') },
       { id: 'favourites', label: t('ah_tab_favourites') },
       { id: 'apps',       label: t('ah_tab_apps'), adminOnly: true },
@@ -154,7 +155,7 @@ const AppHub = (() => {
 
     // Main categories on top, the tabs of the chosen category below them.
     const groups = [
-      { id: 'profile', label: t('ah_group_profile'), tabs: ['account', 'favourites'] },
+      { id: 'profile', label: t('ah_group_profile'), tabs: ['community', 'account', 'favourites'] },
       { id: 'apps',    label: t('ah_group_apps'),    tabs: ['apps', 'paid', 'app-apis', 'keys'] },
       { id: 'users',   label: t('ah_group_users'),   tabs: ['users'] },
     ];
@@ -187,7 +188,9 @@ const AppHub = (() => {
         b.onclick = () => setTab(b.dataset.t);
       });
       const c = body.querySelector('#ah-body');
-      if (id === 'account') renderAccount(c);
+      if (_feedView && id !== 'community') { _feedView.destroy(); _feedView = null; }
+      if (id === 'community') renderCommunity(c);
+      else if (id === 'account') renderAccount(c);
       else if (id === 'favourites') renderFavourites(c);
       else if (id === 'apps')  renderApps(c);
       else if (id === 'paid')  renderCreditServices(c);
@@ -202,6 +205,31 @@ const AppHub = (() => {
         setTab(g.tabs.includes(_activeTab) ? _activeTab : g.tabs[0]);
       };
     });
+
+    // ── Community tab ──────────────────────────────────────────
+    // The same wall as on the public Apps Hub page; the feed itself is feed.js.
+    let _feedView = null;
+    function _loadFeedJs() {
+      if (window.MvmFeed) return Promise.resolve();
+      return new Promise((resolve, reject) => {
+        const s = document.createElement('script');
+        s.src = window.asset('/pub/apphub/feed.js');
+        s.onload = resolve;
+        s.onerror = reject;
+        document.head.appendChild(s);
+      });
+    }
+    async function renderCommunity(c) {
+      c.innerHTML = '<div style="padding:20px;color:var(--text-dim);font-size:.85rem">…</div>';
+      _pubUser = await getUser();
+      if (_activeTab !== 'community' || !c.isConnected) return;
+      // Without a profile there is no wall to show: the sign-in form takes its place.
+      if (!_pubUser) { _renderLogin(c); return; }
+      try { await _loadFeedJs(); } catch (_) { return; }
+      if (_activeTab !== 'community' || !c.isConnected) return;
+      c.innerHTML = '<div style="padding:14px"></div>';
+      _feedView = MvmFeed.mount(c.firstElementChild, { me: _pubUser });
+    }
 
     // ── Account tab ────────────────────────────────────────────
     async function renderAccount(c) {

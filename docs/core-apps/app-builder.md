@@ -25,7 +25,8 @@ Without these options the app is for the desktop only. Games always use Game Hub
 The chat is on the left and the live preview on the right. The AI writes the files of the app, checks them and tells you what it did; you see the result at once. The preview can be shown at phone size, restarted, and its test data reset. If the preview reports an error, one button asks the AI to fix it.
 
 - Files shows every file of the app. You can read and edit a file by hand, delete it, and run the check that looks for problems.
-- Versions keeps a copy before each AI step. Restoring one brings those files back and keeps the current ones as a version too.
+- Versions keeps a copy before each AI step. Restoring one brings those files back and keeps the current ones as a version too. Each copy shows the installed version it was based on, and every install adds a copy named "Installed x.y.z", so the releases can be found and restored.
+- The app's version is set by App Builder: it starts at 1.0.0 and goes up by one patch number each time changed work is installed. When the work differs from what is installed, the chip says so ("Installed 1.0.2 · changes not installed") and the button offers the next version ("Update to 1.0.3"). The installed app stays on the old version until you press it.
 - Settings holds the name, category, icon emoji, description, the profile and public options, and the other apps this app may use.
 
 The project is a draft. It is not an installed app until you press Install, and a draft does not appear in the Start menu.

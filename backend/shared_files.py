@@ -87,11 +87,18 @@ def _grant(grant_id):
     return dict(row)
 
 
-def _authorize(grant_id, request, permission=None):
+def _authorize(grant_id, request, permission=None, allow_ticket=False):
     row = _grant(grant_id)
     header = request.headers.get('authorization', '')
     token = header[7:] if header.startswith('Bearer ') else ''
-    if not token or not hmac.compare_digest(hashlib.sha256(token.encode()).hexdigest(), row['token_hash']):
+    if token:
+        if not hmac.compare_digest(hashlib.sha256(token.encode()).hexdigest(), row['token_hash']):
+            raise HTTPException(401, 'Invalid folder access key')
+    elif allow_ticket and request.headers.get('x-upload-ticket'):
+        # An upload ticket is signed by the receiving server with the folder key,
+        # so the person's browser can upload one file here without ever holding that key.
+        request.state.upload_ticket = _upload_ticket(row, request.headers['x-upload-ticket'])
+    else:
         raise HTTPException(401, 'Invalid folder access key')
     origin = request.headers.get('origin')
     if origin and origin != row['recipient']:
@@ -103,6 +110,20 @@ def _authorize(grant_id, request, permission=None):
 
 def grant_identity(grant_id: str, request: Request):
     return _authorize(grant_id, request)
+
+
+def upload_identity(grant_id: str, request: Request):
+    return _authorize(grant_id, request, 'upload', allow_ticket=True)
+
+
+def _ticket_ok(request, path, size=None):
+    """With an upload ticket only the one file named in it may be written."""
+    data = getattr(request.state, 'upload_ticket', None)
+    if data is not None and data['path'] != path:
+        raise HTTPException(403, 'This upload ticket is for another file')
+    if data is not None and size is not None and size > data['size']:
+        raise HTTPException(403, 'This upload ticket is for a smaller file')
+    return data
 
 
 def file_identity(grant_id: str, request: Request, ticket: str):
@@ -264,7 +285,7 @@ async def cors_middleware(request, call_next):
         response.headers['Access-Control-Allow-Origin'] = origin
         response.headers['Vary'] = 'Origin'
         response.headers['Access-Control-Allow-Methods'] = 'GET, HEAD, POST, PUT, DELETE, OPTIONS'
-        response.headers['Access-Control-Allow-Headers'] = 'Authorization, Content-Type, Range, X-Upload-Offset'
+        response.headers['Access-Control-Allow-Headers'] = 'Authorization, Content-Type, Range, X-Upload-Offset, X-Upload-Ticket'
         response.headers['Access-Control-Expose-Headers'] = 'Content-Length, Content-Range, Accept-Ranges, Content-Disposition'
         response.headers['Access-Control-Max-Age'] = '300'
     return response
@@ -319,6 +340,27 @@ def sign_ticket(token_hash, path, ttl):
     payload = _encode(json.dumps({'path': path, 'expires': int(time.time()) + int(ttl)}, separators=(',', ':')).encode())
     signature = _encode(hmac.new(token_hash.encode(), payload.encode(), hashlib.sha256).digest())
     return payload + '.' + signature
+
+
+def sign_upload_ticket(token_hash, path, size, ttl):
+    """Protocol v1 upload ticket for exactly one file: ``path`` and at most ``size`` bytes."""
+    payload = _encode(json.dumps({'kind': 'upload', 'path': path, 'size': int(size), 'expires': int(time.time()) + int(ttl)},
+                                 separators=(',', ':')).encode())
+    return payload + '.' + _encode(hmac.new(token_hash.encode(), payload.encode(), hashlib.sha256).digest())
+
+
+def _upload_ticket(row, ticket):
+    try:
+        payload, signature = ticket.split('.')
+        expected = _encode(hmac.new(row['token_hash'].encode(), payload.encode(), hashlib.sha256).digest())
+        if not hmac.compare_digest(expected, signature):
+            raise ValueError()
+        data = json.loads(_decode(payload))
+        if data.get('kind') != 'upload' or data['expires'] < time.time() or not isinstance(data['path'], str):
+            raise ValueError()
+        return data
+    except (ValueError, KeyError, TypeError):
+        raise HTTPException(403, 'Upload expired; start the upload again')
 
 
 def _ticket(grant_id, ticket, request):
@@ -408,13 +450,16 @@ class UploadBody(BaseModel):
     size: int = Field(ge=0, le=1024 ** 4)
 
 
-@router.post(PREFIX + '/{grant_id}/uploads', dependencies=[Depends(grant_identity)])
+@router.post(PREFIX + '/{grant_id}/uploads', dependencies=[Depends(upload_identity)])
 def upload_start(grant_id: str, body: UploadBody, request: Request):
     try:
         relative_parts(body.path)
     except ValueError:
         raise HTTPException(400, 'Invalid relative path')
-    row = _authorize(grant_id, request, 'upload')
+    row = _authorize(grant_id, request, 'upload', allow_ticket=True)
+    ticket = _ticket_ok(request, body.path)
+    if ticket is not None and body.size > ticket['size']:
+        raise HTTPException(403, 'This upload ticket is for a smaller file')
     with get_conn() as c:
         stale = [dict(r) for r in c.execute('SELECT * FROM file_remote_uploads WHERE grant_id=? AND created<?', (grant_id, time.time() - 86400))]
         for upload in stale:
@@ -434,9 +479,9 @@ def upload_start(grant_id: str, body: UploadBody, request: Request):
     return {'id': upload_id, 'chunk_size': _CHUNK}
 
 
-@router.put(PREFIX + '/{grant_id}/uploads/{upload_id}', dependencies=[Depends(grant_identity)])
+@router.put(PREFIX + '/{grant_id}/uploads/{upload_id}', dependencies=[Depends(upload_identity)])
 async def upload_chunk(grant_id: str, upload_id: str, request: Request):
-    row = await asyncio.to_thread(_authorize, grant_id, request, 'upload')
+    row = await asyncio.to_thread(_authorize, grant_id, request, 'upload', True)
     data = bytearray()
     async for chunk in request.stream():
         data.extend(chunk)
@@ -454,9 +499,10 @@ async def upload_chunk(grant_id: str, upload_id: str, request: Request):
             upload = c.execute('SELECT * FROM file_remote_uploads WHERE id=? AND grant_id=?', (upload_id, grant_id)).fetchone()
             if not upload:
                 raise HTTPException(404, 'Upload not found')
+            _ticket_ok(request, upload['path'], upload['size'])
             if offset != upload['offset'] or offset + len(data) > upload['size']:
                 raise HTTPException(409, 'Upload offset mismatch')
-            _authorize(grant_id, request, 'upload')
+            _authorize(grant_id, request, 'upload', allow_ticket=True)
             final = offset + len(data) == upload['size']
             _work(row, 'upload', path=upload['path'], upload_id=upload_id, offset=offset,
                   data=base64.b64encode(data).decode(), final=final)
@@ -468,13 +514,14 @@ async def upload_chunk(grant_id: str, upload_id: str, request: Request):
     return await asyncio.to_thread(store)
 
 
-@router.delete(PREFIX + '/{grant_id}/uploads/{upload_id}', dependencies=[Depends(grant_identity)])
+@router.delete(PREFIX + '/{grant_id}/uploads/{upload_id}', dependencies=[Depends(upload_identity)])
 def upload_cancel(grant_id: str, upload_id: str, request: Request):
-    row = _authorize(grant_id, request, 'upload')
+    row = _authorize(grant_id, request, 'upload', allow_ticket=True)
     with get_conn() as c:
         c.execute('BEGIN IMMEDIATE')
         upload = c.execute('SELECT * FROM file_remote_uploads WHERE id=? AND grant_id=?', (upload_id, grant_id)).fetchone()
         if upload:
+            _ticket_ok(request, upload['path'])
             _work(row, 'cancel', path=upload['path'], upload_id=upload_id)
             c.execute('DELETE FROM file_remote_uploads WHERE id=?', (upload_id,))
     return {'ok': True}

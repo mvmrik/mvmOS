@@ -138,6 +138,29 @@ def shared_file_url(owner, folder_id, path, ttl=3600):
     return f"{row['origin']}{shared_files.PREFIX}/{row['grant_id']}/file?ticket={quote(ticket, safe='')}"
 
 
+def shared_upload_ticket(owner, folder_id, path, size, ttl=4 * 3600):
+    """What a person's browser needs to upload ONE file straight to a shared folder.
+
+    ``{"base", "ticket", "path"}``: the browser starts the upload at ``base + "/uploads"``
+    with the header ``X-Upload-Ticket``. The ticket is signed here with the folder key
+    (no network request), names exactly this file and size, and expires, so the browser
+    never holds the key and the bytes never pass through this server. A sharing server
+    older than Core 1.26 does not know tickets and refuses; the caller then falls back
+    to sending the file through this server."""
+    import hashlib
+    try:
+        shared_files.relative_parts(path)
+    except ValueError:
+        raise HTTPException(400, "Invalid relative path")
+    with get_conn() as c:
+        row = c.execute("SELECT origin,grant_id,secret FROM file_remote_folders WHERE id=? AND owner=?",
+                        (folder_id, owner)).fetchone()
+    if not row:
+        raise HTTPException(404, "Shared folder is no longer connected")
+    ticket = shared_files.sign_upload_ticket(hashlib.sha256(row["secret"].encode()).hexdigest(), path, size, ttl)
+    return {"base": f"{row['origin']}{shared_files.PREFIX}/{row['grant_id']}", "ticket": ticket, "path": path}
+
+
 # ── Reading a whole folder in place (a library of files that stay where they are) ──
 #
 # An app that keeps a library does not copy files: it remembers the folder and

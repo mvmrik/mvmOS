@@ -123,15 +123,15 @@ const AppBuilder = (() => {
     return data;
   }
 
-  function when(ts) {
-    try { return window.mvmOS?.dateTimePicker?.format ? new Date(ts * 1000).toLocaleDateString(window.mvmOS.lang) : new Date(ts * 1000).toLocaleDateString(); }
+  function when(ts, type = 'date') {
+    try { const picker = window.mvmOS.dateTimePicker; return picker.format(picker.fromEpoch(ts), { type }); }
     catch (e) { return ''; }
   }
 
   function openWindow() {
     injectStyle();
     mvmOS.createWindow({
-      id: 'app-builder', title: '🧱 ' + t('app_builder'), icon: '🧱', iconImage: '/icons/app-builder.svg', width: 1180, height: 740,
+      id: 'app-builder', title: '🧱 ' + t('app_builder'), icon: '🧱', iconImage: window.asset('/icons/app-builder.svg'), width: 1180, height: 740,
       onMount(body) { mount(body); },
       onClose() { teardown(); },
     });
@@ -145,6 +145,7 @@ const AppBuilder = (() => {
   }
 
   async function mount(body) {
+    await window.mvmOS.dateTimePicker.ready();
     state.body = body;
     body.style.cssText = 'padding:0;overflow:hidden;height:100%;position:relative';
     body.innerHTML = '<div class="bld"><div class="bld-home bld-muted">…</div></div>';
@@ -200,7 +201,7 @@ const AppBuilder = (() => {
   }
 
   function cardHTML(p) {
-    const status = p.installed ? `<span class="bld-chip ok">${esc(t('bld_installed_v', { v: p.installed.version }))}</span>` : `<span class="bld-chip">${esc(t('bld_draft'))}</span>`;
+    const status = instChip(p);
     return `<div class="bld-card" data-id="${p.id}" tabindex="0">
       <div class="bld-card-top"><div class="bld-ico">${iconHTML(p)}</div><div style="min-width:0"><h3>${esc(p.name)}</h3><div class="bld-muted" style="font-size:12.5px">${esc(mvmOS.categoryName ? mvmOS.categoryName(p.category) : p.category)}</div></div></div>
       <div class="bld-meta">${status}${p.imported ? `<span class="bld-chip">${esc(t('bld_imported'))}</span>` : ''}${p.public ? `<span class="bld-chip">${esc(t('bld_chip_public'))}</span>` : ''}<span class="bld-muted">${esc(t('bld_updated', { when: when(p.updated) }))}</span></div>
@@ -301,7 +302,12 @@ const AppBuilder = (() => {
     else if (firstMessage) send(firstMessage);
   }
 
-  function projectBadge(p) { return p.installed ? `<span class="bld-chip ok">${esc(t('bld_installed_v', { v: p.installed.version }))}</span>` : `<span class="bld-chip">${esc(t('bld_draft'))}</span>`; }
+  function instChip(p) {
+    if (!p.installed) return `<span class="bld-chip">${esc(t('bld_draft'))}</span>`;
+    return `<span class="bld-chip ok">${esc(t(p.changed_since_install ? 'bld_installed_changed' : 'bld_installed_v', { v: p.installed.version }))}</span>`;
+  }
+  function updateLabel(p) { return p.installed ? (p.next_version ? t('bld_update_to', { v: p.next_version }) : t('bld_update')) : t('bld_install'); }
+  function projectBadge(p) { return instChip(p); }
 
   function drawWork() {
     const p = state.project;
@@ -314,7 +320,7 @@ const AppBuilder = (() => {
         <button class="bld-btn small" id="bld-settings">⚙ ${esc(t('bld_settings'))}</button>
         <button class="bld-btn small" id="bld-download">⬇ ${esc(t('bld_download'))}</button>
         ${p.installed ? `<button class="bld-btn small" id="bld-open-app">${esc(t('bld_open_app'))}</button><button class="bld-btn small danger" id="bld-uninstall">${esc(t('bld_uninstall'))}</button>` : ''}
-        <button class="bld-btn small primary" id="bld-install">${esc(p.installed ? t('bld_update') : t('bld_install'))}</button>
+        <button class="bld-btn small primary" id="bld-install">${esc(updateLabel(p))}</button>
       </div>
       <div class="bld-main">
         <div class="bld-chat">
@@ -378,6 +384,13 @@ const AppBuilder = (() => {
   async function refreshProject() {
     if (!state.project) return;
     try { state.project = await api('GET', '/projects/' + state.project.id); } catch (e) { /* keep */ }
+    const b = state.body, p = state.project;
+    if (b && p && state.view === 'work') {
+      const old = b.querySelector('.bld-top > .bld-chip');
+      if (old) old.outerHTML = projectBadge(p);
+      const btn = b.querySelector('#bld-install');
+      if (btn && !btn.disabled) btn.textContent = updateLabel(p);
+    }
   }
 
   async function reloadPreview() {
@@ -476,7 +489,7 @@ const AppBuilder = (() => {
   async function versionsTab(pane) {
     await refreshProject();
     const snaps = state.project.snapshots || [];
-    pane.innerHTML = `<div class="bld-list"><div class="bld-muted">${esc(t('bld_versions_hint'))}</div>${snaps.length ? snaps.map(s => `<div class="bld-row"><span>${esc(s.label || s.id)} <span class="bld-muted">· ${esc(s.id.slice(0, 4) + '-' + s.id.slice(4, 6) + '-' + s.id.slice(6, 8) + ' ' + s.id.slice(9, 11) + ':' + s.id.slice(11, 13))}</span></span><button class="bld-btn small" data-restore="${esc(s.id)}">${esc(t('bld_restore'))}</button></div>`).join('') : `<div class="bld-muted">${esc(t('bld_versions_none'))}</div>`}</div>`;
+    pane.innerHTML = `<div class="bld-list"><div class="bld-muted">${esc(t('bld_versions_hint'))}</div>${snaps.length ? snaps.map(s => `<div class="bld-row"><span>${esc(s.installed && s.version ? t('bld_snap_installed', { v: s.version }) : (s.label || s.id))}${!s.installed && s.version ? ` <span class="bld-chip">${esc(t('bld_snap_based', { v: s.version }))}</span>` : ''} <span class="bld-muted">· ${esc(s.created_at ? when(s.created_at, 'datetime') : s.id)}</span></span><button class="bld-btn small" data-restore="${esc(s.id)}">${esc(t('bld_restore'))}</button></div>`).join('') : `<div class="bld-muted">${esc(t('bld_versions_none'))}</div>`}</div>`;
     pane.querySelectorAll('[data-restore]').forEach(b => b.onclick = async () => {
       if (!await mvmOS.confirm(t('bld_restore_confirm'), { ok: t('bld_restore'), cancel: t('bld_cancel') })) return;
       try { await api('POST', `/projects/${state.project.id}/restore`, { snapshot: b.dataset.restore }); mvmOS.toast(t('bld_restored')); versionsTab(pane); } catch (e) { mvmOS.toast(e.message); }
@@ -666,7 +679,7 @@ const AppBuilder = (() => {
       ${p.category === 'Games' ? `<p style="margin:0">${esc(t('bld_install_game'))}</p>` : ''}
       ${(p.server_files || []).length ? `<p class="bld-banner warn" style="margin:0">${esc(t('bld_install_server', { files: p.server_files.join(', ') }))}</p>` : ''}
       ${p.public ? `<p style="margin:0">${esc(t('bld_install_public'))}</p>` : ''}
-      <div class="bld-dlg-actions"><button class="bld-btn" data-x>${esc(t('bld_cancel'))}</button><button class="bld-btn primary" data-ok>${esc(p.installed ? t('bld_update') : t('bld_install'))}</button></div>`,
+      <div class="bld-dlg-actions"><button class="bld-btn" data-x>${esc(t('bld_cancel'))}</button><button class="bld-btn primary" data-ok>${esc(updateLabel(p))}</button></div>`,
     (wrap, close) => {
       wrap.querySelector('[data-x]').onclick = close;
       wrap.querySelector('[data-ok]').onclick = async ev => {
