@@ -121,6 +121,19 @@ Run as root or with `sudo`. The installer asks for a port (default `2026`), crea
 virtualenv and sets up a systemd service. Then open `http://your-server-ip:2026` and log in
 with a Linux account from that machine.
 
+The installer also takes options instead of questions, which lets a second, separate
+installation run next to the first one, with its own folder, service, data and port:
+
+```bash
+sudo bash install.sh --name mvmos-test --port 2070
+```
+
+`--name` is `mvmos` (the default, in `/opt/mvmos`) or `mvmos-` followed by lowercase letters,
+digits and dashes; it names both the folder `/opt/<name>` and the service `<name>.service`.
+`--host 127.0.0.1` makes the installation reachable from that computer only, and `--yes`
+accepts the terms without asking. The installer refuses a port that is already in use and
+never writes over an existing installation other than the default one.
+
 Updating afterwards is a button in Settings. If the UI is unreachable, from the terminal:
 
 ```bash
@@ -128,6 +141,15 @@ cd /opt/mvmos && sudo curl -fsSL https://github.com/mvmrik/mvmOS/archive/refs/he
 ```
 
 To remove it completely:
+
+```bash
+sudo bash /opt/mvmos/install.sh --uninstall
+```
+
+For another installation, add its name, for example `--uninstall --name mvmos-test`. The
+installer asks for confirmation (`--yes` skips it) and removes only a service that runs from
+that installation's folder and a folder that holds mvmOS. An installation older than this
+option is removed with:
 
 ```bash
 sudo systemctl disable --now mvmos 2>/dev/null || true; sudo rm -f /etc/systemd/system/mvmos.service; sudo systemctl daemon-reload; sudo rm -rf /opt/mvmos
