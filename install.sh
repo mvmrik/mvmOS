@@ -212,9 +212,9 @@ elif command -v dnf >/dev/null 2>&1; then
     $SUDO dnf install -y -q python3-virtualenv 2>/dev/null || true
 elif command -v zypper >/dev/null 2>&1; then
     $SUDO zypper install -y python3-virtualenv 2>/dev/null || true
-elif command -v pacman >/dev/null 2>&1; then
-    $SUDO pacman -Sy --noconfirm python 2>/dev/null || true
 fi
+# Arch ships venv inside its python package, and a lone "pacman -Sy python"
+# would be a partial upgrade that can break the rest of the system.
 
 # ── Virtualenv ────────────────────────────────────────────────────────────────
 echo "  [1/3] Creating virtualenv..."

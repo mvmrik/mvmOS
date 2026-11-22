@@ -75,7 +75,7 @@ For Google Maps, the key reaches the person's browser because the map is loaded 
 
 ## What is happening now
 
-When an app reports live activity for a profile, the activity button in the public header shows a running or paused indicator. Opening it displays current items above the recent actions, with clocks and the actions each app offers. There is no separate strip below the header. The button is present only while there is live or recent activity.
+When an app reports live activity for a profile, the activity button in the public header keeps its usual clock icon and gains a green frame. A green dot travels around the frame while an activity is running; when all current activities are paused, the dot stays in place and the frame pulses. With reduced motion enabled, both indicators remain still. Opening it displays current items above the recent actions, with clocks and the actions each app offers. There is no separate strip below the header. The button is present only while there is live or recent activity.
 
 The desktop has the same kind of button beside the notification bell, and phone users can reach it from the side panel. It can open the relevant desktop app, control a timer or share a recent action to Community. The desktop list is filtered to the signed-in Apps Hub profile; clearing it preserves other profiles' entries. Recent actions remain only in the browser, while current activities are read again from the server.
 

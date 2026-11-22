@@ -121,12 +121,13 @@ const LiveTray = (() => {
     s.textContent = `
 #live-btn{position:relative;border:0;background:transparent;cursor:pointer;padding:4px 7px;border-radius:var(--radius);font-size:1rem;flex-shrink:0;color:inherit;font-family:inherit;transition:background .12s;user-select:none}
 #live-btn:hover{background:var(--surface2)}
-.lt-btn.live{box-shadow:0 0 0 2px #a6e3a1;background:color-mix(in srgb,#a6e3a1 22%,transparent)}
-.lt-btn.live.paused{box-shadow:0 0 0 2px #f9e2af;background:color-mix(in srgb,#f9e2af 22%,transparent)}
-.lt-btn.live:not(.paused){animation:lt-pulse 1.6s ease-in-out infinite}
-@keyframes lt-pulse{50%{box-shadow:0 0 0 2px #a6e3a1,0 0 10px 3px #a6e3a1}}
-.lt-btn.live:after{content:"";position:absolute;top:-2px;right:-2px;width:10px;height:10px;border-radius:50%;background:#a6e3a1;border:2px solid var(--surface)}
-.lt-btn.live.paused:after{background:#f9e2af}
+.lt-btn.live{--lt-live-color:var(--green,color-mix(in srgb,#a6e3a1 55%,var(--text)));box-shadow:0 0 0 2px var(--lt-live-color);background:color-mix(in srgb,var(--lt-live-color) 22%,transparent)}
+.lt-btn.live.paused{animation:lt-pulse 1.6s ease-in-out infinite}
+@keyframes lt-pulse{50%{box-shadow:0 0 0 2px var(--lt-live-color),0 0 10px 3px var(--lt-live-color)}}
+.lt-btn.live:after{content:"";position:absolute;top:-2px;right:-2px;width:10px;height:10px;box-sizing:border-box;border-radius:50%;background:var(--lt-live-color);border:2px solid var(--surface);pointer-events:none}
+.lt-btn.live:not(.paused):after{top:0;left:0;right:auto;offset-path:inset(-1px round var(--lt-orbit-radius,var(--radius,8px)));offset-rotate:0deg;animation:lt-orbit 3s linear infinite}
+@keyframes lt-orbit{to{offset-distance:100%}}
+@media(prefers-reduced-motion:reduce){.lt-btn.live.paused,.lt-btn.live:not(.paused):after{animation:none}.lt-btn.live:not(.paused):after{offset-path:none;top:-2px;left:auto;right:-2px}}
 #live-panel{position:fixed;bottom:52px;right:8px;width:320px;max-width:calc(100vw - 16px);max-height:420px;overflow-y:auto;background:var(--surface);color:var(--text);
  border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);z-index:9400;display:none;flex-direction:column;font-size:.83rem}
 #live-panel.open{display:flex}
@@ -155,7 +156,7 @@ const LiveTray = (() => {
 .lt-when{font-size:.7rem;color:var(--text-dim)}
 .lt-foot{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 12px;font-size:.72rem;color:var(--text-dim)}
 .lt-clear{cursor:pointer;border:0;background:none;color:var(--accent);font:inherit;font-weight:700}
-.fs-tb-live-btn{background:none;border:none;color:var(--text);font-size:.75rem;cursor:pointer;padding:2px;position:relative;flex-shrink:0;border-radius:50%}
+.fs-tb-live-btn{--lt-orbit-radius:50%;background:none;border:none;color:var(--text);font-size:.75rem;cursor:pointer;padding:2px;position:relative;flex-shrink:0;border-radius:50%}
 `;
     document.head.appendChild(s);
   }
@@ -194,7 +195,7 @@ const LiveTray = (() => {
     const label = live.length ? `${T('ah_live_title', 'Happening now')} · ${T('feed_activity_title', 'Recent activity')}` : T('feed_activity_title', 'Recent activity');
     buttons().forEach(b => {
       b.className = (b.id === 'fs-live-btn' ? 'fs-tb-live-btn ' : '') + 'lt-btn' + (live.length ? ' live' + (running ? '' : ' paused') : '');
-      b.textContent = !live.length ? '🕘' : (running ? '▶️' : '⏸️');
+      b.textContent = '🕘';
       b.title = label;
       b.setAttribute('aria-label', label);
       b.setAttribute('aria-expanded', String(open));
