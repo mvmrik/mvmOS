@@ -641,7 +641,7 @@ const Desktop = (() => {
   // `pinKey` names what the pinned size/position belongs to. It defaults to the
   // window id; windows whose id is per-instance (filemanager-2, terminal-3,
   // a viewer keyed by file path) pass a stable key so a pin survives reopening.
-  function createWindow({ id, pinKey, title, icon, iconImage, width = 700, height = 450, onMount, onResize, onClose, appSettings, onAppSettings, closeToTray = false }) {
+  function createWindow({ id, pinKey, title, icon, iconImage, width = 700, height = 450, onMount, onResize, onClose, appSettings, onAppSettings, closeToTray = false, background = false }) {
     const pinId = pinKey || id;
     // bring existing to front if already open (or restore from tray)
     if (_trayItems[id]) { restoreFromTray(id); return windows[id]?.el; }
@@ -829,16 +829,23 @@ const Desktop = (() => {
     el.addEventListener('mousedown', () => focusWindow(id));
 
     desktop.appendChild(el);
-    // ensure new window is always on top, even if another window captures mousedown
-    zCounter += 10;
-    el.style.zIndex = zCounter;
-    focusWindow(id);
+    if (background) {
+      // Opened by the system, not by the person: it goes behind every open
+      // window (they all start above 8000) and takes no focus, so nobody is
+      // pulled out of what they are doing. The taskbar button flags it instead.
+      el.style.zIndex = 7990;
+    } else {
+      // ensure new window is always on top, even if another window captures mousedown
+      zCounter += 10;
+      el.style.zIndex = zCounter;
+      focusWindow(id);
+    }
 
     windows[id] = { el, pinId, title, icon: icon || '📦', iconImage: _lead != null ? _img : null, titleText: _lead, minimized: false, onTop: false, origStyle: null, closeToTray, onClose, onAppSettings: appSettings ? (onAppSettings || null) : null };
 
     // taskbar button
     const tbItem = document.createElement('div');
-    tbItem.className = 'taskbar-item active';
+    tbItem.className = background ? 'taskbar-item attention' : 'taskbar-item active';
     tbItem.dataset.winId = id;
     if (_lead != null) tbItem.innerHTML = _imgHtml + window.mvmOS._escHtml(_lead);
     else tbItem.textContent = title;
@@ -872,6 +879,7 @@ const Desktop = (() => {
       setTimeout(() => document.addEventListener('click', () => menu.remove(), { once: true }), 0);
     });
     taskbarWindows.appendChild(tbItem);
+    if (background && mobile) el.style.display = 'none';
 
     if (onMount) onMount(body);
 
@@ -908,7 +916,7 @@ const Desktop = (() => {
       windows[id].el.style.display = '';
       windows[id].el.style.zIndex = ++zCounter;
       const tb = taskbarWindows.querySelector(`[data-win-id="${id}"]`);
-      if (tb) tb.classList.add('active');
+      if (tb) { tb.classList.add('active'); tb.classList.remove('attention'); }
     }
     // Always-on-top windows are raised again after every focus change, so a
     // normal window can take the focus but never cover them.
@@ -918,6 +926,15 @@ const Desktop = (() => {
     if (windows[id]?.onTop) windows[id].el.style.zIndex = ++zCounter;
     if (id) _lastFocusedId = id;
     _updateFsActiveWindow(id);
+  }
+
+  // Draws attention to a window without bringing it forward: its taskbar
+  // button pulses until the window is focused. Used for anything that opens
+  // or updates by itself while someone may be busy elsewhere.
+  function flagWindow(id) {
+    const w = windows[id];
+    if (!w || w.el.classList.contains('focused')) return;
+    taskbarWindows.querySelector(`[data-win-id="${id}"]`)?.classList.add('attention');
   }
 
   function _updateFsActiveWindow(id) {
@@ -1623,6 +1640,10 @@ const Desktop = (() => {
     // an updated one only gets its blue dot. Either way the desktop is already
     // finished booting, so a slow or failed call here costs nothing.
     window.Wizard?.maybeAutoRun();
+    // News waits behind the windows, so it can be asked for right away and
+    // then now and then; the backend decides when the site is really asked.
+    setTimeout(() => window.NewsFeed?.check(), 8000);
+    setInterval(() => window.NewsFeed?.check(), 30 * 60 * 1000);
   }
 
   // ── Mobile swipe pages ────────────────────────────────────────────────────
@@ -2080,5 +2101,5 @@ const Desktop = (() => {
     if (launch) launch();
   }
 
-  return { createWindow, closeWindow, focusWindow, openApp, initMobileSidebar: _initMobileSidebar, sendToTray, restoreFromTray, setWindowCloseToTray, removeApp, reloadApp };
+  return { createWindow, closeWindow, focusWindow, flagWindow, openApp, initMobileSidebar: _initMobileSidebar, sendToTray, restoreFromTray, setWindowCloseToTray, removeApp, reloadApp };
 })();

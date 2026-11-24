@@ -30,6 +30,7 @@ STEPS = [
     {"id": "welcome", "added_in": 1},
     {"id": "regional", "added_in": 1},
     {"id": "privacy", "added_in": 1},
+    {"id": "news", "added_in": 2},
     {"id": "apps", "added_in": 1},
     {"id": "premium", "added_in": 1},
 ]

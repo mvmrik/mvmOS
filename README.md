@@ -43,7 +43,9 @@ languages: English, Bulgarian, German, Spanish, French, Japanese, Brazilian Port
 Russian and Simplified Chinese. It installs as a PWA, so it can sit on your phone's home
 screen and behave like an app.
 
-**Let it work on its own.** Notifications and a shared Clipboard come built in, and
+**Let it work on its own.** Notifications and a shared Clipboard come built in, a What's new window
+opens quietly behind your windows when mvmOS or your apps have news (an administrator chooses
+which kinds, and mvmos.org never learns which apps you have), and
 Automations lets your apps act by themselves: when something happens in an app, or at a
 chosen time, a rule can check what the app reports and call its functions or notify you.
 External APIs let your own scripts call the functions you choose, with tokens you can

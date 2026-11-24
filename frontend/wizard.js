@@ -312,6 +312,21 @@ const Wizard = (() => {
       body.querySelector('#wiz-stats-no').onclick = () => pick(false);
     },
 
+    news(body, step) {
+      body.innerHTML = `
+        <p class="wiz-lead">${t('wiz_step_news_lead')} ${badge(step)}</p>
+        <div id="wiz-news-prefs"><div class="wiz-note">${t('loading')}</div></div>
+        <p class="wiz-note">${t('wiz_step_news_note')}</p>`;
+      // The same choices the news window carries at its bottom — one piece of
+      // code, so the wizard and the window can never disagree about them.
+      // Everything is on until it is turned off; the answer is saved by the
+      // toggle itself, so skipping the wizard keeps whatever was chosen.
+      const host = body.querySelector('#wiz-news-prefs');
+      NewsFeed.loadState().then(() => {
+        if (_overlay && host.isConnected) NewsFeed.renderPrefs(host);
+      });
+    },
+
     apps(body) {
       body.innerHTML = `
         <p class="wiz-lead">${t('wiz_step_apps_lead')}</p>

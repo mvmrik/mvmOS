@@ -68,6 +68,7 @@ from .system import router as system_router
 from .widgets import router as widgets_router
 from .themes import router as themes_router
 from .updates import router as updates_router
+from .newsfeed import router as newsfeed_router
 from .cron import router as cron_router
 from .domains import router as domains_router
 from .projects import router as projects_router
@@ -118,6 +119,7 @@ app.include_router(system_router)
 app.include_router(widgets_router)
 app.include_router(themes_router)
 app.include_router(updates_router)
+app.include_router(newsfeed_router)
 app.include_router(cron_router)
 app.include_router(domains_router)
 app.include_router(projects_router)
@@ -159,6 +161,15 @@ async def _premium_heartbeat():
     from .premium import heartbeat_loop
 
     asyncio.create_task(heartbeat_loop())
+
+
+@app.on_event("startup")
+async def _news_feed_loop():
+    import asyncio
+
+    from .newsfeed import news_loop
+
+    asyncio.create_task(news_loop())
 
 
 @app.exception_handler(404)

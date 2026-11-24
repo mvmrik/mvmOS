@@ -1148,6 +1148,18 @@ var mvmOS = (() => {
       if (!res.ok) return;
       const d = await res.json();
       if (!d.up_to_date) {
+        // The news that explains a new version is asked for when the version
+        // is first noticed. If it is shown, it stands in for the notification;
+        // if it is closed unread, the notification comes with the next check.
+        let covered = false;
+        try {
+          if (localStorage.getItem('mvmos_news_os') !== String(d.remote)) {
+            localStorage.setItem('mvmos_news_os', String(d.remote));
+            const shown = await (window.NewsFeed?.checkNow?.() || []);
+            covered = shown.some(i => i.core);
+          }
+        } catch (_) {}
+        if (covered) return;
         _pushNotif(
           'mvmOS update available',
           t('os_update_body', { behind: d.commits_behind, s: d.commits_behind !== 1 ? 's' : '', local: d.local, remote: d.remote }),
@@ -1170,6 +1182,22 @@ var mvmOS = (() => {
         return;
       }
       const count = updates.length;
+      // The news that explains an update is asked for when the update is
+      // first noticed — only a change in WHAT is waiting does that, not the
+      // same pending updates five minutes later. If the news is shown, it
+      // stands in for the notification; if it is closed unread, the
+      // notification comes with the next check. One or the other, never both.
+      const signature = updates.map(u => `${u.type}:${u.id}@${u.new_version}`).sort().join('|');
+      let known = [];
+      try { known = JSON.parse(localStorage.getItem('mvmos_news_updates') || '[]'); } catch (_) {}
+      const fresh = updates.some(u => !known.includes(`${u.type}:${u.id}@${u.new_version}`));
+      if (fresh) {
+        try { localStorage.setItem('mvmos_news_updates', JSON.stringify(signature.split('|'))); } catch (_) {}
+        const shown = await (window.NewsFeed?.checkNow?.() || []);
+        if (version !== _updatesCheckVersion) return;
+        const waiting = new Set(updates.filter(u => u.type === 'app').map(u => u.id));
+        if (shown.some(i => i.changed.some(id => waiting.has(id)))) return;
+      }
       _pushNotif(
         t('updates_available', { n: count, s: count !== 1 ? 's' : '' }),
         t('updates_body'),
