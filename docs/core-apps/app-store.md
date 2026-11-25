@@ -18,6 +18,7 @@ App Store is the desktop client for browsing, installing, updating, and configur
 - Open an app’s own settings form when the app provides one.
 - Ask for confirmation before an installation that needs a server backend.
 - Show which apps have a licensed Premium build available.
+- Read translated short and full descriptions, capabilities and Premium features from the selected store's repository, falling back to English when a translation is unavailable. Listing texts are cached for one hour.
 
 ## Administrator confirmation
 

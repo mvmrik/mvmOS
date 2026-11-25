@@ -17,6 +17,8 @@ Anonymous usage statistics are optional and disabled until someone switches them
 
 ## Change safely
 
+The built-in Forum lets administrators discuss mvmOS and its apps on mvmos.org using an installation nickname. Threads can be followed or closed, and new replies to followed threads appear in Notifications. Followed threads stay on this server; checks share the existing news schedule, with additional checks while the Forum window is open. The public forum can also be read on mvmos.org.
+
 - Read an option before applying it to a production server.
 - Change one operational setting at a time when diagnosing a problem.
 - Keep a verified backup before changing services, domains, or system configuration.

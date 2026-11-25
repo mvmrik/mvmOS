@@ -69,6 +69,7 @@ from .widgets import router as widgets_router
 from .themes import router as themes_router
 from .updates import router as updates_router
 from .newsfeed import router as newsfeed_router
+from .forum import router as forum_router
 from .cron import router as cron_router
 from .domains import router as domains_router
 from .projects import router as projects_router
@@ -120,6 +121,7 @@ app.include_router(widgets_router)
 app.include_router(themes_router)
 app.include_router(updates_router)
 app.include_router(newsfeed_router)
+app.include_router(forum_router)
 app.include_router(cron_router)
 app.include_router(domains_router)
 app.include_router(projects_router)

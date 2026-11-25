@@ -43,9 +43,9 @@ def _satisfies_min_version(min_ver: str) -> bool:
     return _version_tuple(_core_version()) >= _version_tuple(min_ver)
 
 
-async def _fetch_json(url: str) -> dict:
+async def _fetch_json(url: str, ttl: int = _CACHE_TTL) -> dict:
     cached = _cache.get(url)
-    if cached and time.time() - cached[1] < _CACHE_TTL:
+    if cached and time.time() - cached[1] < ttl:
         return cached[0]
     async with httpx.AsyncClient(timeout=10) as client:
         r = await client.get(url)
@@ -517,31 +517,95 @@ async def list_plugins(session=Depends(get_current_session)):
     return JSONResponse(result)
 
 
-@router.get("/{plugin_id}/premium")
-async def store_premium_info(plugin_id: str, store_id: int = 0, session=Depends(get_current_session)):
-    """What Premium adds to a store app: source/apps/<id>/premium.json in the store the
-    app comes from, read next to that store's root manifest (the same file mvmos.org
-    lists). Only the store itself is asked, never the website. An empty answer just
-    means the store publishes no description."""
+_SOURCE_TTL = 3600  # texts in the store's git repo change only with a release
+
+
+async def _store_source_file(plugin_id: str, store_id: int, name: str):
+    """source/apps/<id>/<name> from the store the app comes from (the git repo that
+    holds the store's root manifest). Only the store is asked, never the website.
+    None when the id is invalid, the store is unknown or the file is not there."""
     import re
     if not re.fullmatch(r"[a-z0-9][a-z0-9_-]{0,63}", plugin_id):
-        return {"summary": "", "features": []}
+        return None
     with get_conn() as conn:
         row = conn.execute("SELECT manifest_url FROM stores WHERE id=?", (store_id,)).fetchone() if store_id else None
         if not row:
             row = conn.execute("SELECT manifest_url FROM stores WHERE official=1").fetchone()
     root = (row["manifest_url"] if row else "").rsplit("/", 1)[0]
     if not root:
-        return {"summary": "", "features": []}
+        return None
     try:
-        data = await _fetch_json(f"{root}/source/apps/{plugin_id}/premium.json")
+        data = await _fetch_json(f"{root}/source/apps/{plugin_id}/{name}", _SOURCE_TTL)
     except Exception:
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def _lang_block(data: dict, lang: str) -> dict:
+    """The translation block for lang inside a store file's "i18n", or {} (the file's
+    own English text is then used)."""
+    import re
+    if not re.fullmatch(r"[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})?", lang or ""):
+        return {}
+    block = (data.get("i18n") or {}).get(lang)
+    return block if isinstance(block, dict) else {}
+
+
+@router.get("/store-texts")
+async def store_texts(ids: str = "", store_id: int = 0, lang: str = "en", session=Depends(get_current_session)):
+    """Short descriptions in the person's language for many apps at once (the Store
+    list), read from store.json in the store's git repo and kept for an hour. Apps
+    without a translation for that language are simply left out."""
+    import asyncio
+    wanted = [i for i in dict.fromkeys(ids.split(",")) if i][:200]
+    files = await asyncio.gather(*(_store_source_file(i, store_id, "store.json") for i in wanted))
+    out = {}
+    for i, data in zip(wanted, files):
+        text = _lang_block(data, lang).get("short_description") if data else ""
+        if text:
+            out[i] = str(text)
+    return out
+
+
+@router.get("/{plugin_id}/store-text")
+async def store_text(plugin_id: str, store_id: int = 0, lang: str = "en", session=Depends(get_current_session)):
+    """What the store's git repo says about the app (store.json) in the person's
+    language: short description, full description and capabilities. Without a
+    translation the file's own English text is used for the full description and
+    capabilities; the short description stays empty so the catalog's one is kept."""
+    data = await _store_source_file(plugin_id, store_id, "store.json")
+    if not data:
+        return {"description": "", "long": "", "capabilities": []}
+    block = _lang_block(data, lang)
+    caps = block.get("capabilities") if isinstance(block.get("capabilities"), list) else data.get("capabilities")
+    return {
+        "description": str(block.get("short_description") or ""),
+        "long": str(block.get("description") or data.get("description") or ""),
+        "capabilities": [str(c) for c in (caps or []) if isinstance(c, str)],
+    }
+
+
+@router.get("/{plugin_id}/premium")
+async def store_premium_info(plugin_id: str, store_id: int = 0, lang: str = "en", session=Depends(get_current_session)):
+    """What Premium adds to a store app: source/apps/<id>/premium.json in the store the
+    app comes from, in the person's language when the file has that translation (English
+    otherwise). Only the store itself is asked, never the website. An empty answer just
+    means the store publishes no description."""
+    data = await _store_source_file(plugin_id, store_id, "premium.json")
+    if not data:
         return {"summary": "", "features": []}
+    block = _lang_block(data, lang)
+    summary = block.get("summary") or data.get("summary")
+    src = data.get("features") or []
+    tr = block.get("features")
+    # A translation is used only when it lines up with the English features one to one.
+    if isinstance(tr, list) and len(tr) == len(src):
+        src = [{**(o if isinstance(o, dict) else {}), **(t if isinstance(t, dict) else {})} for o, t in zip(src, tr)]
     features = [
         {k: str(f.get(k) or "") for k in ("title", "short", "description")}
-        for f in (data.get("features") or []) if isinstance(f, dict) and f.get("title")
+        for f in src if isinstance(f, dict) and f.get("title")
     ]
-    return {"summary": str(data.get("summary") or ""), "features": features}
+    return {"summary": str(summary or ""), "features": features}
 
 
 @router.get("/{plugin_id}/latest")

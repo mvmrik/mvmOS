@@ -106,6 +106,7 @@ var mvmOS = (() => {
       { id: 'clipboard',        name: t('app_clipboard'), icon: '📋', category: 'Utilities', system: true, launch: () => ClipboardApp.openWindow() },
       { id: 'automations',      name: t('app_automations'), icon: '⚡', category: 'Utilities', system: true, launch: () => AutomationsApp.openWindow() },
       { id: 'app-builder',      name: t('app_builder'), icon: '🧱', iconImage: '/icons/app-builder.svg', category: 'Developer Tools', system: true, launch: () => AppBuilder.openWindow() },
+      { id: 'forum',            name: t('app_forum'), icon: '💬', category: 'Communication', system: true, launch: () => ForumApp.openWindow() },
       { id: 'cron-manager',     name: t('app_cron_manager'), icon: '⏰', category: 'System & Administration', system: true, launch: () => CronManager.openWindow() },
     ];
   }

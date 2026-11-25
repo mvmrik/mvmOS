@@ -190,6 +190,13 @@ async def news_loop() -> None:
                 ok = await check_now()
         except Exception:
             ok = False
+        try:
+            # The Forum's followed threads are asked about on this same schedule
+            # and not otherwise (it asks nothing when no open thread is followed).
+            from .forum import check_now as forum_check
+            await forum_check()
+        except Exception:
+            pass
         wait = _CHECK_EVERY + random.uniform(0, _JITTER) if ok else _RETRY_AFTER
         try:
             # A change of the choices wakes the loop early.

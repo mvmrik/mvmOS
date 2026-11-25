@@ -348,7 +348,7 @@ const AppStore = (() => {
   }
 
   async function loadPremiumSection(el, app) {
-    const info = await fetch(`/api/plugins/${encodeURIComponent(app.id)}/premium?store_id=${encodeURIComponent(app.store_id || 0)}`)
+    const info = await fetch(`/api/plugins/${encodeURIComponent(app.id)}/premium?store_id=${encodeURIComponent(app.store_id || 0)}&lang=${encodeURIComponent(window.mvmOS.lang || 'en')}`)
       .then(r => r.json()).catch(() => ({}));
     if (!el.isConnected) return;
     const features = Array.isArray(info.features) ? info.features : [];
@@ -675,7 +675,29 @@ const AppStore = (() => {
         e.target.dataset.orig = t('um_update_btn');
         await installMvmosApp(body, app, e.target, t('um_updating'));
       });
+      row.dataset.appId = app.id;
       list.appendChild(row);
+    });
+    translateDescriptions(list, apps);
+  }
+
+  // The list shows the catalog's English text; where the store's git repo has a
+  // translation in the person's language it replaces it (one request per store).
+  function translateDescriptions(list, apps) {
+    const lang = window.mvmOS.lang || 'en';
+    if (lang === 'en') return;
+    const byStore = {};
+    apps.forEach(a => (byStore[a.store_id || 0] ||= []).push(a.id));
+    Object.entries(byStore).forEach(([store, ids]) => {
+      fetch(`/api/plugins/store-texts?store_id=${encodeURIComponent(store)}&lang=${encodeURIComponent(lang)}&ids=${encodeURIComponent(ids.join(','))}`)
+        .then(r => r.json()).then(map => {
+          if (!map || !list.isConnected) return;
+          list.querySelectorAll('.as-app-card').forEach(row => {
+            const text = map[row.dataset.appId];
+            const el = row.querySelector('.as-app-desc');
+            if (text && el) el.textContent = text;
+          });
+        }).catch(() => {});
     });
   }
 
@@ -705,6 +727,20 @@ const AppStore = (() => {
     const reviewsEl = detailBody.querySelector('.as-review-section');
     const premiumEl = detailBody.querySelector('.as-premium-section');
     if (premiumEl) loadPremiumSection(premiumEl, app);
+    // Full text from the store's git repo (store.json), in the person's language when
+    // it has a translation: the short description, the long one and the capabilities.
+    fetch(`/api/plugins/${encodeURIComponent(app.id)}/store-text?store_id=${encodeURIComponent(app.store_id || 0)}&lang=${encodeURIComponent(window.mvmOS.lang || 'en')}`)
+      .then(r => r.json()).then(d => {
+        const short = detailBody.querySelector('.as-detail-short');
+        if (!d || !short || !short.isConnected) return;
+        if (d.description) short.textContent = d.description;
+        const caps = Array.isArray(d.capabilities) ? d.capabilities : [];
+        if (!d.long && !caps.length) return;
+        const more = document.createElement('section');
+        more.className = 'as-detail-more';
+        more.innerHTML = `${d.long ? `<p class="as-detail-long">${_escHtml(d.long)}</p>` : ''}${caps.length ? `<h3>${_escHtml(t('appstore_capabilities'))}</h3><ul>${caps.map(c => `<li>${_escHtml(c)}</li>`).join('')}</ul>` : ''}`;
+        (detailBody.querySelector('.as-app-detail-actions') || short).after(more);
+      }).catch(() => {});
 
     // Everything you can do with an installed app: open it, its settings, pull the
     // newest version again when something is off, or remove it.

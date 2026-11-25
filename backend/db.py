@@ -56,6 +56,7 @@ SYSTEM_APPS = [
     {"id": "clipboard",       "name": "Clipboard",        "icon": "📋", "category": "Utilities"},
     {"id": "automations",     "name": "Automations",      "icon": "⚡", "category": "Utilities"},
     {"id": "app-builder",     "name": "App Builder",      "icon": "🧱", "category": "Developer Tools"},
+    {"id": "forum",           "name": "Forum",            "icon": "💬", "category": "Communication"},
 ]
 
 
