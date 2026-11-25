@@ -62,7 +62,7 @@ a task list, a website builder, a chat, an RSS reader, games, an AI assistant, a
 client, a torrent dashboard — installs from the App Store in a couple of clicks, and
 uninstalls just as cleanly.
 
-Core 1.29.0 adds a built-in Forum for server administrators to discuss mvmOS and its apps on mvmos.org, follow threads and receive reply notifications. The App Store also reads translated descriptions, capabilities and Premium details from each store's repository in the interface language.
+Core 1.30.0 lets the public Apps Hub page keep several profiles signed in at once and switch between them from the profile menu. Core 1.29.0 added a built-in Forum for server administrators to discuss mvmOS and its apps on mvmos.org, follow threads and receive reply notifications. The App Store also reads translated descriptions, capabilities and Premium details from each store's repository in the interface language.
 
 **Share it outside the server.** Many apps can publish a public page: a booking form, a
 shared shopping list, a quote for a client. Visitors get their own lightweight account

@@ -975,6 +975,7 @@ window._i18n = {
   'ah_registration_failed':       'Неуспешна регистрация',
   'ah_edit_profile':              'Редактирай профил ↗',
   'ah_logout':                    'Изход',
+  'ah_pub_add_account': 'Вход в друг профил',
   'ah_account_active':            'Твоят Apps Hub акаунт е активен. Приложенията, поддържащи Apps Hub, ще те разпознават автоматично.',
   'ah_pwa_install':               'Инсталирай Apps Hub',
   'ah_find_people':                'Намери хора',

@@ -975,6 +975,7 @@ window._i18n = {
   'ah_registration_failed':       'Registration failed',
   'ah_edit_profile':              'Edit profile ↗',
   'ah_logout':                    'Logout',
+  'ah_pub_add_account': 'Sign in to another profile',
   'ah_account_active':            'Your Apps Hub account is active. Apps that support Apps Hub will recognize you automatically.',
   'ah_pwa_install':               'Install Apps Hub',
   'ah_find_people':                'Find people',

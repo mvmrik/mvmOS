@@ -104,6 +104,8 @@ function _dropToken() {
 }
 let _token = _params.get('token') || localStorage.getItem('apphub_token') || _cookieToken();
 const _invitation = _params.get('invitation') || '';
+// Signing in to one more profile while another stays available in the menu.
+const _addMode = _params.get('add') === '1';
 let _hubName = 'Apps Hub';
 const _startTab = _params.get('tab') || 'apps';
 // Optional return URL: another app sends the user here to log in, then we send them back.
@@ -127,7 +129,7 @@ const t = (key, vars) => (window.t ? window.t(key, vars) : key);
 
 async function boot() {
   app.innerHTML = `<div style="flex:1;display:flex;align-items:center;justify-content:center;color:var(--fg2);font-size:.9rem">${t('ah_pub_loading')}</div>`;
-  if (_token) {
+  if (_token && !_addMode) {
     try {
       let r = await fetch(BASE + '/me', {headers:{'X-Pub-Token':_token}});
       // A token out of localStorage can be stale: logging out on the other
@@ -180,6 +182,7 @@ async function showAuth(tab) {
           <button id="a-reg"   style="flex:1;border:none;border-radius:6px;padding:7px;font-size:.88rem;font-weight:600;background:${tab==='register'?'var(--surface1)':'transparent'};color:${tab==='register'?'var(--fg)':'var(--fg2)'}">${t('ah_register')}</button>
         </div>` : ''}
         <div id="a-form"></div>
+        ${_addMode && localStorage.getItem('apphub_token') ? `<a href="/pub/apphub/" style="text-align:center;font-size:.82rem;color:var(--fg2)">${t('ah_cancel')}</a>` : ''}
       </div>
     </div>`;
   if (regAllowed) {

@@ -975,6 +975,7 @@ window._i18n = {
   'ah_registration_failed':       '注册失败',
   'ah_edit_profile':              '编辑个人资料 ↗',
   'ah_logout':                    '注销',
+  'ah_pub_add_account': '登录其他账户',
   'ah_account_active':            '你的 Apps Hub 账户已激活。支持 Apps Hub 的应用将自动识别你。',
   'ah_pwa_install':               '安装 Apps Hub',
   'ah_find_people':                '查找用户',

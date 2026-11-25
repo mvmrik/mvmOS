@@ -19,6 +19,8 @@ Apps Hub provides lightweight profiles for people using public pages. A profile 
 
 Public themes choose contrasting text for accent backgrounds, including buttons and selections. This updates when switching between light, dark and automatic appearance, independently of the desktop theme.
 
+A browser can hold several profiles at once. Choose **Sign in to another profile** in the profile menu of the public page, log in, and the profiles you have signed in to are listed in the same menu; picking one switches to it at once. The list stays in that browser only and the server learns nothing new. A profile whose sign-in has expired or ended elsewhere is dropped from the list when you try it, and logging out of one profile switches to another that is still signed in.
+
 The administrator can separately allow invitations. Each signed-in public user can then create a single-use registration link that expires after seven days, with up to 20 unused invitations at a time. Invitations may be used while public registration is open, or the administrator can close public registration and leave invitations enabled to make new accounts invitation-only. Used, expired, disabled, or otherwise invalid links cannot create an account. A user's own invitations are listed in the Invitations tab of the public Apps Hub page, reached from the profile menu: links still waiting show when they expire and can be copied again, accepted ones show who registered with them, and any invitation can be deleted, which stops a waiting link from working while an account created with it stays.
 
 ## Public app directory and PWA

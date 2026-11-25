@@ -975,6 +975,7 @@ window._i18n = {
   'ah_registration_failed':       '登録に失敗しました',
   'ah_edit_profile':              'プロフィールを編集 ↗',
   'ah_logout':                    'ログアウト',
+  'ah_pub_add_account': '別のプロファイルにログイン',
   'ah_account_active':            'Apps Hubアカウントは有効です。Apps Hub対応アプリはあなたを自動的に認識します。',
   'ah_pwa_install':               'Apps Hubをインストール',
   'ah_find_people':                'ユーザーを探す',

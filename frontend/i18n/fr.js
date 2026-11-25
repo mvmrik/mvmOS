@@ -975,6 +975,7 @@ window._i18n = {
   'ah_registration_failed':       "Échec de l'inscription",
   'ah_edit_profile':              'Modifier le profil ↗',
   'ah_logout':                    'Déconnexion',
+  'ah_pub_add_account': 'Se connecter à un autre profil',
   'ah_account_active':            'Votre compte Apps Hub est actif. Les applications compatibles Apps Hub vous reconnaîtront automatiquement.',
   'ah_pwa_install':               'Installer Apps Hub',
   'ah_find_people':                'Trouver des personnes',

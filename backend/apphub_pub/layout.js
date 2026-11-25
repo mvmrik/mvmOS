@@ -184,6 +184,63 @@
   // so there's no flash of the wrong theme/size on load.
   applyTheme();
 
+  // ── Several profiles in one browser ─────────────────────────────────
+  // Every login makes its own token and the earlier ones stay valid, so
+  // switching profile is only a matter of which token this browser presents.
+  // The list lives here, in this browser; the server learns nothing new.
+  var ACCOUNTS_KEY = 'apphub_accounts';
+  var COOKIE_DAYS = 30;
+
+  function loadAccounts() {
+    var list = [];
+    try { list = JSON.parse(localStorage.getItem(ACCOUNTS_KEY) || '[]'); } catch (e) {}
+    if (!Array.isArray(list)) return [];
+    return list.filter(function (a) { return a && a.token && a.id; });
+  }
+
+  function saveAccounts(list) {
+    try { localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(list.slice(0, 8))); } catch (e) {}
+  }
+
+  // Called with whoever the current token belongs to, so a profile already
+  // signed in before this existed joins the list on its next page load.
+  function rememberAccount(user, token) {
+    if (!user || !user.id || !token) return;
+    var entry = { id: user.id, token: token, username: user.username || '',
+                  display_name: user.display_name || user.username || '',
+                  avatar_color: user.avatar_color || '',
+                  avatar_svg: (user.avatar_svg && user.avatar_svg.length < 20000) ? user.avatar_svg : '' };
+    // A token belongs to exactly one profile: drop any other entry holding it.
+    var list = loadAccounts().filter(function (a) { return a.id === entry.id || a.token !== token; }), found = false;
+    list = list.map(function (a) { if (a.id === entry.id) { found = true; return entry; } return a; });
+    if (!found) list.push(entry);
+    saveAccounts(list);
+  }
+
+  function setActiveToken(token) {
+    localStorage.setItem(TOKEN_KEY, token);
+    document.cookie = 'apphub_token=' + encodeURIComponent(token) + '; Path=/; Max-Age=' + (COOKIE_DAYS * 86400) + '; SameSite=Lax';
+  }
+
+  async function switchAccount(id) {
+    var list = loadAccounts(), acc = null;
+    list.forEach(function (a) { if (a.id === id) acc = a; });
+    if (!acc) return;
+    var ok = false;
+    try {
+      var r = await fetch('/api/pub/apphub/me', { headers: { 'X-Pub-Token': acc.token } });
+      ok = r.ok && (await r.json()).id === id;
+    } catch (e) { return; }
+    if (!ok) {
+      // That sign-in has expired or was ended elsewhere: forget it.
+      saveAccounts(list.filter(function (a) { return a.id !== id; }));
+      renderHeader();
+      return;
+    }
+    setActiveToken(acc.token);
+    location.reload();
+  }
+
   function renderAvatar(user, size) {
     user = user || {};
     if (user.avatar_svg) {
@@ -967,6 +1024,7 @@
       'color:var(--fg,#cdd6f4);text-decoration:none;background:none;border:none;text-align:left;width:100%;' +
       'font-family:inherit;cursor:pointer}' +
       '.mvm-menu-item:hover{background:var(--surface2,#313244)}' +
+      '.mvm-menu-acct .mvm-menu-name{font-weight:500}' +
       '.mvm-menu-logout{color:var(--red,#f38ba8);border-top:1px solid var(--border,#45475a);margin-top:4px;padding-top:11px}' +
       '.mvm-ftr{display:flex;align-items:center;justify-content:center;gap:8px;padding:8px 16px;' +
       'border-top:1px solid var(--border,#45475a);background:var(--surface1,#181825);' +
@@ -1235,6 +1293,8 @@
       // anything on this machine, so a hint would only be noise.
       var hasCredits = !!(user && user.credits);
 
+      var otherAccounts = loadAccounts().filter(function (a) { return a.id !== user.id; });
+
       var box = document.createElement('div');
       box.className = 'mvm-user';
       box.innerHTML =
@@ -1244,6 +1304,11 @@
         + '</button>'
         + '<div class="mvm-menu" hidden>'
           + '<div class="mvm-menu-hdr">' + renderAvatar(user, 32) + '<span class="mvm-menu-name">' + esc(user.display_name) + '</span></div>'
+          + otherAccounts.map(function (a) {
+              return '<button class="mvm-menu-item mvm-menu-acct" type="button" data-acct="' + esc(a.id) + '">'
+                + renderAvatar(a, 22) + '<span class="mvm-menu-name">' + esc(a.display_name || a.username) + '</span></button>';
+            }).join('')
+          + '<button class="mvm-menu-item mvm-menu-add" type="button">＋ ' + esc(tt('ah_pub_add_account', 'Sign in to another profile')) + '</button>'
           + (hasCredits ? '<a class="mvm-menu-item" href="/pub/apphub/?tab=credits" data-tab="credits">🪙 ' + esc(creditsText) + '</a>' : '')
           + '<a class="mvm-menu-item" href="/pub/apphub/?tab=profile" data-tab="profile">👤 ' + esc(tt('ah_pub_tab_profile', 'Profile')) + '</a>'
           + '<a class="mvm-menu-item" href="/pub/apphub/?tab=favourites" data-tab="favourites">⭐ ' + esc(tt('ah_pub_tab_favourites', 'Favorites')) + '</a>'
@@ -1278,11 +1343,27 @@
         });
       });
 
+      box.querySelectorAll('.mvm-menu-acct').forEach(function (el) {
+        el.onclick = function () { switchAccount(el.dataset.acct); };
+      });
+      box.querySelector('.mvm-menu-add').onclick = function () {
+        location.href = '/pub/apphub/?add=1';
+      };
+
       box.querySelector('.mvm-menu-logout').onclick = async function () {
         var token = localStorage.getItem(TOKEN_KEY);
         try {
           await fetch('/api/pub/apphub/logout', { method: 'POST', headers: { 'X-Pub-Token': token || '' } });
         } catch (e) {}
+        // Another profile still signed in here takes over instead of the
+        // browser going back to the login page.
+        var rest = loadAccounts().filter(function (a) { return a.id !== user.id && a.token !== token; });
+        if (rest.length) {
+          saveAccounts(rest);
+          setActiveToken(rest[0].token);
+          location.href = '/pub/apphub/';
+          return;
+        }
         localStorage.clear();
         location.href = '/pub/apphub/';
       };
@@ -1332,7 +1413,12 @@
     try {
       var r = await fetch('/api/pub/apphub/me', { headers: { 'X-Pub-Token': token } });
       if (!r.ok) return null;
-      return await r.json();
+      var me = await r.json();
+      // The profile and the token it was fetched with are known to belong
+      // together only here; the header can be drawn again from an older
+      // answer after the token has already changed.
+      rememberAccount(me, token);
+      return me;
     } catch (e) { return null; }
   }
 
