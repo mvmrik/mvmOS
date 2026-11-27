@@ -15,7 +15,7 @@ Settings collects system-level configuration in one desktop window. Its home scr
 - Regional format and language.
 - Default apps, which decide the app that opens each file type from File Manager and the desktop, including types added by Store apps.
 - Start Menu configuration.
-- Backups, SSH access, and local user accounts.
+- Backups, SSH access (incoming keys and outgoing connections to other servers), and local user accounts.
 - System information and Core updates.
 - The Setup Wizard, which can be reopened after first login to review regional, privacy, app, and Premium choices.
 - Optional anonymous usage statistics, off until someone turns them on, asked once by the Setup Wizard and changeable at any time from the System section.

@@ -12,6 +12,7 @@ import mimetypes
 import os
 from pathlib import Path
 import secrets
+import sqlite3
 import subprocess
 import time
 from urllib.parse import urlsplit
@@ -47,6 +48,10 @@ def init_db():
             id TEXT PRIMARY KEY, grant_id TEXT NOT NULL, path TEXT NOT NULL,
             size INTEGER NOT NULL, offset INTEGER NOT NULL DEFAULT 0, created REAL NOT NULL);
         ''')
+        try:
+            c.execute('ALTER TABLE file_remote_uploads ADD COLUMN overwrite INTEGER NOT NULL DEFAULT 0')
+        except sqlite3.OperationalError:
+            pass
 
 
 def origin_url(value):
@@ -68,6 +73,39 @@ def origin_url(value):
         raise HTTPException(400, 'Use an HTTPS server address without a path')
 
 
+def _public_origin(request):
+    """The address this very browser uses for the server (it may sit behind a TLS proxy)."""
+    host = request.headers.get('host', request.url.netloc)
+    # The page that made the call knows its own address best.
+    for header in ('origin', 'referer'):
+        try:
+            u = urlsplit(request.headers.get(header, ''))
+        except ValueError:
+            continue
+        if u.scheme in ('http', 'https') and u.netloc.lower() == host.lower():
+            return u.scheme + '://' + u.netloc
+    scheme = request.headers.get('x-forwarded-proto', request.url.scheme).split(',')[0].strip()
+    try:
+        scheme = json.loads(request.headers.get('cf-visitor', '{}')).get('scheme', scheme)
+    except ValueError:
+        pass
+    return scheme + '://' + host
+
+
+def _resolve(row, request):
+    """Folders of this very server (SSH connections) are reached at the address the browser used."""
+    from . import ssh_connections
+    row = dict(row)
+    if row.get('origin') == ssh_connections.SELF_ORIGIN:
+        with get_conn() as c:
+            conn = c.execute('SELECT host,port,username FROM ssh_connections WHERE id=?', (row['grant_id'],)).fetchone()
+        row['origin'] = _public_origin(request)
+        row['managed'] = True
+        if conn:
+            row['subtitle'] = 'SSH ' + conn['username'] + '@' + conn['host'] + (':' + str(conn['port']) if conn['port'] != 22 else '')
+    return row
+
+
 def _owner(session):
     # Sharing never inherits a temporary administrator key from File Manager.
     return session['effective_user']
@@ -83,6 +121,11 @@ def _grant(grant_id):
     with get_conn() as c:
         row = c.execute('SELECT * FROM file_folder_grants WHERE id=?', (grant_id,)).fetchone()
     if not row:
+        # A connection managed in Settings > SSH is served by the same protocol.
+        from . import ssh_connections
+        found = ssh_connections.grant(grant_id)
+        if found:
+            return found
         raise HTTPException(410, 'Sharing has been revoked or does not exist')
     return dict(row)
 
@@ -101,7 +144,7 @@ def _authorize(grant_id, request, permission=None, allow_ticket=False):
     else:
         raise HTTPException(401, 'Invalid folder access key')
     origin = request.headers.get('origin')
-    if origin and origin != row['recipient']:
+    if origin and origin != row['recipient'] and row.get('kind') != 'ssh':
         raise HTTPException(403, 'This folder is shared with another server')
     if permission and permission not in json.loads(row['permissions']):
         raise HTTPException(403, 'This operation is not allowed for this shared folder')
@@ -140,6 +183,9 @@ def _command(row, op, **params):
 
 
 def _work(row, op, **params):
+    if row.get('kind') == 'ssh':
+        from . import ssh_connections
+        return ssh_connections.work(row, op, **params)
     command, data = _command(row, op, **params)
     try:
         r = subprocess.run(command, input=data, capture_output=True, text=True, timeout=30)
@@ -167,7 +213,7 @@ class ShareBody(BaseModel):
 
 
 @router.get('/api/files/sharing')
-def sharing_list(session=Depends(get_current_session)):
+def sharing_list(request: Request, session=Depends(get_current_session)):
     with get_conn() as c:
         outgoing = [dict(r) for r in c.execute(
             'SELECT id,name,root,recipient,permissions,created FROM file_folder_grants WHERE owner=? ORDER BY created',
@@ -177,7 +223,7 @@ def sharing_list(session=Depends(get_current_session)):
             (_owner(session),))]
     for row in outgoing:
         row['permissions'] = json.loads(row['permissions'])
-    return {'outgoing': outgoing, 'incoming': incoming}
+    return {'outgoing': outgoing, 'incoming': [_resolve(r, request) for r in incoming]}
 
 
 @router.post('/api/files/sharing')
@@ -245,18 +291,21 @@ def remote_connect(body: ConnectBody, request: Request, session=Depends(get_curr
 
 
 @router.get('/api/files/remote-folders/{folder_id}')
-def remote_details(folder_id: str, session=Depends(get_current_session)):
+def remote_details(folder_id: str, request: Request, session=Depends(get_current_session)):
     with get_conn() as c:
         row = c.execute('SELECT * FROM file_remote_folders WHERE id=? AND owner=?', (folder_id, _owner(session))).fetchone()
     if not row:
         raise HTTPException(404, 'Not found')
-    return JSONResponse(dict(row), headers={'Cache-Control': 'private, no-store'})
+    return JSONResponse(_resolve(row, request), headers={'Cache-Control': 'private, no-store'})
 
 
 @router.delete('/api/files/remote-folders/{folder_id}')
 def remote_disconnect(folder_id: str, request: Request, session=Depends(get_current_session)):
     _local_write(request)
     with get_conn() as c:
+        row = c.execute('SELECT origin FROM file_remote_folders WHERE id=? AND owner=?', (folder_id, _owner(session))).fetchone()
+        if row and row['origin'] == 'self':
+            raise HTTPException(400, 'This folder is an SSH connection; remove it in Settings')
         c.execute('DELETE FROM file_remote_folders WHERE id=? AND owner=?', (folder_id, _owner(session)))
     return {'ok': True}
 
@@ -316,6 +365,27 @@ def remote_operation(grant_id: str, operation: str, body: OperationBody, request
         raise HTTPException(404, 'Unknown operation')
     row = _authorize(grant_id, request, permission)
     return _work(row, operation, path=body.path, new_name=body.new_name)
+
+
+def local_call(grant_id, secret, suffix, method='GET', payload=None, headers=None):
+    """Call this server's own folder protocol without a network round trip (SSH connections)."""
+    import sys
+    from concurrent.futures import ThreadPoolExecutor
+    import httpx
+    app = sys.modules['backend.main'].app
+
+    async def go():
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://self.local') as client:
+            kwargs = {}
+            if isinstance(payload, dict):
+                kwargs['json'] = payload
+            elif payload is not None:
+                kwargs['content'] = payload
+            return await client.request(method, PREFIX + '/' + grant_id + suffix, timeout=120,
+                                        headers={'Authorization': 'Bearer ' + secret, **(headers or {})}, **kwargs)
+    with ThreadPoolExecutor(1) as pool:
+        response = pool.submit(lambda: asyncio.run(go())).result()
+    return response.status_code, response.content
 
 
 def _encode(data):
@@ -423,6 +493,10 @@ def remote_file(grant_id: str, request: Request, ticket: str, download: bool = F
         return Response(status_code=status, media_type=mime, headers=headers)
 
     def stream():
+        if row.get('kind') == 'ssh':
+            from . import ssh_connections
+            yield from ssh_connections.read_stream(row, path, start, length)
+            return
         command, data = _command(row, 'read', path=path, offset=start, length=length)
         proc = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
         try:
@@ -448,6 +522,7 @@ def remote_file(grant_id: str, request: Request, ticket: str, download: bool = F
 class UploadBody(BaseModel):
     path: str = Field(min_length=1, max_length=4096)
     size: int = Field(ge=0, le=1024 ** 4)
+    replace: bool = False  # overwrite an existing regular file; needs the edit right as well
 
 
 @router.post(PREFIX + '/{grant_id}/uploads', dependencies=[Depends(upload_identity)])
@@ -460,6 +535,10 @@ def upload_start(grant_id: str, body: UploadBody, request: Request):
     ticket = _ticket_ok(request, body.path)
     if ticket is not None and body.size > ticket['size']:
         raise HTTPException(403, 'This upload ticket is for a smaller file')
+    if body.replace:
+        if ticket is not None:
+            raise HTTPException(403, 'An upload ticket cannot replace a file')
+        _authorize(grant_id, request, 'edit')
     with get_conn() as c:
         stale = [dict(r) for r in c.execute('SELECT * FROM file_remote_uploads WHERE grant_id=? AND created<?', (grant_id, time.time() - 86400))]
         for upload in stale:
@@ -474,8 +553,8 @@ def upload_start(grant_id: str, body: UploadBody, request: Request):
         if count >= 20:
             raise HTTPException(409, 'Too many unfinished uploads; cancel an upload first')
         upload_id = secrets.token_hex(16)
-        c.execute('INSERT INTO file_remote_uploads(id,grant_id,path,size,created) VALUES (?,?,?,?,?)',
-                  (upload_id, grant_id, body.path, body.size, time.time()))
+        c.execute('INSERT INTO file_remote_uploads(id,grant_id,path,size,created,overwrite) VALUES (?,?,?,?,?,?)',
+                  (upload_id, grant_id, body.path, body.size, time.time(), int(body.replace)))
     return {'id': upload_id, 'chunk_size': _CHUNK}
 
 
@@ -505,7 +584,7 @@ async def upload_chunk(grant_id: str, upload_id: str, request: Request):
             _authorize(grant_id, request, 'upload', allow_ticket=True)
             final = offset + len(data) == upload['size']
             _work(row, 'upload', path=upload['path'], upload_id=upload_id, offset=offset,
-                  data=base64.b64encode(data).decode(), final=final)
+                  data=base64.b64encode(data).decode(), final=final, replace=bool(upload["overwrite"]))
             if final:
                 c.execute('DELETE FROM file_remote_uploads WHERE id=?', (upload_id,))
             else:

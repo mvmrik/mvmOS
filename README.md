@@ -33,7 +33,7 @@ The Devices place lists extra and external disks. An administrator can mount the
 See the [File Manager guide](docs/core-apps/file-manager.md#disks-and-external-drives).
 
 **Run the machine.** Manage Linux users, cron jobs, systemd services, nginx sites and
-domains, SSH keys, and scheduled backups you can download or restore. Watch CPU, memory and
+domains, SSH keys and outgoing SSH connections that show other servers as shared folders, and scheduled backups you can download or restore. Watch CPU, memory and
 disk while you do it. System changes require administrator rights checked by the server;
 sudo users confirm their own password, with a key valid for fifteen minutes without use.
 

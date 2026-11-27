@@ -1115,7 +1115,7 @@ const FileManager = (() => {
           row.addEventListener('dblclick', e => {
             if (e.target.classList.contains('fm-editable')) return;
             const fullPath = this.joinPath(this.currentPath, entry.name);
-            if (SharedFiles.parse(fullPath)) this.remoteAction(() => SharedFiles.openFile(fullPath, entry));
+            if (SharedFiles.parse(fullPath)) this.remoteAction(() => FileAssoc.open(fullPath, this._assocCtx()));
             else FileAssoc.open(fullPath, this._assocCtx());
           });
         }
@@ -1201,7 +1201,10 @@ const FileManager = (() => {
         if (row) {
           const entry = this._lastEntries.find(item => item.name === row.dataset.name);
           if (entry?.type === 'dir') items.push({label: '📂 ' + t('sf_open'), action: () => this.navigate(this.joinPath(this.currentPath, entry.name))});
-          else if (permissions.includes('read')) items.push({label: '📄 ' + t('sf_open'), action: () => SharedFiles.openFile(this.joinPath(this.currentPath, entry.name), entry)});
+          else if (permissions.includes('read')) {
+            items.push({label: '📄 ' + t('sf_open'), action: () => this.remoteAction(() => FileAssoc.open(this.joinPath(this.currentPath, entry.name), this._assocCtx()))});
+            if (names.length === 1) items.push({label: t('fa_open_with_menu'), action: () => this.remoteAction(() => FileAssoc.openWith(this.joinPath(this.currentPath, entry.name), this._assocCtx()))});
+          }
           if (names.length === 1 && permissions.includes('edit')) items.push({label: '✏️ ' + t('sf_rename'), action: () => this.renamePrompt(names[0])});
           if (permissions.includes('read')) {
             items.push({label: '📋 ' + t('sf_copy_files'), action: () => { window._fmClipboard = {paths: names.map(n => this.joinPath(this.currentPath, n)), cut: false}; }});

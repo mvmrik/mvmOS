@@ -99,23 +99,37 @@ const FileAssoc = (() => {
 
   // Every handler that can open this kind of file; with openWith also the
   // editors that open anything.
-  function candidates(ext, openWith) {
-    return all().filter(h => claims(h, ext) || (openWith && h.any));
+  // Files of a shared or SSH folder are not on this disk: only the viewers and
+  // editors that can read them in place are offered there.
+  const REMOTE_OK = ['imageviewer', 'mediaplayer', 'codeeditor', 'texteditor'];
+  const isRemote = path => !!(window.SharedFiles && SharedFiles.parse(path));
+
+  function candidates(ext, openWith, remote) {
+    return all().filter(h => (!remote || REMOTE_OK.includes(h.id)) && (claims(h, ext) || (openWith && h.any)));
+  }
+
+  function run(h, path, ctx) {
+    if (isRemote(path) && (h.id === 'imageviewer' || h.id === 'mediaplayer')) {
+      const name = path.split('/').pop();
+      const entry = ((ctx && ctx.siblings) || []).find(e => e.name === name) || { name, size: 0 };
+      return SharedFiles.openFile(path, entry);
+    }
+    return h.open(path, ctxOf(ctx));
   }
 
   // The handler the file opens with when nobody chose: built-ins first, in
   // their old order, then the apps.
-  function builtinDefault(ext) {
-    return all().find(h => claims(h, ext)) || null;
+  function builtinDefault(ext, remote) {
+    return candidates(ext, false, remote)[0] || null;
   }
 
-  function handlerFor(ext) {
+  function handlerFor(ext, remote) {
     const chosen = _map && _map[ext];
     if (chosen) {
-      const h = candidates(ext, true).find(x => x.id === chosen);
+      const h = candidates(ext, true, remote).find(x => x.id === chosen);
       if (h) return h;
     }
-    return builtinDefault(ext);
+    return builtinDefault(ext, remote);
   }
 
   function ctxOf(ctx) {
@@ -126,6 +140,13 @@ const FileAssoc = (() => {
   async function open(path, ctx) {
     await load();
     const ext = extOf(path.split('/').pop());
+    const remote = isRemote(path);
+    if (remote) {
+      const h = handlerFor(ext, true);
+      // Nothing here opens it (an archive, a binary): the plain preview with a download button.
+      if (!h) return SharedFiles.openFile(path, ((ctx && ctx.siblings) || []).find(e => e.name === path.split('/').pop()) || { name: path.split('/').pop(), size: 0 });
+      return run(h, path, ctx);
+    }
     // Nothing chosen yet and an installed app competes with another handler:
     // ask instead of guessing. One claimer opens straight away.
     if (!(_map && _map[ext] && candidates(ext, true).some(x => x.id === _map[ext]))) {
@@ -134,7 +155,7 @@ const FileAssoc = (() => {
     }
     const h = handlerFor(ext);
     if (!h) return openWith(path, ctx);
-    h.open(path, ctxOf(ctx));
+    run(h, path, ctx);
   }
 
   // "Open with…": pick an app, and optionally keep it for this type.
@@ -142,8 +163,9 @@ const FileAssoc = (() => {
     await load();
     const name = path.split('/').pop();
     const ext = extOf(name);
-    const list = candidates(ext, true);
-    const current = handlerFor(ext);
+    const remote = isRemote(path);
+    const list = candidates(ext, true, remote);
+    const current = handlerFor(ext, remote);
     const esc = v => String(v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
     if (_closeDialog) _closeDialog();
@@ -180,7 +202,7 @@ const FileAssoc = (() => {
       const always = ov.querySelector('.fa-always')?.checked;
       close();
       if (always) await setDefault(ext, h.id);
-      h.open(path, ctxOf(ctx));
+      run(h, path, ctx);
     };
   }
 

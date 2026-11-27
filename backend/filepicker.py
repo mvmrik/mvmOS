@@ -118,7 +118,10 @@ def shared_folder(session, folder_id):
                         (folder_id, _user(session))).fetchone()
     if not row:
         raise HTTPException(404, "Shared folder not found")
-    return dict(row)
+    row = dict(row)
+    if row["origin"] == "self":
+        row["origin"] = ""
+    return row
 
 
 def shared_file_url(owner, folder_id, path, ttl=3600):
@@ -135,7 +138,9 @@ def shared_file_url(owner, folder_id, path, ttl=3600):
         raise HTTPException(404, "Shared folder is no longer connected")
     from urllib.parse import quote
     ticket = shared_files.sign_ticket(hashlib.sha256(row["secret"].encode()).hexdigest(), path, ttl)
-    return f"{row['origin']}{shared_files.PREFIX}/{row['grant_id']}/file?ticket={quote(ticket, safe='')}"
+    # A folder of this very server (an SSH connection) is addressed relative to the page.
+    origin = "" if row["origin"] == "self" else row["origin"]
+    return f"{origin}{shared_files.PREFIX}/{row['grant_id']}/file?ticket={quote(ticket, safe='')}"
 
 
 def shared_upload_ticket(owner, folder_id, path, size, ttl=4 * 3600):
@@ -158,7 +163,8 @@ def shared_upload_ticket(owner, folder_id, path, size, ttl=4 * 3600):
     if not row:
         raise HTTPException(404, "Shared folder is no longer connected")
     ticket = shared_files.sign_upload_ticket(hashlib.sha256(row["secret"].encode()).hexdigest(), path, size, ttl)
-    return {"base": f"{row['origin']}{shared_files.PREFIX}/{row['grant_id']}", "ticket": ticket, "path": path}
+    origin = "" if row["origin"] == "self" else row["origin"]
+    return {"base": f"{origin}{shared_files.PREFIX}/{row['grant_id']}", "ticket": ticket, "path": path}
 
 
 # ── Reading a whole folder in place (a library of files that stay where they are) ──
@@ -291,6 +297,11 @@ def _shared_call(row, suffix, method="GET", payload=None, headers=None, timeout=
     import json
     import urllib.error
     import urllib.request
+    if row["origin"] == "self":
+        status, content = shared_files.local_call(row["grant_id"], row["secret"], suffix, method, payload, headers)
+        if status >= 400:
+            raise HTTPException(403 if status in (401, 403) else 502, "The shared folder refused this")
+        return content
     url = f"{row['origin']}{shared_files.PREFIX}/{row['grant_id']}{suffix}"
     data = None if payload is None else (payload if isinstance(payload, bytes) else json.dumps(payload).encode())
     req = urllib.request.Request(url, data=data, method=method, headers={

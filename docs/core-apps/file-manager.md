@@ -40,6 +40,10 @@ A user who may use sudo can right-click a folder, or the empty space in a folder
 
 Administrator access ends after 15 minutes without use, the same way sudo asks again after a while. The badge counts down the remaining time, and every action in the window, or in an editor opened from it, starts the count again. When the time runs out, the next action asks for the password again and then continues. Click the badge to leave administrator mode at any time. Deleting in an administrator window is always permanent, because root cannot put items into your Trash, so File Manager asks you to confirm it first. Your password is checked on the server for every administrator key, and a key only works with the session it was issued for.
 
+## Outgoing SSH connections
+
+In Settings, the SSH access area has an Outgoing mode. An administrator adds a connection to another server by giving a name, address, port, user and an optional start folder. mvmOS creates a private key for that connection only, shows its public part to add to `~/.ssh/authorized_keys` on the other server, and deletes it when the connection is removed. Each connection has its own days and hours and is refused outside them. A connection appears as a shared folder, so File Manager and every app that opens shared folders use it like any other. Files in such a folder open in the viewers and editors that can read them in place, and open read-only when the connection does not allow changes.
+
 ## Shared folders between servers
 
 Both servers need Core with shared-folder support. On the computer that stores the

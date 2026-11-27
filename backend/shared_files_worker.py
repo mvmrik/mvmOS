@@ -145,9 +145,24 @@ def main(body):
                         os.fchmod(f.fileno(), 0o644)
                         os.fsync(f.fileno())
                 if body['final']:
-                    # Hard link creates the destination only if it does not exist.
-                    os.link(temp, name, src_dir_fd=parent, dst_dir_fd=parent, follow_symlinks=False)
-                    os.unlink(temp, dir_fd=parent)
+                    if body.get('replace'):
+                        # Replacing a file: the target must already be a regular file, keeps its mode.
+                        try:
+                            old = os.stat(name, dir_fd=parent, follow_symlinks=False)
+                            if not stat.S_ISREG(old.st_mode):
+                                raise ValueError('Only regular files can be replaced')
+                            os.chmod(temp, stat.S_IMODE(old.st_mode), dir_fd=parent)
+                            os.rename(temp, name, src_dir_fd=parent, dst_dir_fd=parent)
+                        except BaseException:
+                            try:
+                                os.unlink(temp, dir_fd=parent)
+                            except OSError:
+                                pass
+                            raise
+                    else:
+                        # Hard link creates the destination only if it does not exist.
+                        os.link(temp, name, src_dir_fd=parent, dst_dir_fd=parent, follow_symlinks=False)
+                        os.unlink(temp, dir_fd=parent)
             else:
                 raise ValueError('Unknown operation')
             return {'ok': True}

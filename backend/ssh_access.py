@@ -258,6 +258,8 @@ async def update_key(key_id: int, body: KeySettingsRequest, session=Depends(get_
 def run(now, _db_path="", _config=None):
     """mvmOS scheduler entrypoint."""
     reconcile(now)
+    from . import ssh_connections
+    ssh_connections.close_unallowed(now)
 
 
 @router.delete("/keys/{key_id}")

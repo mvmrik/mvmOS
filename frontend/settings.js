@@ -2818,10 +2818,111 @@ const Settings = (() => {
     _render();
   }
 
+  async function renderSshOutgoing(panel, esc) {
+    panel.innerHTML = `<div style="color:var(--text-dim);font-size:.85rem">${t('loading')}</div>`;
+    let data;
+    try { data = await fetch('/api/ssh-connections').then(r => { if (!r.ok) throw new Error(); return r.json(); }); }
+    catch (_) { panel.innerHTML = `<div style="color:#e05555">${t('ssh_access_load_error')}</div>`; return; }
+    const hour12 = currentSettings.time_format === '12';
+    const formatTime = value => { if (value === '24:00') return hour12 ? '12:00 AM' : value; const [h, m] = value.split(':').map(Number); return hour12 ? `${((h + 11) % 12) + 1}:${String(m).padStart(2, '0')} ${h < 12 ? 'AM' : 'PM'}` : value; };
+    const timeValues = Array.from({length: 97}, (_, i) => i === 96 ? '24:00' : `${String(Math.floor(i / 4)).padStart(2, '0')}:${String((i % 4) * 15).padStart(2, '0')}`);
+    const timeOptions = selected => timeValues.map(value => `<option value="${value}" ${value === selected ? 'selected' : ''}>${formatTime(value)}</option>`).join('');
+    const dayNames = [t('ssh_access_mon'), t('ssh_access_tue'), t('ssh_access_wed'), t('ssh_access_thu'), t('ssh_access_fri'), t('ssh_access_sat'), t('ssh_access_sun')];
+    const password = () => window.mvmOS.confirmPassword(t('ssh_access_title'), t('ssh_access_password_prompt'));
+    const request = async (url, options = {}) => {
+      const res = await fetch(url, {headers: {'Content-Type': 'application/json'}, ...options});
+      if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(typeof err.detail === 'string' ? err.detail : t('ssh_access_action_error')); }
+      return res.json();
+    };
+    const overlay = html => {
+      const ov = document.createElement('div');
+      ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center';
+      ov.innerHTML = `<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:20px;width:440px;max-width:92%;max-height:92vh;overflow:auto">${html}</div>`;
+      document.body.appendChild(ov);
+      return ov;
+    };
+    const rows = data.connections.map(c => `
+      <div class="settings-row" style="align-items:flex-start;gap:12px">
+        <div style="flex:1;min-width:0"><div style="font-weight:600">${esc(c.name)} ${!c.enabled ? `<span style="color:var(--text-dim);font-size:.75rem">${t('ssh_out_disabled')}</span>` : c.active_now ? `<span style="color:#55b971;font-size:.75rem">${t('ssh_access_active')}</span>` : `<span style="color:var(--text-dim);font-size:.75rem">${t('ssh_access_inactive')}</span>`}</div>
+        <div style="font:0.78rem monospace;color:var(--text-dim);margin-top:3px">${esc(c.username)}@${esc(c.host)}${c.port !== 22 ? ':' + c.port : ''}${c.base_path ? ' · ' + esc(c.base_path) : ''}</div>
+        <div style="font-size:.76rem;color:var(--text-dim);margin-top:4px">${t('ssh_access_schedule')}: ${c.days.map(d => dayNames[d]).join(', ')} · ${formatTime(c.start_time)}–${formatTime(c.end_time)}</div></div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end"><button class="s-btn-sm ssh-out-key" data-id="${c.id}">${t('ssh_out_show_key')}</button><button class="s-btn-sm ssh-out-edit" data-id="${c.id}">${t('ssh_access_settings')}</button><button class="s-btn-sm s-btn-danger ssh-out-delete" data-id="${c.id}">${t('ssh_access_remove')}</button></div>
+      </div>`).join('');
+    panel.innerHTML = `<div class="settings-section"><div class="settings-section-title">${t('ssh_mode_outgoing')}</div>${!data.available ? `<div style="margin-top:10px;color:#e05555;font-size:.82rem">${t('ssh_out_unavailable')}</div>` : ''}</div>
+      <div class="settings-section"><div>${rows || `<div style="color:var(--text-dim);font-size:.83rem">${t('ssh_out_empty')}</div>`}</div>
+      ${data.can_admin ? `<button class="s-btn s-btn-primary" id="ssh-out-add" style="margin-top:12px" ${data.available ? '' : 'disabled'}>${t('ssh_out_add')}</button>` : `<div style="margin-top:10px;color:var(--text-dim);font-size:.82rem">${t('ssh_out_admin_required')}</div>`}</div>`;
+    const refresh = () => renderSshOutgoing(panel, esc);
+
+    function showKey(connection) {
+      const ov = overlay(`<div style="font-weight:700;margin-bottom:10px">${t('ssh_out_key_title')}</div><div style="font-size:.8rem;color:var(--text-dim);line-height:1.45;margin-bottom:10px">${t('ssh_out_key_hint')}</div><textarea readonly rows="4" class="s-input" style="width:100%;box-sizing:border-box;font:0.74rem monospace;resize:none">${esc(connection.public_key)}</textarea><div id="sok-result" style="font-size:.8rem;margin-top:10px;min-height:1.2em"></div><div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px"><button class="s-btn-sm" id="sok-copy">${t('ssh_out_copy')}</button><button class="s-btn-sm" id="sok-test">${t('ssh_out_test')}</button><button class="s-btn" id="sok-done">${t('ssh_out_done')}</button></div>`);
+      const area = ov.querySelector('textarea'); area.addEventListener('focus', () => area.select());
+      ov.querySelector('#sok-copy').onclick = async () => {
+        try { await navigator.clipboard.writeText(connection.public_key); } catch (_) { area.focus(); area.select(); document.execCommand('copy'); }
+        ov.querySelector('#sok-copy').textContent = t('ssh_out_copied');
+      };
+      ov.querySelector('#sok-test').onclick = async () => {
+        const out = ov.querySelector('#sok-result'); out.style.color = 'var(--text-dim)'; out.textContent = t('ssh_out_testing');
+        try {
+          const r = await request(`/api/ssh-connections/${connection.id}/test`, {method: 'POST'});
+          out.style.color = r.ok ? '#55b971' : '#e05555';
+          out.textContent = r.ok ? t('ssh_out_test_ok') : (r.error === 'not_allowed' ? t('ssh_out_not_allowed') : t('ssh_out_test_fail', {error: r.error}));
+        } catch (e) { out.style.color = '#e05555'; out.textContent = t('ssh_out_test_fail', {error: e.message}); }
+      };
+      ov.querySelector('#sok-done').onclick = () => ov.remove();
+    }
+
+    function edit(connection) {
+      const c = connection || {name: '', host: '', port: 22, username: '', base_path: '', enabled: true, days: [0, 1, 2, 3, 4, 5, 6], start_time: '00:00', end_time: '24:00'};
+      const field = (id, label, value, extra = '') => `<label style="font-size:.8rem;display:block;margin-bottom:10px">${label}<input id="${id}" class="s-input" style="width:100%;margin-top:4px;box-sizing:border-box" value="${esc(value)}" ${extra}></label>`;
+      const ov = overlay(`<div style="font-weight:700;margin-bottom:14px">${connection ? t('ssh_access_settings') : t('ssh_out_add')}</div>
+        ${field('soc-name', t('ssh_out_name'), c.name, 'maxlength="120"')}
+        <div style="display:flex;gap:10px"><div style="flex:1">${field('soc-host', t('ssh_out_host'), c.host, 'placeholder="server.example.com"')}</div><div style="width:90px">${field('soc-port', t('ssh_out_port'), c.port, 'type="number" min="1" max="65535"')}</div></div>
+        ${field('soc-user', t('ssh_out_user'), c.username, 'autocomplete="off"')}
+        ${field('soc-path', t('ssh_out_path'), c.base_path, 'placeholder="/home/user/files"')}<div style="font-size:.74rem;color:var(--text-dim);margin:-6px 0 10px">${t('ssh_out_path_hint')}</div>
+        <label class="settings-row"><span>${t('ssh_access_enabled_label')}</span><input id="soc-enabled" type="checkbox" ${c.enabled ? 'checked' : ''}></label>
+        <div style="font-size:.82rem;margin:12px 0 6px">${t('ssh_access_days')}</div><div style="display:flex;flex-wrap:wrap;gap:8px">${dayNames.map((name, i) => `<label style="font-size:.78rem"><input type="checkbox" class="soc-day" value="${i}" ${c.days.includes(i) ? 'checked' : ''}> ${name}</label>`).join('')}</div>
+        <div style="display:flex;gap:12px;margin-top:16px"><label style="flex:1;font-size:.8rem">${t('ssh_access_start')}<select id="soc-start" class="s-input">${timeOptions(c.start_time)}</select></label><label style="flex:1;font-size:.8rem">${t('ssh_access_end')}<select id="soc-end" class="s-input">${timeOptions(c.end_time)}</select></label></div>
+        <div id="soc-error" style="color:#e05555;font-size:.8rem;margin-top:10px;min-height:1.2em"></div>
+        <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:10px"><button class="s-btn-sm" id="soc-cancel">${t('cancel')}</button><button class="s-btn" id="soc-save">${connection ? t('save') : t('ssh_out_create')}</button></div>`);
+      ov.querySelector('#soc-cancel').onclick = () => ov.remove();
+      ov.querySelector('#soc-name').focus();
+      ov.querySelector('#soc-save').onclick = async () => {
+        const val = id => ov.querySelector('#' + id).value.trim();
+        const err = ov.querySelector('#soc-error'); err.textContent = '';
+        if (!val('soc-name') || !val('soc-host') || !val('soc-user')) { err.textContent = t('ssh_out_required'); return; }
+        const pass = await password(); if (pass === null) return;
+        const payload = {name: val('soc-name'), host: val('soc-host'), port: Number(val('soc-port')) || 22, username: val('soc-user'), base_path: val('soc-path'),
+          enabled: ov.querySelector('#soc-enabled').checked, days: [...ov.querySelectorAll('.soc-day:checked')].map(el => Number(el.value)),
+          start_time: ov.querySelector('#soc-start').value, end_time: ov.querySelector('#soc-end').value, password: pass};
+        try {
+          const saved = await request(connection ? `/api/ssh-connections/${connection.id}` : '/api/ssh-connections', {method: connection ? 'PUT' : 'POST', body: JSON.stringify(payload)});
+          ov.remove(); await refresh();
+          if (!connection) showKey(saved);
+        } catch (e) { err.textContent = e.message; }
+      };
+    }
+
+    panel.querySelector('#ssh-out-add')?.addEventListener('click', () => edit(null));
+    panel.querySelectorAll('.ssh-out-key').forEach(b => b.addEventListener('click', () => showKey(data.connections.find(c => c.id === b.dataset.id))));
+    panel.querySelectorAll('.ssh-out-edit').forEach(b => b.addEventListener('click', () => edit(data.connections.find(c => c.id === b.dataset.id))));
+    panel.querySelectorAll('.ssh-out-delete').forEach(b => b.addEventListener('click', async () => {
+      if (!confirm(t('ssh_out_remove_confirm'))) return;
+      const pass = await password(); if (pass === null) return;
+      try { await request(`/api/ssh-connections/${b.dataset.id}`, {method: 'DELETE', body: JSON.stringify({password: pass})}); await refresh(); } catch (e) { alert(e.message); }
+    }));
+  }
+
+  let sshMode = 'in';
+  let sshInfoOpen = false;
   async function renderSshAccess(body) {
-    const panel = body.querySelector('#sp-sshaccess');
-    if (!panel) return;
+    const outer = body.querySelector('#sp-sshaccess');
+    if (!outer) return;
     const esc = value => String(value).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+    outer.innerHTML = `<div style="display:flex;gap:6px;margin-bottom:14px;align-items:center">${[['in','ssh_mode_incoming'],['out','ssh_mode_outgoing']].map(([mode, key]) => `<button class="${sshMode === mode ? 's-btn s-btn-primary' : 's-btn-sm'}" data-ssh-mode="${mode}">${t(key)}</button>`).join('')}<button class="s-btn-sm" id="ssh-info-btn" style="margin-left:auto;border-radius:50%;width:28px;height:28px;padding:0;font-weight:700" title="${esc(t('ssh_help_title'))}" aria-expanded="${sshInfoOpen}">i</button></div><div id="ssh-info" class="settings-section" style="${sshInfoOpen ? '' : 'display:none;'}margin-bottom:14px"><div class="settings-section-title">${t('ssh_help_title')}</div><div style="font-size:.82rem;color:var(--text-dim);line-height:1.5"><p style="margin:0 0 8px">${t('ssh_help_in')}</p><p style="margin:0 0 8px">${t('ssh_help_out')}</p><p style="margin:0">${t('ssh_access_desc')}</p><p style="margin:8px 0 0">${t('ssh_out_desc')}</p></div></div><div class="ssh-view"></div>`;
+    outer.querySelector('#ssh-info-btn').addEventListener('click', () => { sshInfoOpen = !sshInfoOpen; const box = outer.querySelector('#ssh-info'); box.style.display = sshInfoOpen ? '' : 'none'; outer.querySelector('#ssh-info-btn').setAttribute('aria-expanded', sshInfoOpen); });
+    outer.querySelectorAll('[data-ssh-mode]').forEach(button => button.addEventListener('click', () => { sshMode = button.dataset.sshMode; renderSshAccess(body); }));
+    const panel = outer.querySelector('.ssh-view');
+    if (sshMode === 'out') return renderSshOutgoing(panel, esc);
     panel.innerHTML = `<div style="color:var(--text-dim);font-size:.85rem">${t('loading')}</div>`;
     let status, keys;
     try {
@@ -2841,8 +2942,7 @@ const Settings = (() => {
         <div style="display:flex;gap:6px"><button class="s-btn-sm ssh-settings" data-id="${key.id}">${t('ssh_access_settings')}</button><button class="s-btn-sm s-btn-danger ssh-delete" data-id="${key.id}">${t('ssh_access_remove')}</button></div>
       </div>`).join('') : '';
     panel.innerHTML = `
-      <div class="settings-section"><div class="settings-section-title">${t('ssh_access_title')}</div><div style="font-size:.82rem;color:var(--text-dim);line-height:1.45">${t('ssh_access_desc')}</div>
-      ${status.enabled ? `<div style="margin-top:10px;color:#55b971;font-size:.82rem">${t('ssh_access_enabled')}</div>` : (status.can_admin ? `<button class="settings-btn" id="ssh-enable" style="margin-top:12px">${t('ssh_access_enable')}</button>` : `<div style="margin-top:10px;color:var(--text-dim);font-size:.82rem">${t('ssh_access_root_required')}</div>`)}</div>
+      <div class="settings-section"><div class="settings-section-title">${t('ssh_access_title')}</div>${status.enabled ? `<div style="margin-top:2px;color:#55b971;font-size:.82rem">${t('ssh_access_enabled')}</div>` : (status.can_admin ? `<button class="settings-btn" id="ssh-enable" style="margin-top:12px">${t('ssh_access_enable')}</button>` : `<div style="margin-top:10px;color:var(--text-dim);font-size:.82rem">${t('ssh_access_root_required')}</div>`)}</div>
       <div class="settings-section" ${status.enabled ? '' : 'style="opacity:.55;pointer-events:none"'}><div class="settings-section-title">${t('ssh_access_keys')}</div><div id="ssh-keys">${rows || `<div style="color:var(--text-dim);font-size:.83rem">${t('ssh_access_empty')}</div>`}</div><button class="s-btn s-btn-primary" id="ssh-add" style="margin-top:12px">${t('ssh_access_add')}</button></div>`;
     const password = () => window.mvmOS.confirmPassword(t('ssh_access_title'), t('ssh_access_password_prompt'));
     const request = async (url, options) => {
@@ -2854,11 +2954,18 @@ const Settings = (() => {
       const pass = await password(); if (pass === null) return;
       try { await request('/api/ssh-access/enable', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:pass})}); renderSshAccess(body); } catch (e) { alert(e.message); }
     });
-    panel.querySelector('#ssh-add')?.addEventListener('click', async () => {
-      const label = prompt(t('ssh_access_label_prompt')); if (!label) return;
-      const public_key = prompt(t('ssh_access_key_prompt')); if (!public_key) return;
-      const pass = await password(); if (pass === null) return;
-      try { await request('/api/ssh-access/keys', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({label,public_key,password:pass})}); renderSshAccess(body); } catch (e) { alert(e.message); }
+    panel.querySelector('#ssh-add')?.addEventListener('click', () => {
+      const ov = document.createElement('div'); ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center';
+      ov.innerHTML=`<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:20px;width:420px;max-width:92%"><div style="font-weight:700;margin-bottom:14px">${t('ssh_access_add')}</div><label style="font-size:.8rem;display:block;margin-bottom:6px">${t('ssh_access_label_prompt')}<input id="sak-label" class="s-input" style="width:100%;margin-top:4px;box-sizing:border-box"></label><label style="font-size:.8rem;display:block">${t('ssh_access_key_prompt')}<textarea id="sak-key" class="s-input" rows="5" style="width:100%;margin-top:4px;box-sizing:border-box;font:0.75rem monospace;resize:vertical"></textarea></label><div style="display:flex;justify-content:flex-end;gap:8px;margin-top:18px"><button id="sak-cancel" class="s-btn-sm">${t('cancel')}</button><button id="sak-save" class="s-btn">${t('save')}</button></div></div>`;
+      document.body.appendChild(ov);
+      ov.querySelector('#sak-cancel').onclick=()=>ov.remove();
+      ov.querySelector('#sak-label').focus();
+      ov.querySelector('#sak-save').onclick=async()=>{
+        const label=ov.querySelector('#sak-label').value.trim(), public_key=ov.querySelector('#sak-key').value.trim();
+        if(!label||!public_key) return;
+        const pass=await password(); if(pass===null) return;
+        try { await request('/api/ssh-access/keys',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({label,public_key,password:pass})}); ov.remove(); renderSshAccess(body); } catch(e){ alert(e.message); }
+      };
     });
     panel.querySelectorAll('.ssh-settings').forEach(button => button.addEventListener('click', async () => {
       const key = keys.find(item => item.id === Number(button.dataset.id)); if (!key) return;

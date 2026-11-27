@@ -76,6 +76,7 @@ from .projects import router as projects_router
 from .backup import router as backup_router
 from .scheduler import router as scheduler_router
 from .ssh_access import router as ssh_access_router, init_ssh_access_db
+from . import ssh_connections
 from .startup import router as startup_router, _init_startup_db, run_startup_apps
 from . import public_hosts
 from .apphub import router as apphub_router, public_page_router as apphub_public_router, _init_db as _init_apphub_db, is_app_public
@@ -99,6 +100,7 @@ init_db()
 shared_files.init_db()
 _purge_clipboard()
 init_ssh_access_db()
+ssh_connections.init_db()
 _init_startup_db()
 _init_apphub_db()
 _init_apikeys_db()
@@ -128,6 +130,7 @@ app.include_router(projects_router)
 app.include_router(backup_router)
 app.include_router(scheduler_router)
 app.include_router(ssh_access_router)
+app.include_router(ssh_connections.router)
 app.include_router(startup_router)
 app.include_router(apphub_router)
 app.include_router(apikeys_router)

@@ -198,11 +198,12 @@ const TextEditor = (() => {
         const status = body.querySelector('#te-status');
         const saveBtn = body.querySelector('#te-save');
 
-        // load content
-        fetch(url(`/api/files/raw?path=${encodeURIComponent(path)}&_=${Date.now()}`))
-          .then(r => r.text())
+        // load content (a shared or SSH folder is read through the shared-folder protocol)
+        const remote = !!SharedFiles.parse(path);
+        (remote ? SharedFiles.readText(path) : fetch(url(`/api/files/raw?path=${encodeURIComponent(path)}&_=${Date.now()}`)).then(r => r.text()))
           .then(text => { area.value = text; status.textContent = ''; })
           .catch(() => { status.textContent = t('mv_failed_to_load'); });
+        if (remote) SharedFiles.canWrite(path).then(ok => { if (!ok) { area.readOnly = true; saveBtn.disabled = true; } }).catch(() => {});
 
         let dirty = false;
         area.addEventListener('input', () => {
@@ -213,13 +214,15 @@ const TextEditor = (() => {
 
         async function save() {
           saveBtn.disabled = true;
-          const res = await fetch(url('/api/files/write'), {
+          let ok;
+          if (remote) ok = await SharedFiles.writeText(path, area.value).then(() => true, () => false);
+          else ok = (await fetch(url('/api/files/write'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ path, content: area.value }),
-          });
+          })).ok;
           saveBtn.disabled = false;
-          if (res.ok) {
+          if (ok) {
             dirty = false;
             status.textContent = '✓ ' + t('mv_saved');
             status.style.color = '#50fa7b';

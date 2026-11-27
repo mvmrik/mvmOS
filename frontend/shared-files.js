@@ -183,10 +183,10 @@ const SharedFiles = (() => {
           if (!data.incoming.length) content.append(el('p', tr('empty'), 'sf-muted'));
           for (const folder of data.incoming) {
             const card = el('div', undefined, 'sf-card');
-            card.append(el('strong', folder.name), el('div', folder.origin, 'sf-muted'));
+            card.append(el('strong', folder.name), el('div', folder.subtitle || folder.origin, 'sf-muted'));
             const state = el('span', tr('checking'), 'sf-status'); card.append(state);
             button(tr('open'), () => open(folder.id), card);
-            button(tr('disconnect'), async () => {
+            if (!folder.managed) button(tr('disconnect'), async () => {
               if (!await dialog(tr('disconnect_confirm'))) return;
               await local('/api/files/remote-folders/' + folder.id, 'DELETE'); changed(); await refresh();
             }, card);
@@ -256,7 +256,7 @@ const SharedFiles = (() => {
       const data = await local('/api/files/sharing');
       if (!parent.isConnected) return;
       for (const folder of data.incoming) {
-        const item = el('div', '', 'fm-place'); item.title = folder.name + '\n' + folder.origin;
+        const item = el('div', '', 'fm-place'); item.title = folder.name + '\n' + (folder.subtitle || folder.origin);
         item.append(el('span', '📂', 'fm-place-icon'), el('span', folder.name));
         item.dataset.path = virtualPath(folder.id);
         item.addEventListener('click', () => navigate ? navigate(virtualPath(folder.id)) : open(folder.id)); parent.append(item);
@@ -346,6 +346,27 @@ const SharedFiles = (() => {
     const loc = await locationFor(path);
     return preview(loc.folder, entry, loc.path);
   }
+  // Text files of a shared or SSH folder for the editors: read and save them in place.
+  async function readText(path) {
+    const loc = await locationFor(path);
+    const response = await fetch(await fileUrl(loc.folder, loc.path), {credentials: 'omit', cache: 'no-store', referrerPolicy: 'no-referrer'});
+    if (!response.ok) throw new Error(tr('unavailable'));
+    if (Number(response.headers.get('content-length')) > 5 * 1024 * 1024) throw new Error(tr('too_large'));
+    return response.text();
+  }
+  async function writeText(path, text) {
+    const bytes = new TextEncoder().encode(text);
+    let offset = 0;
+    await writeFile(path, bytes.length, async length => {
+      const chunk = bytes.slice(offset, offset + length); offset += length; return chunk;
+    }, undefined, new AbortController().signal, () => {}, true);
+  }
+  // Saving over an existing file needs both the upload and the edit right.
+  async function canWrite(path) {
+    const loc = await locationFor(path);
+    const permissions = (await remote(loc.folder)).permissions || [];
+    return permissions.includes('upload') && permissions.includes('edit');
+  }
   async function downloadPath(path) {
     const loc = await locationFor(path);
     return downloadFile(loc.folder, loc.path);
@@ -375,10 +396,10 @@ const SharedFiles = (() => {
     return localRequest(path, '/delete', 'DELETE', {path}, key);
   }
   // Stream files through bounded 4 MiB chunks instead of buffering whole files.
-  async function writeFile(path, size, readChunk, key, signal, progress) {
+  async function writeFile(path, size, readChunk, key, signal, progress, replace = false) {
     const loc = parse(path) ? await locationFor(path) : null;
     const chunkSize = 4 * 1024 * 1024;
-    const transfer = loc ? await remote(loc.folder, '/uploads', 'POST', {path: loc.path, size}) : {id: crypto.randomUUID()};
+    const transfer = loc ? await remote(loc.folder, '/uploads', 'POST', {path: loc.path, size, replace}) : {id: crypto.randomUUID()};
     const name = path.split('/').pop(), parent = path.slice(0, path.lastIndexOf('/'));
     try {
       for (let offset = 0, index = 0; offset < size || index === 0; offset += chunkSize, index++) {
@@ -549,6 +570,6 @@ const SharedFiles = (() => {
     await scan(path, entry);
     for (const target of plan.reverse()) { signal?.throwIfAborted(); await operation(target, 'delete'); }
   }
-  return {share, manage, attachPlaces, open, virtualPath, parse, listing, operation, openFile, downloadPath,
+  return {share, manage, attachPlaces, open, virtualPath, parse, listing, operation, openFile, downloadPath, readText, writeText, canWrite,
     dialog, copyPaths, uploadList, uploadEntries, removeSelection};
 })();

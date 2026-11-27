@@ -420,7 +420,7 @@ var CodeEditor = (() => {
     const filename = filepath.split('/').pop();
     // derive projectDir as parent directory
     const dir = filepath.substring(0, filepath.lastIndexOf('/'));
-    const projectId = dir.split('/').pop();
+    const projectId = SharedFiles.parse(dir) && !SharedFiles.parse(dir).path ? t('sf_title') : dir.split('/').pop();
     const adminKey = opts.adminKey || null;
     if (_win && document.body.contains(_win) && _projectDir === dir && _adminKey === adminKey) {
       // editor already open for this dir — just switch file
@@ -450,13 +450,24 @@ var CodeEditor = (() => {
 
   function _url(u) { return FileManager.adminUrl(u, _adminKey); }
 
+  async function _listDir(path) {
+    if (SharedFiles.parse(path)) return (await SharedFiles.listing(path)).entries;
+    const data = await (await fetch(_url('/api/files?path=' + encodeURIComponent(path)))).json();
+    return data.entries || data.files || data || [];
+  }
+
   async function _loadFile(filepath) {
+    if (SharedFiles.parse(filepath)) return SharedFiles.readText(filepath);
     const res = await fetch(_url('/api/files/raw?path=' + encodeURIComponent(filepath)));
     if (!res.ok) throw new Error('Cannot read file');
     return await res.text();
   }
 
   async function _saveFile(filepath, content) {
+    if (SharedFiles.parse(filepath)) {
+      try { await SharedFiles.writeText(filepath, content); return true; }
+      catch (e) { await SharedFiles.dialog(t('sf_failed') + '\n' + e.message, { notice: true }); return false; }
+    }
     const res = await fetch(_url('/api/files/write'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -473,6 +484,9 @@ var CodeEditor = (() => {
       sidebar.querySelectorAll('.ce-file[data-path="' + filepath + '"]').forEach(el => el.classList.add('active'));
     }
     const content = await _loadFile(filepath);
+    // A shared folder without the right to change files opens read-only.
+    const writable = !SharedFiles.parse(filepath) || await SharedFiles.canWrite(filepath).catch(() => false);
+    _editor.setOption('readOnly', !writable);
     _editor.setValue(content);
     _editor.setOption('mode', _modeFor(filename));
     _dirty = false;
@@ -489,9 +503,7 @@ var CodeEditor = (() => {
   async function _buildSidebar(sidebar) {
     sidebar.innerHTML = `<div class="ce-loading">${t('ce_loading')}</div>`;
     try {
-      const res = await fetch(_url('/api/files?path=' + encodeURIComponent(_projectDir)));
-      const data = await res.json();
-      const files = (data.entries || data.files || data || []).filter(f => !f.name.startsWith('.') && f.name !== 'mvmos_project.json');
+      const files = (await _listDir(_projectDir)).filter(f => !f.name.startsWith('.') && f.name !== 'mvmos_project.json');
       sidebar.innerHTML = '';
 
       function renderItems(items, parentEl, basePath) {
@@ -516,9 +528,7 @@ var CodeEditor = (() => {
               const sub = document.createElement('div');
               sub.className = 'ce-dir-children';
               el.after(sub);
-              const r2 = await fetch(_url('/api/files?path=' + encodeURIComponent(el.dataset.path)));
-              const d2 = await r2.json();
-              renderItems(d2.entries || d2.files || d2 || [], sub, el.dataset.path);
+              renderItems(await _listDir(el.dataset.path), sub, el.dataset.path);
             });
           }
           parentEl.appendChild(el);

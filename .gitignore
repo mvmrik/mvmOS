@@ -18,6 +18,7 @@ TODO.md
 backend/app-backends/
 backend/apphub_data/
 backend/premium/
+backend/ssh_keys/
 error-reports/
 clipboard/
 builder/
