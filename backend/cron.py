@@ -45,11 +45,19 @@ def _parse_crontab(text: str) -> list:
 
 
 def _read_crontab(username: str) -> str:
+    # Without cron there is no crontab to read; writing one is what asks for it to be installed.
+    from . import deps_core
+    if not deps_core.has_command("crontab"):
+        return ""
     r = subprocess.run(["crontab", "-l", "-u", username], capture_output=True, text=True)
     return r.stdout if r.returncode == 0 else ""
 
 
 def _write_crontab(username: str, text: str):
+    from . import deps_core
+    if not deps_core.has_command("crontab"):
+        from .deps import missing_dependency
+        raise missing_dependency("cron")
     r = subprocess.run(["crontab", "-u", username, "-"], input=text, capture_output=True, text=True)
     if r.returncode != 0:
         raise HTTPException(status_code=500, detail=r.stderr.strip() or "crontab write failed")

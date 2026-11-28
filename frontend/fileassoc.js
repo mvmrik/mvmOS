@@ -102,7 +102,7 @@ const FileAssoc = (() => {
   // Files of a shared or SSH folder are not on this disk: only the viewers and
   // editors that can read them in place are offered there.
   const REMOTE_OK = ['imageviewer', 'mediaplayer', 'codeeditor', 'texteditor'];
-  const isRemote = path => !!(window.SharedFiles && SharedFiles.parse(path));
+  const isRemote = path => typeof SharedFiles !== 'undefined' && !!SharedFiles.parse(path);
 
   function candidates(ext, openWith, remote) {
     return all().filter(h => (!remote || REMOTE_OK.includes(h.id)) && (claims(h, ext) || (openWith && h.any)));

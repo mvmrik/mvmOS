@@ -20,6 +20,7 @@ import tempfile
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
+from . import deps_core
 from .auth import get_current_session, require_admin
 
 router = APIRouter(prefix="/api/files/drives", tags=["drives"])
@@ -299,6 +300,10 @@ def mount(body: DriveBody, request: Request, session=Depends(require_admin)):
                 os.rmdir(path)
             except OSError:
                 pass
+        if d["fstype"] == "ntfs" and _ntfs_type() == "ntfs-3g" and not deps_core.has_command("ntfs-3g"):
+            # Neither NTFS driver is on this system: offer to install the one that works everywhere.
+            from .deps import missing_dependency
+            raise missing_dependency("ntfs-3g")
         raise _err(r, "mount_failed")
     return {"mountpoint": path}
 

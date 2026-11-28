@@ -223,6 +223,19 @@ async def do_update(session=Depends(require_admin)):
         except Exception:
             pass
 
+        # Programs the new version relies on (installed only when missing; a failure here never stops the update)
+        yield "data: Checking the programs mvmOS needs…\n\n"
+        try:
+            py = os.path.join(repo_dir, "venv", "bin", "python")
+            if os.path.exists(py):
+                r = subprocess.run([py, "-m", "backend.deps_core", "base"], cwd=repo_dir,
+                                   capture_output=True, text=True, timeout=900)
+                for line in (r.stdout or "").splitlines()[-12:]:
+                    if line.strip():
+                        yield f"data: {line.strip()}\n\n"
+        except Exception:
+            pass
+
         # backend/premium/ is not part of the release, so the core premium
         # build is still the one made for the previous version. The first
         # check-in after the restart fetches it again.

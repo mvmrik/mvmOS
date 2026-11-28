@@ -129,6 +129,7 @@ const GameLauncher = (() => {
     if (!result.ok) return fail(result.error || t('gl_unknown_error'));
 
     mvmOS._loadPlugin(HUB_ID);
+    await mvmOS.deps?.ensureApp(HUB_ID);
     if (onDone) onDone();
   }
 

@@ -7,7 +7,10 @@ connection shows up as a shared folder (``file_remote_folders`` with the origin
 file picker and every app use it like any other shared folder. While the
 connection is disabled or outside its schedule every request is refused here.
 """
+import asyncio
 import base64
+import fcntl
+import importlib.util
 import json
 import os
 import re
@@ -17,6 +20,7 @@ import shutil
 import sqlite3
 import socket
 import subprocess
+import sys
 import threading
 import time
 import hashlib
@@ -69,8 +73,29 @@ def _control_path(cid):
 
 
 def _generate_key(cid, comment):
-    from cryptography.hazmat.primitives import serialization
-    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+    try:
+        importlib.import_module("cryptography")
+    except ModuleNotFoundError as exc:
+        if exc.name != "cryptography":
+            raise
+        try:
+            if sys.prefix == sys.base_prefix:
+                raise OSError("mvmOS virtual environment is required")
+            # Telegram Hub uses the same lock when provisioning this package.
+            with (Path(sys.prefix) / ".cryptography-install.lock").open("a") as lock:
+                fcntl.flock(lock, fcntl.LOCK_EX)
+                importlib.invalidate_caches()
+                if importlib.util.find_spec("cryptography") is None:
+                    subprocess.run([sys.executable, "-m", "pip", "install", "--disable-pip-version-check",
+                                    "--no-input", "cryptography>=43"], check=True, timeout=120)
+                    importlib.invalidate_caches()
+        except (OSError, subprocess.SubprocessError) as error:
+            raise HTTPException(503, "Could not install cryptography in the mvmOS Python environment") from error
+    try:
+        from cryptography.hazmat.primitives import serialization
+        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+    except ImportError as error:
+        raise HTTPException(503, "Could not load cryptography in the mvmOS Python environment") from error
     KEYS_DIR.mkdir(mode=0o700, exist_ok=True)
     os.chmod(KEYS_DIR, 0o700)
     key = Ed25519PrivateKey.generate()
@@ -85,7 +110,8 @@ def _generate_key(cid, comment):
 
 def _ssh_base(row):
     if not shutil.which("ssh"):
-        raise HTTPException(501, "The ssh program is not installed on this server")
+        from .deps import missing_dependency
+        raise missing_dependency("openssh-client")
     cid = row["id"]
     return ["ssh", "-i", str(_key_file(cid)), "-p", str(row["port"]), "-l", row["username"],
             "-o", "BatchMode=yes", "-o", "IdentitiesOnly=yes", "-o", "PasswordAuthentication=no",
@@ -409,7 +435,7 @@ async def create_connection(body: ConnectionBody, session=Depends(get_current_se
         raise HTTPException(403, "Administrator rights are required")
     host, username, base = _validate(body)
     cid = secrets.token_hex(16)
-    public = _generate_key(cid, "mvmos-" + body.name.strip().replace(" ", "_")[:40])
+    public = await asyncio.to_thread(_generate_key, cid, "mvmos-" + body.name.strip().replace(" ", "_")[:40])
     secret = secrets.token_urlsafe(32)
     try:
         with get_conn() as c:

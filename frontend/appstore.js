@@ -614,6 +614,7 @@ const AppStore = (() => {
       if (wasOpen) Desktop.reloadApp?.(appData.id);
       body._as?.refreshCurrent?.();
       mvmOS.refreshAppUpdateNotification?.();
+      await mvmOS.deps?.ensureApp(appData.id, appData.name);
       return true;
     }
     restore();
@@ -1744,6 +1745,7 @@ const UpdateManager = (() => {
           row.remove();
           renderMvmOS();
           mvmOS.refreshAppUpdateNotification?.();
+          if (u.type === 'app') await mvmOS.deps?.ensureApp(u.id, u.name);
         });
         mvmosList.appendChild(row);
       });
@@ -1752,6 +1754,7 @@ const UpdateManager = (() => {
     mvmosAllBtn.addEventListener('click', async () => {
       mvmosAllBtn.disabled = true; mvmosAllBtn.textContent = t('um_updating');
       const batch = { backendConfirmed: false, cancelled: false };
+      const updatedApps = [];
       try {
         for (const u of [...mvmosUpdates]) {
           if (u.compatible === false) continue;
@@ -1761,6 +1764,7 @@ const UpdateManager = (() => {
           if (await doMvmOSUpdate(u, batch)) {
             mvmosUpdates = mvmosUpdates.filter(x => !(x.id === u.id && x.type === u.type));
             row?.remove();
+            if (u.type === 'app') updatedApps.push(u.id);
           }
           if (batch.cancelled) break;
         }
@@ -1770,6 +1774,7 @@ const UpdateManager = (() => {
       }
       renderMvmOS();
       mvmOS.refreshAppUpdateNotification?.();
+      await mvmOS.deps?.ensureApps(updatedApps);
     });
 
     loadMvmOS();

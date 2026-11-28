@@ -713,10 +713,22 @@ const FileManager = (() => {
       return rows.concat(this._healthRows(disk));
     }
 
+    // The health of a disk is read with smartmontools. When the system does not have it, the installation window
+    // is offered once per session; whoever declines still sees the "install smartmontools" line.
+    async _offerSmart(disks) {
+      if (this._smartOffered || !window.mvmOS?.deps || !(disks || []).some(x => x?.smart?.state === 'not_installed')) return false;
+      this._smartOffered = true;
+      return window.mvmOS.deps.ask(['smartmontools']);
+    }
+
     async showDriveInfo(device) {
-      const res = await this.api('/api/files/drives/info?device=' + encodeURIComponent(device));
+      let res = await this.api('/api/files/drives/info?device=' + encodeURIComponent(device));
       if (!res.ok) return this._notice(t('fm_drive_info_failed'));
-      const d = await res.json();
+      let d = await res.json();
+      if (await this._offerSmart([d.disk])) {
+        res = await this.api('/api/files/drives/info?device=' + encodeURIComponent(device));
+        if (res.ok) d = await res.json();
+      }
       const yes = t('fm_info_yes'), no = t('fm_info_no');
       const fsRows = [];
       if (d.label) fsRows.push([t('fm_info_label'), d.label]);
@@ -733,9 +745,13 @@ const FileManager = (() => {
     }
 
     async showComputerInfo() {
-      const res = await this.api('/api/files/drives/computer');
+      let res = await this.api('/api/files/drives/computer');
       if (!res.ok) return this._notice(t('fm_drive_info_failed'));
-      const c = await res.json();
+      let c = await res.json();
+      if (await this._offerSmart(c.disks)) {
+        res = await this.api('/api/files/drives/computer');
+        if (res.ok) c = await res.json();
+      }
       const blocks = (c.filesystems || []).map(f => ({
         heading: `${f.mountpoint}  ·  ${f.device}  ·  ${f.fstype}`,
         rows: [], bar: { used: f.used, total: f.total },

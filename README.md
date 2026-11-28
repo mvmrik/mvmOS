@@ -173,6 +173,26 @@ Eight Python packages, installed automatically: `fastapi`, `uvicorn[standard]`, 
 `python-multipart`, `httpx`, `watchdog`, `python-pam`, `six`. No npm, no build step —
 xterm.js is bundled.
 
+Nothing else has to be on the system beforehand. The installer puts the programs mvmOS itself uses
+on a minimal Linux (`curl`, `cron`, `tar`, `unzip`, `zip`, `tmux`, `git`, the OpenSSH client,
+`ping`, `procps`, `iproute2`, `util-linux`) with the package manager of the system (apt, dnf, yum,
+zypper or pacman), and an update checks them again. An app that needs more says so itself:
+
+- An app lists what it needs in its `manifest.json` as `"system_requires"`, an array of ids known to
+  Core (`mysql-client`, `postgresql-client`, `openssh-server`, `smartmontools`, `ntfs-3g`,
+  `imagemagick` and the base programs above), or objects of its own:
+  `{"id": "mytool", "cmds": ["mytool"], "packages": {"apt": "mytool", "dnf": "mytool", "pacman": "mytool", "zypper": "mytool"}}`.
+- Before the app opens, the desktop asks `GET /api/deps/check?app=<id>`. When something is missing, a
+  window lists it with what it is for and an Install button. An administrator who is not root is asked
+  for the password, the installation runs in a terminal inside the window, and the app starts by itself
+  when it is done. The browser never sends a command: `POST /api/deps/start` returns a one-time ticket
+  and the server builds the command from its own table (`backend/deps_core.py`, `backend/deps.py`).
+- A backend that finds a program missing in the middle of a request raises
+  `sys.modules["backend.deps"].missing_dependency("<id>")` (HTTP 424). The desktop shows the same
+  window and repeats the request once the program is installed.
+- The window is not shown on public Apps Hub pages: only a person who can use the desktop installs
+  programs on the server. Set `min_core_version` to the release that introduced this.
+
 ---
 
 ## Before you expose it to the internet

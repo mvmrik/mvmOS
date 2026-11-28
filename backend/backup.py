@@ -29,7 +29,8 @@ INSTALL_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 _RESTORE_SH = r"""#!/bin/bash
 set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-INSTALL_DIR="/var/www/mvmos.mvmrik.com"
+INSTALL_DIR=@INSTALL_DIR@
+SERVICE=@SERVICE@
 
 echo "=== mvmOS Restore ==="
 echo ""
@@ -39,19 +40,45 @@ if [ ! -f "$SCRIPT_DIR/backup.tar.gz" ]; then
   exit 1
 fi
 
-echo "Stopping mvmOS..."
-systemctl stop mvmos 2>/dev/null || true
-systemctl stop mvmos-public 2>/dev/null || true
+if [ -n "$SERVICE" ]; then
+  echo "Stopping $SERVICE..."
+  systemctl stop "$SERVICE" 2>/dev/null || true
+else
+  echo "mvmOS runs without a service of its own here: stop it yourself before going on."
+fi
 
 echo "Restoring files to $INSTALL_DIR ..."
+mkdir -p "$INSTALL_DIR"
 tar -xzf "$SCRIPT_DIR/backup.tar.gz" -C "$INSTALL_DIR"
 
-echo "Starting mvmOS..."
-systemctl start mvmos
+if [ -n "$SERVICE" ]; then
+  echo "Starting $SERVICE..."
+  systemctl start "$SERVICE"
+else
+  echo "Start mvmOS again the way you usually do."
+fi
 
 echo ""
 echo "Done. Open your browser to access mvmOS."
 """
+
+
+def _service_name() -> str:
+    """The systemd service that runs this installation, found by the folder it works in; '' when it has none."""
+    import glob
+    for path in sorted(glob.glob("/etc/systemd/system/*.service")):
+        try:
+            text = open(path, encoding="utf-8", errors="replace").read()
+        except OSError:
+            continue
+        if "backend.main:app" in text and f"WorkingDirectory={INSTALL_DIR}\n" in text + "\n":
+            return os.path.basename(path)[:-len(".service")]
+    return ""
+
+
+def _restore_script() -> str:
+    import shlex
+    return _RESTORE_SH.replace("@INSTALL_DIR@", shlex.quote(INSTALL_DIR)).replace("@SERVICE@", shlex.quote(_service_name()))
 
 
 def _setting(key, default=None):
@@ -210,15 +237,19 @@ def perform_backup(ids=None):
         work = tempfile.mkdtemp(prefix=".mvmos-backup-", dir=first["path"] if first else None)
         tar_path = os.path.join(work, "backup.tar.gz")
         restore_path = os.path.join(work, "restore.sh")
-        r = subprocess.run(
-            ["tar", "-czf", tar_path, "--exclude=./venv", "--exclude=*/__pycache__",
-             "--exclude=*.pyc", "--exclude=*.pyo", "-C", INSTALL_DIR, "."],
-            capture_output=True, text=True)
+        try:
+            r = subprocess.run(
+                ["tar", "-czf", tar_path, "--exclude=./venv", "--exclude=*/__pycache__",
+                 "--exclude=*.pyc", "--exclude=*.pyo", "-C", INSTALL_DIR, "."],
+                capture_output=True, text=True)
+        except FileNotFoundError:
+            from .deps import missing_dependency
+            raise missing_dependency("tar")
         # Exit code 1 only means some file changed while it was read, which happens on a live system.
         if r.returncode not in (0, 1) or not os.path.isfile(tar_path):
             raise HTTPException(500, f"Backup failed: {r.stderr.strip()}")
         with open(restore_path, "w") as f:
-            f.write(_RESTORE_SH)
+            f.write(_restore_script())
         os.chmod(restore_path, 0o755)
         results = []
         for loc in locations:

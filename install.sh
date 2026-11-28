@@ -233,6 +233,14 @@ $SUDO "$VENV_DIR/bin/pip" install --quiet \
     "python-pam>=2.0.0" \
     "six>=1.16.0"
 
+# ── System programs ──────────────────────────────────────────────────────────
+# Programs that mvmOS itself uses all the time (scheduled tasks, archives, the
+# persistent terminal, SSH, git...). A minimal Linux does not have them. Apps
+# that need more ask for it themselves when they are opened.
+echo "  Installing the system programs mvmOS needs..."
+(cd "$SCRIPT_DIR" && $SUDO "$VENV_DIR/bin/python" -m backend.deps_core base) || \
+    echo "  Some programs could not be installed. mvmOS will offer to install them when they are needed."
+
 # ── config.ini ────────────────────────────────────────────────────────────────
 $SUDO tee "$SCRIPT_DIR/config.ini" > /dev/null <<EOF
 [server]

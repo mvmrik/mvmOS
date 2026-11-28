@@ -18,6 +18,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
+from . import deps_core
 from .auth import get_current_session, verify_linux_password
 from .db import get_conn
 
@@ -163,6 +164,9 @@ def enable(body: "PasswordRequest", session=Depends(get_current_session)):
     username = _verify_actor(body.password, session)
     if not _is_admin(username):
         raise HTTPException(status_code=403, detail="Administrator access is required")
+    if not deps_core.has_command("sshd"):
+        from .deps import missing_dependency
+        raise missing_dependency("openssh-server")
     if not _has_dropin_support():
         raise HTTPException(status_code=400, detail="This SSH configuration does not support drop-in files")
     if not SSHD_DROPIN_DIR.is_dir():

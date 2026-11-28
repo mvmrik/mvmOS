@@ -78,8 +78,31 @@ var mvmOS = (() => {
       headers.set('X-Admin-Key', _adminKey);
       res = await _fetch(base, { ...init, headers });
     }
+    // A backend that finds a program missing answers 424 with the ids of what it needs. The installation window
+    // opens and, once everything is installed, the same request is made again.
+    if (res.status === 424) {
+      const detail = await res.clone().json().then(j => j?.detail).catch(() => null);
+      if (detail && detail.code === 'missing_dependency' && window.mvmOS?.deps && await window.mvmOS.deps.ask(detail.deps)) {
+        const base = saved ? saved.clone() : input;
+        const headers = new Headers(init?.headers || saved?.headers);
+        if (_adminKey) headers.set('X-Admin-Key', _adminKey);
+        res = await _fetch(base, { ...init, headers });
+      }
+    }
     return res;
   };
+
+  // Opens an app once the programs it needs are on the system. An app that needs none starts at once; for one
+  // that does, the server is asked first and a window offers to install what is missing.
+  async function _launchApp(id, app) {
+    const meta = _pluginsCache.find(p => p.id === id);
+    if (meta?.needs_deps && window.mvmOS?.deps) {
+      if (!await window.mvmOS.deps.ensureApp(id, app.name || meta.name)) return false;
+    }
+    _trackOpen(id);
+    app.launch();
+    return true;
+  }
 
   // Tracks an app open server-side, then refreshes the Start Menu's
   // Recent/Most-used lists so they reflect it immediately (no page reload needed).
@@ -876,8 +899,8 @@ var mvmOS = (() => {
     if (actionApp === 'updates') { UpdateManager.openWindow(); return; }
     if (actionApp.startsWith('settings:')) { Settings.openWindow(actionApp.slice('settings:'.length)); return; }
     const app = _apps[actionApp];
-    if (app) { _trackOpen(actionApp); app.launch(); }
-    else { _loadPlugin(actionApp).then(() => _apps[actionApp]?.launch?.()); }
+    if (app) { _launchApp(actionApp, app); }
+    else { _loadPlugin(actionApp).then(() => { if (_apps[actionApp]) _launchApp(actionApp, _apps[actionApp]); }); }
   }
 
   // An app's icon as HTML: its own picture where it has one, otherwise the
@@ -1526,7 +1549,7 @@ var mvmOS = (() => {
     },
     initMobileSidebar: (body) => Desktop.initMobileSidebar(body),
     openSettings: (tab) => Settings.openWindow(tab),
-    openApp: (id) => { const a = _apps[id]; if (a) { _trackOpen(id); a.launch(); } },
+    openApp: (id) => { const a = _apps[id]; if (a) _launchApp(id, a); },
     // Generic "which installed app claims this core widget slot" lookup —
     // e.g. the taskbar clock's calendar popup opens the Calendar app instead
     // of its built-in popup if one is installed, without core ever

@@ -513,6 +513,9 @@ async def list_plugins(session=Depends(get_current_session)):
             # Apps Hub's extension (mvmOS Apps) is defined in core, so it is
             # found without a manifest — see _CORE_EXTENSIONS in extensions.py.
             item["browser_extension"] = _browser_extension(r["id"])
+        # An app that needs programs from the system is checked before it opens (see backend/deps.py).
+        from .deps import app_requirements
+        item["needs_deps"] = bool(app_requirements(r["id"]))
         result.append(item)
     return JSONResponse(result)
 

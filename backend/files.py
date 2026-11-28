@@ -234,6 +234,15 @@ async def upload_chunk(
 
     tmp_path = os.path.join(_CHUNK_TMP_DIR, f"{safe_id}_{filename}.mvmostmp")
 
+    # Unpacking needs the archive program of the system. Asking before anything is written means the
+    # same chunk can simply be sent again once it has been installed.
+    if extract == "1" and _archive_kind(filename):
+        from . import deps_core
+        from .deps import missing_dependency
+        needed = "unzip" if _archive_kind(filename) == "zip" else "tar"
+        if not deps_core.has_command(needed):
+            raise missing_dependency(needed)
+
     chunk_data = await file.read()
     mode = "ab" if chunk_index > 0 else "wb"
 

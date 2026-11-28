@@ -17,6 +17,10 @@ mvmOS includes Core tools for desktop and server administration. Additional appl
 
 Use the Store to discover available apps and install the ones needed by your server. Updates may change app behaviour, so create backups for apps that store important data and review release notes before updating production systems.
 
+## Programs an app needs
+
+Some apps rely on programs of the Linux system itself, for example the MySQL client for a database tool or `ping` for a monitor. mvmOS installs what it needs for itself together with the system, and an update checks it again. When you open an app that needs something more which is missing, a window lists the missing programs and what each is for. Choose Install: an administrator who is not root confirms with their own password, the installation runs in a terminal inside the window so you can follow it, and the app starts by itself when it is finished. If the installation fails, the output stays visible and you can try again. Installing programs needs an administrator, and the window works with apt, dnf, yum, zypper and pacman; on another system it names the programs so you can install them yourself.
+
 ## Data access
 
 An app’s browser SQL is confined to its own database, with attaching other databases disabled. Apps that keep their records behind an API and do not use browser database calls expose only their cfg settings through that generic route. Store updates can include separate Premium modules, which are delivered only to licensed installations.

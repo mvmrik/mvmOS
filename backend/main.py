@@ -63,6 +63,7 @@ from .settings import router as settings_router
 from .premium import router as premium_router
 from .users import router as users_router
 from .packages import router as packages_router
+from .deps import router as deps_router
 from .plugins import router as plugins_router
 from .system import router as system_router
 from .widgets import router as widgets_router
@@ -117,6 +118,7 @@ app.include_router(settings_router)
 app.include_router(premium_router)
 app.include_router(users_router)
 app.include_router(packages_router)
+app.include_router(deps_router)
 app.include_router(plugins_router)
 app.include_router(system_router)
 app.include_router(widgets_router)
@@ -268,8 +270,21 @@ def public_app_icon_png(app_id: str, size: int):
             stderr=subprocess.DEVNULL, check=True, timeout=5,
         ).stdout
     except (OSError, subprocess.SubprocessError):
-        return Response(status_code=500)
+        # Without ImageMagick the icon is a plain square in the app's colour: a browser still accepts it
+        # for installing the page, which needs a PNG of this size.
+        image = _plain_png(size, (0x89, 0xb4, 0xfa))
     return Response(image, media_type="image/png", headers={"Cache-Control": "public, max-age=86400"})
+
+
+def _plain_png(size: int, rgb: tuple) -> bytes:
+    """A square PNG of one colour, made without any image library."""
+    import struct, zlib
+    def chunk(kind: bytes, data: bytes) -> bytes:
+        body = kind + data
+        return struct.pack(">I", len(data)) + body + struct.pack(">I", zlib.crc32(body) & 0xffffffff)
+    row = b"\x00" + bytes(rgb) * size
+    return (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", size, size, 8, 2, 0, 0, 0))
+            + chunk(b"IDAT", zlib.compress(row * size, 9)) + chunk(b"IEND", b""))
 
 
 @app.get("/pub/{app_id}/pwa-sw.js", include_in_schema=False)
